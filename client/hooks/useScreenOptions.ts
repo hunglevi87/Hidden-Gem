@@ -2,7 +2,7 @@ import { Platform } from "react-native";
 import { NativeStackNavigationOptions } from "@react-navigation/native-stack";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 
-import { useTheme } from "@/hooks/useTheme";
+import { Colors, Fonts } from "@/constants/theme";
 
 interface UseScreenOptionsParams {
   transparent?: boolean;
@@ -11,13 +11,19 @@ interface UseScreenOptionsParams {
 export function useScreenOptions({
   transparent = true,
 }: UseScreenOptionsParams = {}): NativeStackNavigationOptions {
-  const { theme, isDark } = useTheme();
+  const theme = Colors.dark;
+  const isDark = true;
 
   return {
     headerTitleAlign: "center",
     headerTransparent: transparent,
-    headerBlurEffect: isDark ? "dark" : "light",
+    headerBlurEffect: "dark",
     headerTintColor: theme.text,
+    headerTitleStyle: {
+      fontFamily: Fonts?.heading || "serif",
+      fontWeight: "600",
+      color: theme.text,
+    },
     headerStyle: {
       backgroundColor: Platform.select({
         ios: undefined,
