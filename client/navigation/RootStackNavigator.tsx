@@ -23,11 +23,13 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootStackNavigator() {
   const screenOptions = useScreenOptions();
-  const { isAuthenticated, loading } = useAuthContext();
+  const { isAuthenticated, loading, isConfigured } = useAuthContext();
 
   if (loading) {
     return null;
   }
+
+  const showAuthScreen = !isAuthenticated && isConfigured;
 
   return (
     <Stack.Navigator 
@@ -36,7 +38,13 @@ export default function RootStackNavigator() {
         contentStyle: { backgroundColor: Colors.dark.backgroundRoot },
       }}
     >
-      {isAuthenticated ? (
+      {showAuthScreen ? (
+        <Stack.Screen
+          name="Auth"
+          component={AuthScreen}
+          options={{ headerShown: false }}
+        />
+      ) : (
         <>
           <Stack.Screen
             name="Main"
@@ -73,12 +81,6 @@ export default function RootStackNavigator() {
             }}
           />
         </>
-      ) : (
-        <Stack.Screen
-          name="Auth"
-          component={AuthScreen}
-          options={{ headerShown: false }}
-        />
       )}
     </Stack.Navigator>
   );

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
 
 export function useAuth() {
@@ -8,9 +8,16 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(false);
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      setLoading(false);
+    }).catch(() => {
       setLoading(false);
     });
 
@@ -24,6 +31,9 @@ export function useAuth() {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error("Supabase is not configured. Please add your API keys.");
+    }
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -33,6 +43,9 @@ export function useAuth() {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error("Supabase is not configured. Please add your API keys.");
+    }
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -42,6 +55,9 @@ export function useAuth() {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      return;
+    }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   }, []);
@@ -54,5 +70,6 @@ export function useAuth() {
     signUp,
     signOut,
     isAuthenticated: !!session,
+    isConfigured: isSupabaseConfigured,
   };
 }
