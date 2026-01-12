@@ -19,10 +19,15 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleAuth = async () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    
     if (!email || !password) {
-      Alert.alert("Missing Information", "Please enter both email and password.");
+      setErrorMessage("Please enter both email and password.");
       return;
     }
 
@@ -33,7 +38,7 @@ export default function AuthScreen() {
         if (Platform.OS !== "web") {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
-        Alert.alert("Success", "Check your email for a verification link!");
+        setSuccessMessage("Check your email for a verification link!");
       } else {
         await signIn(email, password);
         if (Platform.OS !== "web") {
@@ -41,16 +46,20 @@ export default function AuthScreen() {
         }
       }
     } catch (error: any) {
+      console.error("Auth error:", error);
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-      Alert.alert("Error", error.message || "Authentication failed");
+      const msg = error.message || error.error_description || "Authentication failed";
+      setErrorMessage(msg);
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
     setGoogleLoading(true);
     try {
       await signInWithGoogle();
@@ -58,10 +67,12 @@ export default function AuthScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (error: any) {
+      console.error("Google auth error:", error);
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-      Alert.alert("Error", error.message || "Google sign-in failed");
+      const msg = error.message || "Google sign-in failed";
+      setErrorMessage(msg);
     } finally {
       setGoogleLoading(false);
     }
@@ -133,6 +144,20 @@ export default function AuthScreen() {
             </View>
           </View>
 
+          {errorMessage ? (
+            <View style={styles.messageContainer} testID="error-message">
+              <Feather name="alert-circle" size={16} color={Colors.dark.error} />
+              <ThemedText style={styles.errorText}>{errorMessage}</ThemedText>
+            </View>
+          ) : null}
+
+          {successMessage ? (
+            <View style={styles.successContainer} testID="success-message">
+              <Feather name="check-circle" size={16} color={Colors.dark.success} />
+              <ThemedText style={styles.successText}>{successMessage}</ThemedText>
+            </View>
+          ) : null}
+
           <Pressable
             style={({ pressed }) => [
               styles.authButton,
@@ -187,7 +212,11 @@ export default function AuthScreen() {
 
           <Pressable
             style={styles.switchButton}
-            onPress={() => setIsSignUp(!isSignUp)}
+            onPress={() => {
+              setIsSignUp(!isSignUp);
+              setErrorMessage(null);
+              setSuccessMessage(null);
+            }}
             testID="button-switch-auth"
           >
             <ThemedText style={styles.switchText}>
@@ -366,6 +395,32 @@ const styles = StyleSheet.create({
   googleButtonText: {
     ...Typography.button,
     color: Colors.dark.text,
+  },
+  messageContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  errorText: {
+    ...Typography.caption,
+    color: Colors.dark.error,
+    flex: 1,
+  },
+  successContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  successText: {
+    ...Typography.caption,
+    color: Colors.dark.success,
+    flex: 1,
   },
   footer: {
     marginTop: "auto",
