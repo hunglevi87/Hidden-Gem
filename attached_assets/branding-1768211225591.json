@@ -1,0 +1,90 @@
+{
+  "colorScheme": "light",
+  "fonts": [
+    {
+      "family": "Jost",
+      "count": 53
+    },
+    {
+      "family": "sans-serif",
+      "count": 53
+    },
+    {
+      "family": "Cormorant Garamond",
+      "count": 17
+    },
+    {
+      "family": "serif",
+      "count": 17
+    }
+  ],
+  "colors": {
+    "primary": "#111827",
+    "accent": "#D4AF37",
+    "background": "#F3F4F6",
+    "textPrimary": "#1A1A1A",
+    "link": "#D4AF37"
+  },
+  "typography": {
+    "fontFamilies": {
+      "primary": "Jost",
+      "heading": "Cormorant Garamond"
+    },
+    "fontStacks": {
+      "body": [
+        "Jost",
+        "sans-serif"
+      ],
+      "heading": [
+        "Cormorant Garamond",
+        "serif"
+      ],
+      "paragraph": [
+        "Jost",
+        "sans-serif"
+      ]
+    },
+    "fontSizes": {
+      "h1": "72px",
+      "h2": "36px",
+      "body": "20px"
+    }
+  },
+  "spacing": {
+    "baseUnit": 4,
+    "borderRadius": "0px"
+  },
+  "components": {},
+  "images": {
+    "logo": "File saved at: attached_assets/logo.svg",
+    "favicon": "https://trs-nc.vercel.app/vite.svg",
+    "ogImage": null
+  },
+  "__framework_hints": [
+    "tailwind"
+  ],
+  "__llm_logo_reasoning": {
+    "selectedIndex": 0,
+    "reasoning": "Logo rejected: Red flags detected (small square icon). Strong indicators: in header, header location, visible, top-left position, highest logo on page, small square icon (likely UI icon, heavy penalty), SVG format. Score: 73 (clear winner by 30 points)",
+    "confidence": 0.9,
+    "rejected": true
+  },
+  "__llm_button_reasoning": {
+    "primary": {
+      "index": -1,
+      "text": "N/A",
+      "reasoning": "LLM failed"
+    },
+    "secondary": {
+      "index": -1,
+      "text": "N/A",
+      "reasoning": "LLM failed"
+    },
+    "confidence": 0
+  },
+  "confidence": {
+    "buttons": 0,
+    "colors": 0,
+    "overall": 0
+  }
+}
