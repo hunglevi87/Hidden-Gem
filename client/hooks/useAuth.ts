@@ -5,6 +5,10 @@ import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 import type { Session, User } from "@supabase/supabase-js";
 
+if (Platform.OS !== "web") {
+  WebBrowser.maybeCompleteAuthSession();
+}
+
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -99,25 +103,33 @@ export function useAuth() {
 
       if (result.type === "success") {
         const url = result.url;
-        const params = new URL(url);
-        const accessToken = params.searchParams.get("access_token");
-        const refreshToken = params.searchParams.get("refresh_token");
-
-        if (accessToken && refreshToken) {
-          await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
+        const parsedUrl = new URL(url);
+        
+        const code = parsedUrl.searchParams.get("code");
+        
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
         } else {
-          const hashParams = new URLSearchParams(params.hash.slice(1));
-          const hashAccessToken = hashParams.get("access_token");
-          const hashRefreshToken = hashParams.get("refresh_token");
-          
-          if (hashAccessToken && hashRefreshToken) {
+          const accessToken = parsedUrl.searchParams.get("access_token");
+          const refreshToken = parsedUrl.searchParams.get("refresh_token");
+
+          if (accessToken && refreshToken) {
             await supabase.auth.setSession({
-              access_token: hashAccessToken,
-              refresh_token: hashRefreshToken,
+              access_token: accessToken,
+              refresh_token: refreshToken,
             });
+          } else if (parsedUrl.hash && parsedUrl.hash.length > 1) {
+            const hashParams = new URLSearchParams(parsedUrl.hash.slice(1));
+            const hashAccessToken = hashParams.get("access_token");
+            const hashRefreshToken = hashParams.get("refresh_token");
+            
+            if (hashAccessToken && hashRefreshToken) {
+              await supabase.auth.setSession({
+                access_token: hashAccessToken,
+                refresh_token: hashRefreshToken,
+              });
+            }
           }
         }
       }
