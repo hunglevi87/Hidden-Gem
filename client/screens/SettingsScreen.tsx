@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Alert, Platform, ActivityIndicator } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -9,6 +9,9 @@ import { Feather } from "@expo/vector-icons";
 import { useAuthContext } from "@/contexts/AuthContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 interface SettingsSectionProps {
   title: string;
@@ -58,15 +61,46 @@ function SettingsRow({ icon, label, value, onPress, isDestructive, showChevron =
   );
 }
 
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const navigation = useNavigation<NavigationProp>();
   const { user, signOut } = useAuthContext();
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [huggingfaceApiKey, setHuggingfaceApiKey] = useState("");
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [showHuggingfaceKey, setShowHuggingfaceKey] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [wooCommerceStatus, setWooCommerceStatus] = useState("Not configured");
+  const [ebayStatus, setEbayStatus] = useState("Not configured");
+
+  const loadIntegrationStatus = useCallback(async () => {
+    try {
+      const wooStatus = await AsyncStorage.getItem("woocommerce_status");
+      if (wooStatus === "connected") {
+        setWooCommerceStatus("Connected");
+      } else {
+        setWooCommerceStatus("Not configured");
+      }
+
+      const ebayStatus = await AsyncStorage.getItem("ebay_status");
+      if (ebayStatus === "connected") {
+        setEbayStatus("Connected");
+      } else {
+        setEbayStatus("Not configured");
+      }
+    } catch (error) {
+      console.error("Failed to load integration status:", error);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadIntegrationStatus();
+    }, [loadIntegrationStatus])
+  );
 
   useEffect(() => {
     loadApiKeys();
@@ -194,9 +228,19 @@ export default function SettingsScreen() {
           </Pressable>
         </SettingsSection>
 
-        <SettingsSection title="Integrations">
-          <SettingsRow icon="shopping-bag" label="WooCommerce" value="Not configured" onPress={() => {}} />
-          <SettingsRow icon="tag" label="eBay" value="Not configured" onPress={() => {}} />
+        <SettingsSection title="Marketplace Integrations">
+          <SettingsRow
+            icon="shopping-bag"
+            label="WooCommerce"
+            value={wooCommerceStatus}
+            onPress={() => navigation.navigate("WooCommerceSettings")}
+          />
+          <SettingsRow
+            icon="tag"
+            label="eBay"
+            value={ebayStatus}
+            onPress={() => navigation.navigate("EbaySettings")}
+          />
         </SettingsSection>
 
         <SettingsSection title="Account">

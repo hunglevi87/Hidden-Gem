@@ -16,6 +16,7 @@ export const Colors = {
     border: "#D1D5DB",
     success: "#10B981",
     error: "#EF4444",
+    warning: "#F59E0B",
     surface: "#FFFFFF",
   },
   dark: {
@@ -33,6 +34,7 @@ export const Colors = {
     border: "#374151",
     success: "#10B981",
     error: "#EF4444",
+    warning: "#F59E0B",
     surface: "#1F2937",
   },
 };

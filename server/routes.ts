@@ -225,6 +225,268 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
+  app.post("/api/stash/:id/publish/woocommerce", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { storeUrl, consumerKey, consumerSecret } = req.body;
+      
+      if (!storeUrl || !consumerKey || !consumerSecret) {
+        return res.status(400).json({ error: "Missing WooCommerce credentials" });
+      }
+      
+      const [item] = await db.select().from(stashItems).where(eq(stashItems.id, id));
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      
+      if (item.publishedToWoocommerce) {
+        return res.status(400).json({ error: "Item already published to WooCommerce" });
+      }
+      
+      const credentials = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
+      const priceMatch = item.estimatedValue?.match(/\$(\d+(?:,\d{3})*(?:\.\d{2})?)/);
+      const price = priceMatch ? priceMatch[1].replace(/,/g, "") : "0";
+      
+      const productData = {
+        name: item.title,
+        type: "simple",
+        regular_price: price,
+        description: item.seoDescription || item.description || "",
+        short_description: item.description?.substring(0, 200) || "",
+        categories: [],
+        images: item.fullImageUrl ? [{ src: item.fullImageUrl }] : [],
+        status: "publish",
+      };
+      
+      const wooResponse = await fetch(`${storeUrl}/wp-json/wc/v3/products`, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(productData),
+      });
+      
+      if (!wooResponse.ok) {
+        const errorData = await wooResponse.json().catch(() => ({}));
+        return res.status(wooResponse.status).json({ 
+          error: errorData.message || `WooCommerce error: ${wooResponse.status}` 
+        });
+      }
+      
+      const product = await wooResponse.json();
+      
+      await db.update(stashItems)
+        .set({
+          publishedToWoocommerce: true,
+          woocommerceProductId: String(product.id),
+          updatedAt: new Date(),
+        })
+        .where(eq(stashItems.id, id));
+      
+      res.json({ 
+        success: true, 
+        productId: product.id,
+        productUrl: product.permalink || `${storeUrl}/?p=${product.id}` 
+      });
+    } catch (error) {
+      console.error("WooCommerce publish error:", error);
+      res.status(500).json({ error: "Failed to publish to WooCommerce" });
+    }
+  });
+  
+  app.post("/api/stash/:id/publish/ebay", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { clientId, clientSecret, refreshToken, environment, merchantLocationKey } = req.body;
+      
+      if (!clientId || !clientSecret) {
+        return res.status(400).json({ error: "Missing eBay credentials" });
+      }
+      
+      if (!refreshToken) {
+        return res.status(400).json({ 
+          error: "User OAuth refresh token required to create listings. Generate a refresh token from eBay Developer Portal and add it in eBay settings." 
+        });
+      }
+      
+      const [item] = await db.select().from(stashItems).where(eq(stashItems.id, id));
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      
+      if (item.publishedToEbay) {
+        return res.status(400).json({ error: "Item already published to eBay" });
+      }
+      
+      const baseUrl = environment === "production"
+        ? "https://api.ebay.com"
+        : "https://api.sandbox.ebay.com";
+      
+      const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+      const tokenResponse = await fetch(`${baseUrl}/identity/v1/oauth2/token`, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`,
+      });
+      
+      if (!tokenResponse.ok) {
+        const error = await tokenResponse.json().catch(() => ({}));
+        return res.status(tokenResponse.status).json({ 
+          error: error.error_description || "Failed to authenticate with eBay. Check your credentials and refresh token." 
+        });
+      }
+      
+      const tokenData = await tokenResponse.json();
+      const accessToken = tokenData.access_token;
+      
+      const priceMatch = item.estimatedValue?.match(/\$(\d+(?:,\d{3})*(?:\.\d{2})?)/);
+      const price = priceMatch ? priceMatch[1].replace(/,/g, "") : "9.99";
+      
+      const conditionMap: Record<string, string> = {
+        "Mint": "NEW",
+        "Excellent": "LIKE_NEW",
+        "Very Good": "VERY_GOOD",
+        "Good": "GOOD",
+        "Fair": "ACCEPTABLE",
+        "Poor": "FOR_PARTS_OR_NOT_WORKING",
+      };
+      
+      const sku = `HG-${id}-${Date.now()}`;
+      const locationKey = merchantLocationKey || "DEFAULT";
+      
+      const inventoryItem = {
+        availability: {
+          shipToLocationAvailability: {
+            quantity: 1,
+          },
+        },
+        condition: conditionMap[item.condition || "Good"] || "GOOD",
+        product: {
+          title: (item.seoTitle || item.title).substring(0, 80),
+          description: `<p>${item.seoDescription || item.description || item.title}</p>`,
+          imageUrls: item.fullImageUrl ? [item.fullImageUrl] : [],
+        },
+      };
+      
+      const inventoryResponse = await fetch(`${baseUrl}/sell/inventory/v1/inventory_item/${sku}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "Content-Language": "en-US",
+        },
+        body: JSON.stringify(inventoryItem),
+      });
+      
+      if (!inventoryResponse.ok && inventoryResponse.status !== 204) {
+        const error = await inventoryResponse.json().catch(() => ({}));
+        const errorMessage = error.errors?.[0]?.message || `eBay inventory error: ${inventoryResponse.status}`;
+        console.error("eBay inventory error:", error);
+        return res.status(inventoryResponse.status).json({ error: errorMessage });
+      }
+      
+      const offer = {
+        sku: sku,
+        marketplaceId: "EBAY_US",
+        format: "FIXED_PRICE",
+        availableQuantity: 1,
+        categoryId: "1",
+        listingDescription: `<p>${item.seoDescription || item.description || item.title}</p>`,
+        listingPolicies: {
+          fulfillmentPolicyId: null,
+          paymentPolicyId: null,
+          returnPolicyId: null,
+        },
+        merchantLocationKey: locationKey,
+        pricingSummary: {
+          price: {
+            currency: "USD",
+            value: price,
+          },
+        },
+      };
+      
+      const offerResponse = await fetch(`${baseUrl}/sell/inventory/v1/offer`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "Content-Language": "en-US",
+        },
+        body: JSON.stringify(offer),
+      });
+      
+      let offerId: string | null = null;
+      let listingId: string | null = null;
+      
+      if (offerResponse.ok || offerResponse.status === 201) {
+        const offerData = await offerResponse.json();
+        offerId = offerData.offerId;
+        
+        const publishResponse = await fetch(`${baseUrl}/sell/inventory/v1/offer/${offerId}/publish`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        });
+        
+        if (publishResponse.ok) {
+          const publishData = await publishResponse.json();
+          listingId = publishData.listingId;
+        } else {
+          const publishError = await publishResponse.json().catch(() => ({}));
+          console.error("eBay publish offer error:", publishError);
+        }
+      } else {
+        const offerError = await offerResponse.json().catch(() => ({}));
+        console.error("eBay offer error:", offerError);
+        
+        const requiresPolicies = offerError.errors?.some((e: any) => 
+          e.message?.includes("policy") || e.errorId === 25002
+        );
+        
+        if (requiresPolicies) {
+          return res.status(400).json({ 
+            error: "eBay requires business policies (shipping, payment, return) to be configured in your Seller Hub before listing items. Please set up these policies at ebay.com/sh/settings/policies." 
+          });
+        }
+        
+        return res.status(offerResponse.status).json({ 
+          error: offerError.errors?.[0]?.message || `eBay offer error: ${offerResponse.status}` 
+        });
+      }
+      
+      await db.update(stashItems)
+        .set({
+          publishedToEbay: true,
+          ebayListingId: listingId || offerId || sku,
+          updatedAt: new Date(),
+        })
+        .where(eq(stashItems.id, id));
+      
+      const listingUrl = listingId 
+        ? (environment === "production" 
+          ? `https://www.ebay.com/itm/${listingId}`
+          : `https://sandbox.ebay.com/itm/${listingId}`)
+        : undefined;
+      
+      res.json({ 
+        success: true, 
+        listingId: listingId || offerId || sku,
+        listingUrl,
+        message: listingId ? "Item listed on eBay" : "Inventory created. Check your Seller Hub to complete the listing."
+      });
+    } catch (error) {
+      console.error("eBay publish error:", error);
+      res.status(500).json({ error: "Failed to publish to eBay. Please check your credentials and try again." });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

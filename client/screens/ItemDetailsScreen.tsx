@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, Alert, Share, Platform } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -11,6 +11,9 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { apiRequest } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { getWooCommerceSettings, getEbaySettings, publishToWooCommerce, publishToEbay } from "@/lib/marketplace";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type ItemDetailsRouteProp = RouteProp<RootStackParamList, "ItemDetails">;
 
@@ -34,13 +37,31 @@ interface StashItem {
   createdAt: string;
 }
 
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
 export default function ItemDetailsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp>();
   const route = useRoute<ItemDetailsRouteProp>();
   const queryClient = useQueryClient();
   const { itemId } = route.params;
+  
+  const [wooConnected, setWooConnected] = useState(false);
+  const [ebayConnected, setEbayConnected] = useState(false);
+  const [publishingWoo, setPublishingWoo] = useState(false);
+  const [publishingEbay, setPublishingEbay] = useState(false);
+
+  useEffect(() => {
+    checkConnections();
+  }, []);
+
+  const checkConnections = async () => {
+    const wooStatus = await AsyncStorage.getItem("woocommerce_status");
+    const ebayStatus = await AsyncStorage.getItem("ebay_status");
+    setWooConnected(wooStatus === "connected");
+    setEbayConnected(ebayStatus === "connected");
+  };
 
   const { data: item, isLoading, error } = useQuery<StashItem>({
     queryKey: ["/api/stash", itemId],
@@ -81,8 +102,98 @@ export default function ItemDetailsScreen() {
     ]);
   };
 
-  const handlePublish = (platform: "woocommerce" | "ebay") => {
-    Alert.alert("Coming Soon", `Publishing to ${platform === "woocommerce" ? "WooCommerce" : "eBay"} will be available soon.`);
+  const handlePublishWooCommerce = async () => {
+    if (!item) return;
+    
+    if (!wooConnected) {
+      Alert.alert(
+        "WooCommerce Not Connected",
+        "Connect your WooCommerce store in Settings to publish listings.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Go to Settings", onPress: () => navigation.navigate("WooCommerceSettings") },
+        ]
+      );
+      return;
+    }
+    
+    if (item.publishedToWoocommerce) {
+      Alert.alert("Already Published", "This item has already been published to WooCommerce.");
+      return;
+    }
+    
+    setPublishingWoo(true);
+    try {
+      const settings = await getWooCommerceSettings();
+      if (!settings) {
+        Alert.alert("Error", "Could not retrieve WooCommerce settings.");
+        return;
+      }
+      
+      const result = await publishToWooCommerce(itemId, settings);
+      
+      if (result.success) {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        Alert.alert("Published!", `Your item has been listed on WooCommerce.\n\n${result.productUrl || ""}`);
+        queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/stash"] });
+      } else {
+        Alert.alert("Publishing Failed", result.error || "Unknown error occurred");
+      }
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to publish to WooCommerce");
+    } finally {
+      setPublishingWoo(false);
+    }
+  };
+  
+  const handlePublishEbay = async () => {
+    if (!item) return;
+    
+    if (!ebayConnected) {
+      Alert.alert(
+        "eBay Not Connected",
+        "Connect your eBay seller account in Settings to publish listings.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Go to Settings", onPress: () => navigation.navigate("EbaySettings") },
+        ]
+      );
+      return;
+    }
+    
+    if (item.publishedToEbay) {
+      Alert.alert("Already Published", "This item has already been published to eBay.");
+      return;
+    }
+    
+    setPublishingEbay(true);
+    try {
+      const settings = await getEbaySettings();
+      if (!settings) {
+        Alert.alert("Error", "Could not retrieve eBay settings.");
+        return;
+      }
+      
+      const result = await publishToEbay(itemId, settings);
+      
+      if (result.success) {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        Alert.alert("Published!", `Your item has been listed on eBay.\n\n${result.listingUrl || ""}`);
+        queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/stash"] });
+      } else {
+        Alert.alert("Publishing Failed", result.error || "Unknown error occurred");
+      }
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to publish to eBay");
+    } finally {
+      setPublishingEbay(false);
+    }
   };
 
   if (isLoading) {
@@ -190,20 +301,28 @@ export default function ItemDetailsScreen() {
                 style={({ pressed }) => [
                   styles.publishButton,
                   item.publishedToWoocommerce && styles.publishButtonActive,
+                  wooConnected && !item.publishedToWoocommerce && styles.publishButtonConnected,
                   pressed && { opacity: 0.8 },
+                  publishingWoo && { opacity: 0.6 },
                 ]}
-                onPress={() => handlePublish("woocommerce")}
+                onPress={handlePublishWooCommerce}
+                disabled={publishingWoo || publishingEbay}
                 testID="button-publish-woocommerce"
               >
-                <Feather
-                  name="shopping-bag"
-                  size={24}
-                  color={item.publishedToWoocommerce ? Colors.dark.buttonText : Colors.dark.text}
-                />
+                {publishingWoo ? (
+                  <ActivityIndicator color={Colors.dark.primary} size="small" />
+                ) : (
+                  <Feather
+                    name="shopping-bag"
+                    size={24}
+                    color={item.publishedToWoocommerce ? Colors.dark.buttonText : wooConnected ? Colors.dark.primary : Colors.dark.textSecondary}
+                  />
+                )}
                 <ThemedText
                   style={[
                     styles.publishButtonText,
                     item.publishedToWoocommerce && styles.publishButtonTextActive,
+                    !wooConnected && !item.publishedToWoocommerce && styles.publishButtonTextDisabled,
                   ]}
                 >
                   WooCommerce
@@ -212,6 +331,8 @@ export default function ItemDetailsScreen() {
                   <View style={styles.publishedBadge}>
                     <Feather name="check" size={12} color={Colors.dark.success} />
                   </View>
+                ) : !wooConnected ? (
+                  <ThemedText style={styles.notConnectedText}>Not connected</ThemedText>
                 ) : null}
               </Pressable>
 
@@ -219,20 +340,28 @@ export default function ItemDetailsScreen() {
                 style={({ pressed }) => [
                   styles.publishButton,
                   item.publishedToEbay && styles.publishButtonActive,
+                  ebayConnected && !item.publishedToEbay && styles.publishButtonConnected,
                   pressed && { opacity: 0.8 },
+                  publishingEbay && { opacity: 0.6 },
                 ]}
-                onPress={() => handlePublish("ebay")}
+                onPress={handlePublishEbay}
+                disabled={publishingWoo || publishingEbay}
                 testID="button-publish-ebay"
               >
-                <Feather
-                  name="tag"
-                  size={24}
-                  color={item.publishedToEbay ? Colors.dark.buttonText : Colors.dark.text}
-                />
+                {publishingEbay ? (
+                  <ActivityIndicator color={Colors.dark.primary} size="small" />
+                ) : (
+                  <Feather
+                    name="tag"
+                    size={24}
+                    color={item.publishedToEbay ? Colors.dark.buttonText : ebayConnected ? Colors.dark.primary : Colors.dark.textSecondary}
+                  />
+                )}
                 <ThemedText
                   style={[
                     styles.publishButtonText,
                     item.publishedToEbay && styles.publishButtonTextActive,
+                    !ebayConnected && !item.publishedToEbay && styles.publishButtonTextDisabled,
                   ]}
                 >
                   eBay
@@ -241,6 +370,8 @@ export default function ItemDetailsScreen() {
                   <View style={styles.publishedBadge}>
                     <Feather name="check" size={12} color={Colors.dark.success} />
                   </View>
+                ) : !ebayConnected ? (
+                  <ThemedText style={styles.notConnectedText}>Not connected</ThemedText>
                 ) : null}
               </Pressable>
             </View>
@@ -409,6 +540,10 @@ const styles = StyleSheet.create({
   publishButtonActive: {
     backgroundColor: Colors.dark.primary,
   },
+  publishButtonConnected: {
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+  },
   publishButtonText: {
     ...Typography.small,
     color: Colors.dark.text,
@@ -416,6 +551,13 @@ const styles = StyleSheet.create({
   },
   publishButtonTextActive: {
     color: Colors.dark.buttonText,
+  },
+  publishButtonTextDisabled: {
+    color: Colors.dark.textSecondary,
+  },
+  notConnectedText: {
+    ...Typography.caption,
+    color: Colors.dark.textSecondary,
   },
   publishedBadge: {
     position: "absolute",
