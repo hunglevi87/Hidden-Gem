@@ -9,6 +9,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<any>;
   signUp: (email: string, password: string) => Promise<any>;
   signOut: () => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   isAuthenticated: boolean;
   isConfigured: boolean;
 }

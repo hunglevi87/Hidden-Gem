@@ -12,11 +12,12 @@ import logoImage from "../../assets/images/logo.png";
 
 export default function AuthScreen() {
   const insets = useSafeAreaInsets();
-  const { signIn, signUp } = useAuthContext();
+  const { signIn, signUp, signInWithGoogle } = useAuthContext();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const handleAuth = async () => {
@@ -46,6 +47,23 @@ export default function AuthScreen() {
       Alert.alert("Error", error.message || "Authentication failed");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error: any) {
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+      Alert.alert("Error", error.message || "Google sign-in failed");
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -133,6 +151,36 @@ export default function AuthScreen() {
                   {isSignUp ? "Create Account" : "Sign In"}
                 </ThemedText>
                 <Feather name="arrow-right" size={20} color={Colors.dark.buttonText} />
+              </>
+            )}
+          </Pressable>
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <ThemedText style={styles.dividerText}>or</ThemedText>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.googleButton,
+              pressed && styles.googleButtonPressed,
+              googleLoading && styles.authButtonDisabled,
+            ]}
+            onPress={handleGoogleSignIn}
+            disabled={googleLoading}
+            testID="button-google-signin"
+          >
+            {googleLoading ? (
+              <ActivityIndicator color={Colors.dark.text} />
+            ) : (
+              <>
+                <View style={styles.googleIconContainer}>
+                  <ThemedText style={styles.googleIcon}>G</ThemedText>
+                </View>
+                <ThemedText style={styles.googleButtonText}>
+                  Continue with Google
+                </ThemedText>
               </>
             )}
           </Pressable>
@@ -272,6 +320,52 @@ const styles = StyleSheet.create({
   switchTextHighlight: {
     color: Colors.dark.primary,
     fontWeight: "600",
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: Spacing.lg,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.dark.border,
+  },
+  dividerText: {
+    ...Typography.caption,
+    color: Colors.dark.textSecondary,
+    marginHorizontal: Spacing.lg,
+  },
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    height: Spacing.buttonHeight,
+    gap: Spacing.md,
+  },
+  googleButtonPressed: {
+    opacity: 0.8,
+  },
+  googleIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  googleIcon: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#4285F4",
+  },
+  googleButtonText: {
+    ...Typography.button,
+    color: Colors.dark.text,
   },
   footer: {
     marginTop: "auto",
