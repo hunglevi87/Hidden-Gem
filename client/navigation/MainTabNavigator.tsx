@@ -5,6 +5,7 @@ import { BlurView } from "expo-blur";
 import { Platform, StyleSheet, View, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useQuery } from "@tanstack/react-query";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { Colors, Spacing } from "@/constants/theme";
 import DiscoverScreen from "@/screens/DiscoverScreen";
@@ -37,11 +38,17 @@ function HeaderLeft() {
 function HeaderRight() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   
+  const { data: countData } = useQuery<{ count: number }>({
+    queryKey: ["/api/stash/count"],
+  });
+  
+  const scanCount = countData?.count ?? 0;
+  
   return (
     <View style={styles.headerRight}>
       <View style={styles.scanBadge}>
         <Feather name="zap" size={14} color={Colors.dark.primary} />
-        <ThemedText style={styles.scanCount}>3</ThemedText>
+        <ThemedText style={styles.scanCount}>{scanCount}</ThemedText>
       </View>
       <Pressable 
         onPress={() => navigation.navigate("Settings")}

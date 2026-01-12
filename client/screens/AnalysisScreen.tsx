@@ -9,9 +9,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { apiRequest } from "@/lib/query-client";
+import { getApiUrl, apiRequest } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
-import successImage from "../../assets/images/success-scan.png";
 
 type AnalysisRouteProp = RouteProp<RootStackParamList, "Analysis">;
 
@@ -47,6 +46,7 @@ export default function AnalysisScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stash"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stash/count"] });
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
@@ -69,23 +69,25 @@ export default function AnalysisScreen() {
 
     try {
       const formData = new FormData();
+      
       formData.append("fullImage", {
         uri: fullImageUri,
         type: "image/jpeg",
         name: "full.jpg",
       } as any);
+      
       formData.append("labelImage", {
         uri: labelImageUri,
         type: "image/jpeg",
         name: "label.jpg",
       } as any);
 
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || ""}/api/analyze`, {
+      const apiUrl = getApiUrl();
+      const url = new URL("/api/analyze", apiUrl);
+      
+      const response = await fetch(url.toString(), {
         method: "POST",
         body: formData,
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
       });
 
       if (!response.ok) {
@@ -180,7 +182,9 @@ export default function AnalysisScreen() {
         </View>
 
         <View style={styles.successBadge}>
-          <Image source={successImage} style={styles.successIcon} resizeMode="contain" />
+          <View style={styles.successIcon}>
+            <Feather name="check-circle" size={40} color={Colors.dark.success} />
+          </View>
         </View>
 
         <View style={styles.resultCard}>
@@ -355,6 +359,10 @@ const styles = StyleSheet.create({
   successIcon: {
     width: 60,
     height: 60,
+    borderRadius: 30,
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   resultCard: {
     backgroundColor: Colors.dark.surface,

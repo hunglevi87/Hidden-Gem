@@ -1,8 +1,11 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
+import multer from "multer";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { db } from "./db";
 import { articles, stashItems } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, count } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({
@@ -11,6 +14,11 @@ const ai = new GoogleGenAI({
     apiVersion: "",
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
   },
+});
+
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -56,6 +64,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching stash items:", error);
       res.status(500).json({ error: "Failed to fetch stash items" });
+    }
+  });
+
+  app.get("/api/stash/count", async (_req: Request, res: Response) => {
+    try {
+      const [result] = await db.select({ count: count() }).from(stashItems);
+      res.json({ count: result?.count || 0 });
+    } catch (error) {
+      console.error("Error fetching stash count:", error);
+      res.status(500).json({ error: "Failed to fetch stash count" });
     }
   });
 
@@ -119,8 +137,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/analyze", async (req: Request, res: Response) => {
+  app.post("/api/analyze", upload.fields([
+    { name: "fullImage", maxCount: 1 },
+    { name: "labelImage", maxCount: 1 }
+  ]), async (req: Request, res: Response) => {
     try {
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      
+      const fullImageFile = files?.fullImage?.[0];
+      const labelImageFile = files?.labelImage?.[0];
+
       const prompt = `You are an expert appraiser and reseller assistant. Analyze this collectible/vintage item and provide a detailed assessment.
 
 Based on the images provided (one showing the full item and one showing the label/tag), please provide:
@@ -147,9 +173,29 @@ Respond ONLY with valid JSON in this exact format:
   "tags": ["tag1", "tag2", "tag3"]
 }`;
 
+      const parts: any[] = [{ text: prompt }];
+
+      if (fullImageFile) {
+        parts.push({
+          inlineData: {
+            mimeType: fullImageFile.mimetype,
+            data: fullImageFile.buffer.toString("base64"),
+          },
+        });
+      }
+
+      if (labelImageFile) {
+        parts.push({
+          inlineData: {
+            mimeType: labelImageFile.mimetype,
+            data: labelImageFile.buffer.toString("base64"),
+          },
+        });
+      }
+
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: prompt,
+        contents: [{ role: "user", parts }],
         config: {
           responseMimeType: "application/json",
         },

@@ -75,3 +75,4 @@ ensurePreviewReachable = "/status"
 [userenv.shared]
 SUPABASE_URL = "https://lluuaxhmyuuvqldgzwau.supabase.co"
 EXPO_PUBLIC_SUPABASE_URL = "https://lluuaxhmyuuvqldgzwau.supabase.co"
+EXPO_PUBLIC_SUPABASE_ANON_KEY = "${SUPABASE_ANON_KEY}"

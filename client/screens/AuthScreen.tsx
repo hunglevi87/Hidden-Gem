@@ -1,13 +1,14 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, Platform } from "react-native";
+import { View, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, Platform, Image } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Colors, Spacing, BorderRadius, Typography, Fonts } from "@/constants/theme";
+import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { Feather } from "@expo/vector-icons";
 import { useAuthContext } from "@/contexts/AuthContext";
 import * as Haptics from "expo-haptics";
+import logoImage from "../../assets/images/logo.png";
 
 export default function AuthScreen() {
   const insets = useSafeAreaInsets();
@@ -53,15 +54,12 @@ export default function AuthScreen() {
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + Spacing["5xl"], paddingBottom: insets.bottom + Spacing["2xl"] },
+          { paddingTop: insets.top + Spacing["4xl"], paddingBottom: insets.bottom + Spacing["2xl"] },
         ]}
       >
         <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
-            <Feather name="star" size={40} color={Colors.dark.primary} />
-          </View>
+          <Image source={logoImage} style={styles.logo} resizeMode="contain" />
           <ThemedText style={styles.appName}>HiddenGem</ThemedText>
-          <ThemedText style={styles.tagline}>by The Relic Shop</ThemedText>
         </View>
 
         <View style={styles.headerContainer}>
@@ -174,27 +172,18 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: "center",
-    marginBottom: Spacing["4xl"],
+    marginBottom: Spacing["3xl"],
   },
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.dark.surface,
-    alignItems: "center",
-    justifyContent: "center",
+  logo: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     marginBottom: Spacing.lg,
   },
   appName: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: "700",
-    color: Colors.dark.text,
-  },
-  tagline: {
-    fontSize: 14,
     color: Colors.dark.primary,
-    marginTop: Spacing.xs,
-    letterSpacing: 1,
   },
   headerContainer: {
     marginBottom: Spacing["3xl"],
