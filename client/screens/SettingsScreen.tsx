@@ -34,9 +34,10 @@ interface SettingsRowProps {
   onPress?: () => void;
   isDestructive?: boolean;
   showChevron?: boolean;
+  status?: "connected" | "not_connected";
 }
 
-function SettingsRow({ icon, label, value, onPress, isDestructive, showChevron = true }: SettingsRowProps) {
+function SettingsRow({ icon, label, value, onPress, isDestructive, showChevron = true, status }: SettingsRowProps) {
   return (
     <Pressable
       style={({ pressed }) => [styles.settingsRow, pressed && styles.settingsRowPressed]}
@@ -52,7 +53,16 @@ function SettingsRow({ icon, label, value, onPress, isDestructive, showChevron =
         </ThemedText>
       </View>
       <View style={styles.settingsRowRight}>
-        {value ? <ThemedText style={styles.settingsValue}>{value}</ThemedText> : null}
+        {status ? (
+          <View style={[styles.statusBadge, status === "connected" ? styles.statusBadgeConnected : styles.statusBadgeDisconnected]}>
+            <View style={[styles.statusDot, status === "connected" ? styles.statusDotConnected : styles.statusDotDisconnected]} />
+            <ThemedText style={[styles.statusBadgeText, status === "connected" ? styles.statusTextConnected : styles.statusTextDisconnected]}>
+              {status === "connected" ? "Connected" : "Not Connected"}
+            </ThemedText>
+          </View>
+        ) : value ? (
+          <ThemedText style={styles.settingsValue}>{value}</ThemedText>
+        ) : null}
         {showChevron && onPress ? (
           <Feather name="chevron-right" size={20} color={Colors.dark.textSecondary} />
         ) : null}
@@ -228,24 +238,39 @@ export default function SettingsScreen() {
           </Pressable>
         </SettingsSection>
 
-        <SettingsSection title="Marketplace Integrations">
+        <View style={styles.accountHeader}>
+          <View style={styles.avatarContainer}>
+            <ThemedText style={styles.avatarText}>
+              {user?.email?.charAt(0).toUpperCase() || "?"}
+            </ThemedText>
+          </View>
+          <View style={styles.accountInfo}>
+            <ThemedText style={styles.accountEmail}>{user?.email || "Unknown"}</ThemedText>
+            <ThemedText style={styles.accountLabel}>Signed in</ThemedText>
+          </View>
+          <Pressable
+            style={({ pressed }) => [styles.signOutButton, pressed && { opacity: 0.7 }]}
+            onPress={handleSignOut}
+            testID="button-sign-out"
+          >
+            <Feather name="log-out" size={18} color={Colors.dark.error} />
+            <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
+          </Pressable>
+        </View>
+
+        <SettingsSection title="Connected Marketplaces">
           <SettingsRow
             icon="shopping-bag"
             label="WooCommerce"
-            value={wooCommerceStatus}
+            status={wooCommerceStatus === "Connected" ? "connected" : "not_connected"}
             onPress={() => navigation.navigate("WooCommerceSettings")}
           />
           <SettingsRow
             icon="tag"
             label="eBay"
-            value={ebayStatus}
+            status={ebayStatus === "Connected" ? "connected" : "not_connected"}
             onPress={() => navigation.navigate("EbaySettings")}
           />
-        </SettingsSection>
-
-        <SettingsSection title="Account">
-          <SettingsRow icon="mail" label="Email" value={user?.email || "Unknown"} showChevron={false} />
-          <SettingsRow icon="log-out" label="Sign Out" onPress={handleSignOut} isDestructive showChevron={false} />
         </SettingsSection>
 
         <SettingsSection title="App">
@@ -325,6 +350,90 @@ const styles = StyleSheet.create({
   settingsValue: {
     ...Typography.small,
     color: Colors.dark.textSecondary,
+  },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.sm,
+    gap: 6,
+  },
+  statusBadgeConnected: {
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+  },
+  statusBadgeDisconnected: {
+    backgroundColor: "rgba(156, 163, 175, 0.15)",
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusDotConnected: {
+    backgroundColor: Colors.dark.success,
+  },
+  statusDotDisconnected: {
+    backgroundColor: Colors.dark.textSecondary,
+  },
+  statusBadgeText: {
+    ...Typography.caption,
+    fontWeight: "500",
+  },
+  statusTextConnected: {
+    color: Colors.dark.success,
+  },
+  statusTextDisconnected: {
+    color: Colors.dark.textSecondary,
+  },
+  accountHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing["2xl"],
+  },
+  avatarContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.dark.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    ...Typography.h4,
+    color: Colors.dark.buttonText,
+    fontWeight: "700",
+  },
+  accountInfo: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  accountEmail: {
+    ...Typography.body,
+    color: Colors.dark.text,
+    fontWeight: "600",
+  },
+  accountLabel: {
+    ...Typography.caption,
+    color: Colors.dark.textSecondary,
+    marginTop: 2,
+  },
+  signOutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+  },
+  signOutText: {
+    ...Typography.small,
+    color: Colors.dark.error,
+    fontWeight: "600",
   },
   apiKeySection: {
     padding: Spacing.lg,
