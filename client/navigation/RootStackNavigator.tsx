@@ -8,6 +8,8 @@ import AnalysisScreen from "@/screens/AnalysisScreen";
 import ArticleScreen from "@/screens/ArticleScreen";
 import WooCommerceSettingsScreen from "@/screens/WooCommerceSettingsScreen";
 import EbaySettingsScreen from "@/screens/EbaySettingsScreen";
+import TermsOfServiceScreen from "@/screens/TermsOfServiceScreen";
+import PrivacyPolicyScreen from "@/screens/PrivacyPolicyScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { Colors } from "@/constants/theme";
@@ -18,6 +20,8 @@ export type RootStackParamList = {
   Settings: undefined;
   WooCommerceSettings: undefined;
   EbaySettings: undefined;
+  TermsOfService: undefined;
+  PrivacyPolicy: undefined;
   ItemDetails: { itemId: number };
   Analysis: { fullImageUri: string; labelImageUri: string };
   Article: { articleId: number };
@@ -96,6 +100,20 @@ export default function RootStackNavigator() {
             component={EbaySettingsScreen}
             options={{
               headerTitle: "eBay",
+            }}
+          />
+          <Stack.Screen
+            name="TermsOfService"
+            component={TermsOfServiceScreen}
+            options={{
+              headerTitle: "Terms of Service",
+            }}
+          />
+          <Stack.Screen
+            name="PrivacyPolicy"
+            component={PrivacyPolicyScreen}
+            options={{
+              headerTitle: "Privacy Policy",
             }}
           />
         </>

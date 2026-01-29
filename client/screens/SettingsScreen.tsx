@@ -275,8 +275,8 @@ export default function SettingsScreen() {
 
         <SettingsSection title="App">
           <SettingsRow icon="info" label="Version" value="1.0.0" showChevron={false} />
-          <SettingsRow icon="file-text" label="Terms of Service" onPress={() => {}} />
-          <SettingsRow icon="shield" label="Privacy Policy" onPress={() => {}} />
+          <SettingsRow icon="file-text" label="Terms of Service" onPress={() => navigation.navigate("TermsOfService")} />
+          <SettingsRow icon="shield" label="Privacy Policy" onPress={() => navigation.navigate("PrivacyPolicy")} />
         </SettingsSection>
       </ScrollView>
     </ThemedView>
