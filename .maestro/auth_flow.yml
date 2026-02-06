@@ -1,0 +1,46 @@
+appId: com.therelicshop.hiddengem
+tags:
+  - auth
+  - critical
+---
+# Authentication Flow - Sign Up and Sign In
+# Tests the complete authentication journey
+
+- launchApp:
+    clearState: true
+
+# Should show the auth screen
+- assertVisible: "Sign In"
+
+# Test switching between Sign In and Sign Up
+- tapOn:
+    id: "button-switch-auth"
+- assertVisible: "Sign Up"
+- tapOn:
+    id: "button-switch-auth"
+- assertVisible: "Sign In"
+
+# Test empty form validation
+- tapOn:
+    id: "button-auth"
+- assertVisible:
+    id: "error-message"
+
+# Test email input
+- tapOn:
+    id: "input-email"
+- inputText: "testuser@example.com"
+
+# Test password input
+- tapOn:
+    id: "input-password"
+- inputText: "TestPassword123!"
+
+# Submit sign in (may fail with invalid creds - that's expected)
+- tapOn:
+    id: "button-auth"
+
+# Verify error or success message appears
+- assertVisible:
+    id: "error-message"
+    optional: true

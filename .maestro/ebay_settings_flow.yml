@@ -1,0 +1,44 @@
+appId: com.therelicshop.hiddengem
+tags:
+  - ebay
+  - marketplace
+---
+# eBay Settings Flow
+# Tests eBay credential entry and connection testing
+# Requires: User is already authenticated
+
+- launchApp
+
+# Navigate to Settings > eBay
+- tapOn:
+    id: "button-settings"
+- tapOn: "eBay"
+
+# Verify form fields are present
+- assertVisible:
+    id: "input-ebay-client-id"
+- assertVisible:
+    id: "input-ebay-client-secret"
+- assertVisible:
+    id: "input-ebay-refresh-token"
+
+# Enter test credentials
+- tapOn:
+    id: "input-ebay-client-id"
+- inputText: "test-client-id-12345"
+
+- tapOn:
+    id: "input-ebay-client-secret"
+- inputText: "test-client-secret-12345"
+
+- tapOn:
+    id: "input-ebay-refresh-token"
+- inputText: "test-refresh-token-12345"
+
+# Save credentials
+- tapOn:
+    id: "button-save-ebay"
+
+# Test connection button should be available
+- assertVisible:
+    id: "button-test-ebay"

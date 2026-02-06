@@ -1,0 +1,50 @@
+appId: com.therelicshop.hiddengem
+tags:
+  - settings
+---
+# Settings Screen Navigation Flow
+# Tests navigation to settings and sub-screens
+# Requires: User is already authenticated
+
+- launchApp
+
+# Navigate to Settings via the tab bar button
+- tapOn:
+    id: "button-settings"
+
+# Verify Settings screen loads
+- assertVisible: "Settings"
+
+# Verify marketplace sections are visible
+- assertVisible: "Marketplace Integrations"
+- assertVisible: "WooCommerce"
+- assertVisible: "eBay"
+
+# Verify App section
+- scrollUntilVisible:
+    element: "Terms of Service"
+    direction: DOWN
+- assertVisible: "Terms of Service"
+- assertVisible: "Privacy Policy"
+
+# Navigate to Terms of Service
+- tapOn: "Terms of Service"
+- assertVisible: "Acceptance of Terms"
+- back
+
+# Navigate to Privacy Policy
+- tapOn: "Privacy Policy"
+- assertVisible: "Information We Collect"
+- back
+
+# Navigate to WooCommerce settings
+- tapOn: "WooCommerce"
+- assertVisible:
+    id: "input-woo-url"
+- back
+
+# Navigate to eBay settings
+- tapOn: "eBay"
+- assertVisible:
+    id: "input-ebay-client-id"
+- back

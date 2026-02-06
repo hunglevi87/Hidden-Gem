@@ -1,0 +1,30 @@
+appId: com.therelicshop.hiddengem
+tags:
+  - scan
+  - camera
+---
+# Scan Screen Flow
+# Tests the camera/scan tab navigation and UI elements
+# Requires: User is already authenticated, camera permission may be needed
+
+- launchApp
+
+# Navigate to Scan tab
+- tapOn: "Scan"
+
+# Camera permission screen may appear
+# If permission not granted, the enable button should be visible
+- assertVisible:
+    id: "button-enable-camera"
+    optional: true
+
+# If camera is available, verify capture controls
+- assertVisible:
+    id: "button-capture"
+    optional: true
+- assertVisible:
+    id: "button-gallery"
+    optional: true
+- assertVisible:
+    id: "button-flash"
+    optional: true

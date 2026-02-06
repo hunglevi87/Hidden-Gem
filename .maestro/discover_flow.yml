@@ -1,0 +1,26 @@
+appId: com.therelicshop.hiddengem
+tags:
+  - discover
+  - articles
+---
+# Discover (Must-Reads) Screen Flow
+# Tests the articles/discover tab
+# Requires: User is already authenticated
+
+- launchApp
+
+# Discover should be the default/first tab
+- assertVisible: "Must-Reads"
+
+# Check for articles or empty state
+- assertVisible:
+    id: "card-article-1"
+    optional: true
+
+# If articles exist, tap to view
+- runFlow:
+    when:
+      visible: "See All"
+    commands:
+      - tapOn:
+          id: "button-all-articles"

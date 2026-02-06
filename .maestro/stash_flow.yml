@@ -1,0 +1,27 @@
+appId: com.therelicshop.hiddengem
+tags:
+  - stash
+  - inventory
+---
+# Stash (Inventory) Screen Flow
+# Tests the inventory management tab
+# Requires: User is already authenticated
+
+- launchApp
+
+# Navigate to Stash tab
+- tapOn: "Stash"
+
+# Verify empty state or item list
+- assertVisible:
+    text: "Your stash is empty"
+    optional: true
+
+# If items exist, first item card should be tappable
+- assertVisible:
+    id: "card-item-1"
+    optional: true
+
+# Verify FAB scan button is present
+- assertVisible:
+    id: "button-fab-scan"

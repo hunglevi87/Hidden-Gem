@@ -1,0 +1,44 @@
+appId: com.therelicshop.hiddengem
+tags:
+  - woocommerce
+  - marketplace
+---
+# WooCommerce Settings Flow
+# Tests WooCommerce credential entry and connection testing
+# Requires: User is already authenticated
+
+- launchApp
+
+# Navigate to Settings > WooCommerce
+- tapOn:
+    id: "button-settings"
+- tapOn: "WooCommerce"
+
+# Verify form fields are present
+- assertVisible:
+    id: "input-woo-url"
+- assertVisible:
+    id: "input-woo-key"
+- assertVisible:
+    id: "input-woo-secret"
+
+# Enter test credentials
+- tapOn:
+    id: "input-woo-url"
+- inputText: "https://mystore.example.com"
+
+- tapOn:
+    id: "input-woo-key"
+- inputText: "ck_test_key_12345"
+
+- tapOn:
+    id: "input-woo-secret"
+- inputText: "cs_test_secret_12345"
+
+# Save credentials
+- tapOn:
+    id: "button-save-woo"
+
+# Test connection button should be available
+- assertVisible:
+    id: "button-test-woo"
