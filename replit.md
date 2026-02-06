@@ -78,3 +78,31 @@ Preferred communication style: Simple, everyday language.
 - **Image Picker**: Alternative to camera for selecting existing photos
 - **Haptics**: Tactile feedback on iOS/Android
 - **SecureStore**: Encrypted storage for API keys and secrets
+
+## Feature Completion Status
+
+### Completed
+- Authentication: Supabase email/password and Google OAuth with inline error/success messages
+- Settings screen: Account header with user email/avatar, sign-out button, marketplace connection status badges
+- WooCommerce integration: Save credentials (SecureStore), test connection, publish items from ItemDetailsScreen
+- eBay integration: Save credentials (SecureStore), test connection, publish items from ItemDetailsScreen
+- Terms of Service and Privacy Policy screens (accessible from Settings)
+- Item scanning: Two-photo capture workflow (full item + label close-up) with camera and gallery support
+- AI analysis: Google Gemini integration for item identification and appraisal
+- Stash (inventory) management: Grid view with item details, publish status badges
+- Discover tab: Curated articles with featured card layout
+- Backend API: Express.js with PostgreSQL/Drizzle, marketplace proxy endpoints
+
+### Not Yet Implemented
+- HuggingFace as secondary AI model
+- Full SEO-optimized listing generation (backend stubs exist)
+- Advanced publish status tracking across marketplaces
+- Search/filter functionality in Stash
+- Theme switching (light mode)
+- Push notifications
+- Onboarding/welcome screen
+
+## Recent Changes
+- 2026-02-06: Added Terms of Service and Privacy Policy screens
+- 2026-02-06: Added environment setup documentation (ENVIRONMENT.md)
+- 2026-02-06: Added E2E testing infrastructure with Maestro
