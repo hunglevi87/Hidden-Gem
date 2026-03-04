@@ -7,6 +7,7 @@ import { db } from "./db";
 import { articles, stashItems } from "@shared/schema";
 import { eq, desc, count } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
+import { testProviderConnection, AIProviderConfig } from "./ai-providers";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
@@ -484,6 +485,29 @@ Respond ONLY with valid JSON in this exact format:
     } catch (error) {
       console.error("eBay publish error:", error);
       res.status(500).json({ error: "Failed to publish to eBay. Please check your credentials and try again." });
+    }
+  });
+
+  app.post("/api/ai-providers/test", async (req: Request, res: Response) => {
+    try {
+      const { provider, apiKey, endpoint, model } = req.body;
+      
+      if (!provider) {
+        return res.status(400).json({ success: false, message: "Provider is required" });
+      }
+
+      const config: AIProviderConfig = {
+        provider,
+        apiKey,
+        endpoint,
+        model,
+      };
+
+      const result = await testProviderConnection(config);
+      res.json(result);
+    } catch (error: any) {
+      console.error("AI provider test error:", error);
+      res.status(500).json({ success: false, message: error.message || "Test failed" });
     }
   });
 
