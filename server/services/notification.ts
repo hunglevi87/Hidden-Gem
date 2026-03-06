@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { db } from "../db";
 import { pushTokens, notifications, priceTracking, stashItems } from "@shared/schema";
 import { eq, and, lte, isNotNull } from "drizzle-orm";
 
@@ -115,10 +115,10 @@ export async function sendPushNotification(
     // Store notification in database
     await db.insert(notifications).values({
       userId,
-      type: data?.type || "general",
+      type: (data?.type as string) || "general",
       title,
       body,
-      data: data || {},
+      data: (data || {}) as Record<string, unknown>,
     });
 
     return true;
@@ -263,7 +263,7 @@ export async function getPriceTrackingStatus(
   }
 
   return {
-    isActive: tracking[0].isActive,
+    isActive: tracking[0].isActive ?? true,
     alertThreshold: tracking[0].alertThreshold || 10,
   };
 }
