@@ -11,7 +11,8 @@ import { queryClient } from "@/lib/query-client";
 
 import RootStackNavigator from "@/navigation/RootStackNavigator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuthContext } from "@/contexts/AuthContext";
+import { useNotifications } from "@/hooks/useNotifications";
 import { Colors } from "@/constants/theme";
 
 const HiddenGemTheme = {
@@ -27,21 +28,30 @@ const HiddenGemTheme = {
   },
 };
 
+function AppInner() {
+  const { isAuthenticated } = useAuthContext();
+  useNotifications(isAuthenticated);
+
+  return (
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={styles.root}>
+        <KeyboardProvider>
+          <NavigationContainer theme={HiddenGemTheme}>
+            <RootStackNavigator />
+          </NavigationContainer>
+          <StatusBar style="light" />
+        </KeyboardProvider>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <SafeAreaProvider>
-            <GestureHandlerRootView style={styles.root}>
-              <KeyboardProvider>
-                <NavigationContainer theme={HiddenGemTheme}>
-                  <RootStackNavigator />
-                </NavigationContainer>
-                <StatusBar style="light" />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </SafeAreaProvider>
+          <AppInner />
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>

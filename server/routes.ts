@@ -34,6 +34,145 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Push notification token endpoints
+  app.post("/api/push-token", async (req: Request, res: Response) => {
+    try {
+      const { userId, token, platform } = req.body;
+      if (!userId || !token || !platform) {
+        return res.status(400).json({ error: "userId, token, and platform are required" });
+      }
+      await registerPushToken(userId, token, platform);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error registering push token:", error);
+      res.status(500).json({ error: "Failed to register push token" });
+    }
+  });
+
+  app.delete("/api/push-token", async (req: Request, res: Response) => {
+    try {
+      const { userId, token } = req.body;
+      if (!userId || !token) {
+        return res.status(400).json({ error: "userId and token are required" });
+      }
+      await unregisterPushToken(userId, token);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unregistering push token:", error);
+      res.status(500).json({ error: "Failed to unregister push token" });
+    }
+  });
+
+  app.get("/api/notifications", async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+      const notifications = await getUserNotifications(userId);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  app.get("/api/notifications/unread-count", async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+      const count = await getUnreadNotificationCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching unread count:", error);
+      res.status(500).json({ error: "Failed to fetch unread count" });
+    }
+  });
+
+  app.post("/api/notifications/:id/read", async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId as string;
+      const id = parseInt(req.params.id);
+      if (!userId || isNaN(id)) {
+        return res.status(400).json({ error: "userId and notification id are required" });
+      }
+      await markNotificationAsRead(userId, id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+  });
+
+  app.post("/api/notifications/read-all", async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+      await markAllNotificationsAsRead(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ error: "Failed to mark all notifications as read" });
+    }
+  });
+
+  // Price tracking endpoints
+  app.post("/api/stash/:id/price-tracking", async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId as string || "anonymous";
+      const id = parseInt(req.params.id);
+      const { alertThreshold } = req.body;
+      
+      if (!userId || isNaN(id)) {
+        return res.status(400).json({ error: "userId and stash item id are required" });
+      }
+      
+      await enablePriceTracking(userId, id, alertThreshold);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error enabling price tracking:", error);
+      res.status(500).json({ error: "Failed to enable price tracking" });
+    }
+  });
+
+  app.delete("/api/stash/:id/price-tracking", async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId as string || "anonymous";
+      const id = parseInt(req.params.id);
+      
+      if (!userId || isNaN(id)) {
+        return res.status(400).json({ error: "userId and stash item id are required" });
+      }
+      
+      await disablePriceTracking(userId, id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error disabling price tracking:", error);
+      res.status(500).json({ error: "Failed to disable price tracking" });
+    }
+  });
+
+  app.get("/api/stash/:id/price-tracking", async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId as string || "anonymous";
+      const id = parseInt(req.params.id);
+      
+      if (!userId || isNaN(id)) {
+        return res.status(400).json({ error: "userId and stash item id are required" });
+      }
+      
+      const status = await getPriceTrackingStatus(userId, id);
+      res.json(status);
+    } catch (error) {
+      console.error("Error getting price tracking status:", error);
+      res.status(500).json({ error: "Failed to get price tracking status" });
+    }
+  });
+
   app.get("/api/articles", async (_req: Request, res: Response) => {
     try {
       const allArticles = await db
@@ -555,17 +694,6 @@ Respond ONLY with valid JSON in this exact format:
         ? JSON.parse(previousResult) 
         : previousResult;
 
-      const result = await analyzeItemWithRetry(config, images, parsedPrevious, feedback);
-      res.json(result);
-    } catch (error) {
-      console.error("Error in retry analysis:", error);
-      res.status(500).json({ error: "Failed to re-analyze item" });
-    }
-  });
-
-  const httpServer = createServer(app);
-  return httpServer;
-}
       const result = await analyzeItemWithRetry(config, images, parsedPrevious, feedback);
       res.json(result);
     } catch (error) {

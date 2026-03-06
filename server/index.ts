@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { processPriceChecks } from "./services/notification";
+import { db } from "./db";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -241,6 +243,19 @@ function setupErrorHandler(app: express.Application) {
     },
     () => {
       log(`express server serving on port ${port}`);
+
+      // Schedule price check every 6 hours
+      const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+      setInterval(async () => {
+        try {
+          log("Running scheduled price check...");
+          await processPriceChecks();
+          log("Scheduled price check completed");
+        } catch (error) {
+          console.error("Scheduled price check failed:", error);
+        }
+      }, SIX_HOURS_MS);
+      log("Price check scheduled every 6 hours");
     },
   );
 })();
