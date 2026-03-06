@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, ScrollView, Pressable, TextInput, Alert, Platform, ActivityIndicator } from "react-native";
+import React, { useCallback } from "react";
+import { View, StyleSheet, ScrollView, Pressable, Alert, Platform } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -78,13 +78,8 @@ export default function SettingsScreen() {
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation<NavigationProp>();
   const { user, signOut } = useAuthContext();
-  const [geminiApiKey, setGeminiApiKey] = useState("");
-  const [huggingfaceApiKey, setHuggingfaceApiKey] = useState("");
-  const [showGeminiKey, setShowGeminiKey] = useState(false);
-  const [showHuggingfaceKey, setShowHuggingfaceKey] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [wooCommerceStatus, setWooCommerceStatus] = useState("Not configured");
-  const [ebayStatus, setEbayStatus] = useState("Not configured");
+  const [wooCommerceStatus, setWooCommerceStatus] = React.useState("Not configured");
+  const [ebayStatus, setEbayStatus] = React.useState("Not configured");
 
   const loadIntegrationStatus = useCallback(async () => {
     try {
@@ -111,37 +106,6 @@ export default function SettingsScreen() {
       loadIntegrationStatus();
     }, [loadIntegrationStatus])
   );
-
-  useEffect(() => {
-    loadApiKeys();
-  }, []);
-
-  const loadApiKeys = async () => {
-    try {
-      const gemini = await AsyncStorage.getItem("gemini_api_key");
-      const huggingface = await AsyncStorage.getItem("huggingface_api_key");
-      if (gemini) setGeminiApiKey(gemini);
-      if (huggingface) setHuggingfaceApiKey(huggingface);
-    } catch (error) {
-      console.error("Failed to load API keys:", error);
-    }
-  };
-
-  const saveApiKeys = async () => {
-    setSaving(true);
-    try {
-      await AsyncStorage.setItem("gemini_api_key", geminiApiKey);
-      await AsyncStorage.setItem("huggingface_api_key", huggingfaceApiKey);
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      Alert.alert("Saved", "API keys have been saved securely.");
-    } catch (error) {
-      Alert.alert("Error", "Failed to save API keys.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleSignOut = () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -173,69 +137,11 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <SettingsSection title="AI Configuration">
-          <View style={styles.apiKeySection}>
-            <View style={styles.apiKeyHeader}>
-              <Feather name="cpu" size={18} color={Colors.dark.primary} />
-              <ThemedText style={styles.apiKeyTitle}>Google Gemini API Key</ThemedText>
-            </View>
-            <View style={styles.apiKeyInputContainer}>
-              <TextInput
-                value={geminiApiKey}
-                onChangeText={setGeminiApiKey}
-                placeholder="Enter your Gemini API key"
-                placeholderTextColor={Colors.dark.textSecondary}
-                secureTextEntry={!showGeminiKey}
-                style={styles.apiKeyInput}
-                testID="input-gemini-key"
-              />
-              <Pressable onPress={() => setShowGeminiKey(!showGeminiKey)} style={styles.eyeButton}>
-                <Feather name={showGeminiKey ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
-              </Pressable>
-            </View>
-            <ThemedText style={styles.apiKeyHint}>
-              Get your key from Google AI Studio
-            </ThemedText>
-          </View>
-
-          <View style={styles.apiKeySection}>
-            <View style={styles.apiKeyHeader}>
-              <Feather name="box" size={18} color={Colors.dark.primary} />
-              <ThemedText style={styles.apiKeyTitle}>HuggingFace API Key</ThemedText>
-            </View>
-            <View style={styles.apiKeyInputContainer}>
-              <TextInput
-                value={huggingfaceApiKey}
-                onChangeText={setHuggingfaceApiKey}
-                placeholder="Enter your HuggingFace API key"
-                placeholderTextColor={Colors.dark.textSecondary}
-                secureTextEntry={!showHuggingfaceKey}
-                style={styles.apiKeyInput}
-                testID="input-huggingface-key"
-              />
-              <Pressable onPress={() => setShowHuggingfaceKey(!showHuggingfaceKey)} style={styles.eyeButton}>
-                <Feather name={showHuggingfaceKey ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
-              </Pressable>
-            </View>
-            <ThemedText style={styles.apiKeyHint}>
-              Get your key from huggingface.co/settings/tokens
-            </ThemedText>
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [styles.saveButton, pressed && { opacity: 0.8 }, saving && { opacity: 0.6 }]}
-            onPress={saveApiKeys}
-            disabled={saving}
-            testID="button-save-keys"
-          >
-            {saving ? (
-              <ActivityIndicator color={Colors.dark.buttonText} size="small" />
-            ) : (
-              <>
-                <Feather name="save" size={18} color={Colors.dark.buttonText} />
-                <ThemedText style={styles.saveButtonText}>Save API Keys</ThemedText>
-              </>
-            )}
-          </Pressable>
+          <SettingsRow
+            icon="cpu"
+            label="AI Providers"
+            onPress={() => navigation.navigate("AIProviders")}
+          />
         </SettingsSection>
 
         <View style={styles.accountHeader}>

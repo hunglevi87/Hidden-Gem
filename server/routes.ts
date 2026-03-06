@@ -7,7 +7,18 @@ import { db } from "./db";
 import { articles, stashItems } from "@shared/schema";
 import { eq, desc, count } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
-import { testProviderConnection, AIProviderConfig } from "./ai-providers";
+import { testProviderConnection, AIProviderConfig, analyzeItemWithRetry, AnalysisResult } from "./ai-providers";
+import {
+  registerPushToken,
+  unregisterPushToken,
+  getUserNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  getUnreadNotificationCount,
+  enablePriceTracking,
+  disablePriceTracking,
+  getPriceTrackingStatus,
+} from "./services/notification";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
@@ -508,6 +519,58 @@ Respond ONLY with valid JSON in this exact format:
     } catch (error: any) {
       console.error("AI provider test error:", error);
       res.status(500).json({ success: false, message: error.message || "Test failed" });
+    }
+  });
+
+  app.post("/api/analyze/retry", upload.fields([
+    { name: "fullImage", maxCount: 1 },
+    { name: "labelImage", maxCount: 1 }
+  ]), async (req: Request, res: Response) => {
+    try {
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      const fullImageFile = files?.fullImage?.[0];
+      const labelImageFile = files?.labelImage?.[0];
+      
+      const { previousResult, feedback, provider, apiKey, model } = req.body;
+      
+      if (!previousResult || !feedback) {
+        return res.status(400).json({ error: "previousResult and feedback are required" });
+      }
+
+      const images: { mimeType: string; data: string }[] = [];
+      if (fullImageFile) {
+        images.push({ mimeType: fullImageFile.mimetype, data: fullImageFile.buffer.toString("base64") });
+      }
+      if (labelImageFile) {
+        images.push({ mimeType: labelImageFile.mimetype, data: labelImageFile.buffer.toString("base64") });
+      }
+
+      const config: AIProviderConfig = {
+        provider: provider || "gemini",
+        apiKey,
+        model,
+      };
+
+      const parsedPrevious: AnalysisResult = typeof previousResult === "string" 
+        ? JSON.parse(previousResult) 
+        : previousResult;
+
+      const result = await analyzeItemWithRetry(config, images, parsedPrevious, feedback);
+      res.json(result);
+    } catch (error) {
+      console.error("Error in retry analysis:", error);
+      res.status(500).json({ error: "Failed to re-analyze item" });
+    }
+  });
+
+  const httpServer = createServer(app);
+  return httpServer;
+}
+      const result = await analyzeItemWithRetry(config, images, parsedPrevious, feedback);
+      res.json(result);
+    } catch (error) {
+      console.error("Error in retry analysis:", error);
+      res.status(500).json({ error: "Failed to re-analyze item" });
     }
   });
 

@@ -1,5 +1,17 @@
-import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, Alert, Platform } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Image,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  TextInput,
+  KeyboardAvoidingView,
+  Modal,
+} from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,10 +23,14 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 
 type AnalysisRouteProp = RouteProp<RootStackParamList, "Analysis">;
 
+type AppraisalState = "appraising" | "reviewing" | "editing" | "retrying" | "stashed";
+
 interface AnalysisResult {
+  // Legacy fields
   title: string;
   description: string;
   category: string;
@@ -24,7 +40,40 @@ interface AnalysisResult {
   seoDescription: string;
   seoKeywords: string[];
   tags: string[];
+  // New enhanced fields
+  brand: string;
+  subtitle: string;
+  shortDescription: string;
+  fullDescription: string;
+  estimatedValueLow: number;
+  estimatedValueHigh: number;
+  suggestedListPrice: number;
+  confidence: "high" | "medium" | "low";
+  authenticity: "Authentic" | "Likely Authentic" | "Uncertain" | "Likely Counterfeit" | "Counterfeit";
+  authenticityConfidence: number;
+  authenticityDetails: string;
+  authenticationTips: string[];
+  marketAnalysis: string;
+  aspects: Record<string, string[]>;
+  ebayCategoryId: string;
+  wooCategory: string;
 }
+
+const CONDITION_OPTIONS = ["New", "Like New", "Very Good", "Good", "Acceptable", "For Parts"];
+
+const AUTHENTICITY_COLORS: Record<string, string> = {
+  "Authentic": Colors.dark.success,
+  "Likely Authentic": "#22c55e",
+  "Uncertain": Colors.dark.warning || "#f59e0b",
+  "Likely Counterfeit": Colors.dark.error,
+  "Counterfeit": "#dc2626",
+};
+
+const CONFIDENCE_COLORS: Record<string, string> = {
+  "high": Colors.dark.success,
+  "medium": Colors.dark.warning || "#f59e0b",
+  "low": Colors.dark.error,
+};
 
 export default function AnalysisScreen() {
   const insets = useSafeAreaInsets();
@@ -33,28 +82,24 @@ export default function AnalysisScreen() {
   const queryClient = useQueryClient();
   const { fullImageUri, labelImageUri } = route.params;
 
+  const [state, setState] = useState<AppraisalState>("appraising");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const [analyzing, setAnalyzing] = useState(true);
+  const [editedResult, setEditedResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryFeedback, setRetryFeedback] = useState("");
+  const [aspectKey, setAspectKey] = useState("");
+  const [aspectValue, setAspectValue] = useState("");
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("/api/stash", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      return apiRequest("POST", "/api/stash", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stash"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stash/count"] });
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      Alert.alert("Saved!", "Item has been added to your stash.", [
-        { text: "OK", onPress: () => navigation.navigate("Main") },
-      ]);
+      setState("stashed");
     },
-    onError: (error) => {
+    onError: () => {
       Alert.alert("Error", "Failed to save item. Please try again.");
     },
   });
@@ -64,38 +109,26 @@ export default function AnalysisScreen() {
   }, []);
 
   const analyzeImages = async () => {
-    setAnalyzing(true);
+    setState("appraising");
     setError(null);
 
     try {
       const formData = new FormData();
-      
-      formData.append("fullImage", {
-        uri: fullImageUri,
-        type: "image/jpeg",
-        name: "full.jpg",
-      } as any);
-      
-      formData.append("labelImage", {
-        uri: labelImageUri,
-        type: "image/jpeg",
-        name: "label.jpg",
-      } as any);
+      formData.append("fullImage", { uri: fullImageUri, type: "image/jpeg", name: "full.jpg" } as any);
+      formData.append("labelImage", { uri: labelImageUri, type: "image/jpeg", name: "label.jpg" } as any);
 
       const apiUrl = getApiUrl();
-      const url = new URL("/api/analyze", apiUrl);
-      
-      const response = await fetch(url.toString(), {
+      const response = await fetch(`${apiUrl}/api/analyze`, {
         method: "POST",
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error("Analysis failed");
-      }
+      if (!response.ok) throw new Error("Analysis failed");
 
       const result = await response.json();
       setAnalysisResult(result);
+      setEditedResult(result);
+      setState("reviewing");
       
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -106,26 +139,102 @@ export default function AnalysisScreen() {
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-    } finally {
-      setAnalyzing(false);
+    }
+  };
+
+  const handleRetryAnalysis = async () => {
+    if (!analysisResult || !retryFeedback.trim()) return;
+    
+    setState("appraising");
+    
+    try {
+      const formData = new FormData();
+      formData.append("fullImage", { uri: fullImageUri, type: "image/jpeg", name: "full.jpg" } as any);
+      formData.append("labelImage", { uri: labelImageUri, type: "image/jpeg", name: "label.jpg" } as any);
+      formData.append("previousResult", JSON.stringify(analysisResult));
+      formData.append("feedback", retryFeedback);
+
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/analyze/retry`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error("Retry analysis failed");
+
+      const result = await response.json();
+      setAnalysisResult(result);
+      setEditedResult(result);
+      setRetryFeedback("");
+      setState("reviewing");
+      
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (err) {
+      console.error("Retry error:", err);
+      Alert.alert("Error", "Failed to re-analyze. Please try again.");
+      setState("retrying");
     }
   };
 
   const handleSave = () => {
-    if (!analysisResult) return;
+    const dataToSave = state === "editing" ? editedResult : analysisResult;
+    if (!dataToSave) return;
 
     saveMutation.mutate({
-      ...analysisResult,
+      ...dataToSave,
       fullImageUrl: fullImageUri,
       labelImageUrl: labelImageUri,
+      aiAnalysis: dataToSave,
     });
+  };
+
+  const handleEdit = () => {
+    setState("editing");
+  };
+
+  const handleRetry = () => {
+    setState("retrying");
+  };
+
+  const handleBackToReview = () => {
+    setState("reviewing");
   };
 
   const handleRescan = () => {
     navigation.goBack();
   };
 
-  if (analyzing) {
+  const handleStashedComplete = () => {
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    navigation.navigate("Main");
+  };
+
+  const updateEditedField = (field: keyof AnalysisResult, value: any) => {
+    if (!editedResult) return;
+    setEditedResult({ ...editedResult, [field]: value });
+  };
+
+  const addAspect = () => {
+    if (!editedResult || !aspectKey.trim() || !aspectValue.trim()) return;
+    const newAspects = { ...editedResult.aspects, [aspectKey.trim()]: [aspectValue.trim()] };
+    setEditedResult({ ...editedResult, aspects: newAspects });
+    setAspectKey("");
+    setAspectValue("");
+  };
+
+  const removeAspect = (key: string) => {
+    if (!editedResult) return;
+    const { [key]: _, ...rest } = editedResult.aspects;
+    setEditedResult({ ...editedResult, aspects: rest });
+  };
+
+  // ==================== RENDER STATES ====================
+
+  if (state === "appraising") {
     return (
       <ThemedView style={styles.container}>
         <View style={[styles.loadingContainer, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
@@ -133,9 +242,7 @@ export default function AnalysisScreen() {
             <Feather name="star" size={48} color={Colors.dark.primary} />
           </View>
           <ThemedText style={styles.loadingTitle}>Analyzing Item...</ThemedText>
-          <ThemedText style={styles.loadingSubtitle}>
-            Our AI is identifying and appraising your find
-          </ThemedText>
+          <ThemedText style={styles.loadingSubtitle}>Our AI is identifying and appraising your find</ThemedText>
           <ActivityIndicator size="large" color={Colors.dark.primary} style={{ marginTop: Spacing["2xl"] }} />
         </View>
       </ThemedView>
@@ -151,11 +258,7 @@ export default function AnalysisScreen() {
           </View>
           <ThemedText style={styles.errorTitle}>Analysis Failed</ThemedText>
           <ThemedText style={styles.errorSubtitle}>{error}</ThemedText>
-          <Pressable
-            style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.8 }]}
-            onPress={analyzeImages}
-            testID="button-retry"
-          >
+          <Pressable style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.8 }]} onPress={analyzeImages}>
             <Feather name="refresh-cw" size={20} color={Colors.dark.buttonText} />
             <ThemedText style={styles.retryButtonText}>Try Again</ThemedText>
           </Pressable>
@@ -164,320 +267,476 @@ export default function AnalysisScreen() {
     );
   }
 
-  return (
-    <ThemedView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing["2xl"] }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.imagesRow}>
-          <View style={styles.imageContainer}>
-            <Image source={{ uri: fullImageUri }} style={styles.previewImage} resizeMode="cover" />
-            <ThemedText style={styles.imageLabel}>Full Item</ThemedText>
+  if (state === "stashed") {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={[styles.successContainer, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
+          <View style={styles.successIconLarge}>
+            <Feather name="check-circle" size={64} color={Colors.dark.success} />
           </View>
-          <View style={styles.imageContainer}>
-            <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
-            <ThemedText style={styles.imageLabel}>Label</ThemedText>
-          </View>
+          <ThemedText style={styles.successTitle}>Saved to Stash!</ThemedText>
+          <ThemedText style={styles.successSubtitle}>Your item has been added to your collection</ThemedText>
+          <Pressable style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.8 }]} onPress={handleStashedComplete}>
+            <ThemedText style={styles.primaryButtonText}>View My Stash</ThemedText>
+          </Pressable>
         </View>
+      </ThemedView>
+    );
+  }
 
-        <View style={styles.successBadge}>
-          <View style={styles.successIcon}>
-            <Feather name="check-circle" size={40} color={Colors.dark.success} />
-          </View>
-        </View>
-
-        <View style={styles.resultCard}>
-          <ThemedText style={styles.resultTitle}>{analysisResult?.title || "Unknown Item"}</ThemedText>
-          
-          <View style={styles.valueRow}>
-            <ThemedText style={styles.valueLabel}>Estimated Value</ThemedText>
-            <ThemedText style={styles.valueAmount}>{analysisResult?.estimatedValue || "N/A"}</ThemedText>
-          </View>
-
-          <View style={styles.detailsGrid}>
-            <View style={styles.detailItem}>
-              <ThemedText style={styles.detailLabel}>Category</ThemedText>
-              <ThemedText style={styles.detailValue}>{analysisResult?.category || "N/A"}</ThemedText>
+  if (state === "retrying") {
+    return (
+      <ThemedView style={styles.container}>
+        <KeyboardAwareScrollViewCompat contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
+          <View style={styles.imagesRow}>
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: fullImageUri }} style={styles.previewImage} resizeMode="cover" />
+              <ThemedText style={styles.imageLabel}>Full Item</ThemedText>
             </View>
-            <View style={styles.detailItem}>
-              <ThemedText style={styles.detailLabel}>Condition</ThemedText>
-              <ThemedText style={styles.detailValue}>{analysisResult?.condition || "N/A"}</ThemedText>
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
+              <ThemedText style={styles.imageLabel}>Label</ThemedText>
             </View>
           </View>
 
-          <View style={styles.descriptionSection}>
-            <ThemedText style={styles.sectionLabel}>AI-Generated Description</ThemedText>
-            <ThemedText style={styles.descriptionText}>
-              {analysisResult?.description || "No description available"}
-            </ThemedText>
-          </View>
+          <View style={styles.card}>
+            <ThemedText style={styles.cardTitle}>Tell AI What to Fix</ThemedText>
+            <ThemedText style={styles.cardSubtitle}>Describe what the AI missed or got wrong</ThemedText>
+            
+            <TextInput
+              style={styles.feedbackInput}
+              multiline
+              numberOfLines={4}
+              placeholder="e.g., This is actually a vintage Coach bag from the 1990s, not a generic handbag. The serial number is visible in the second image..."
+              placeholderTextColor={Colors.dark.textSecondary}
+              value={retryFeedback}
+              onChangeText={setRetryFeedback}
+            />
 
-          {analysisResult?.tags && analysisResult.tags.length > 0 ? (
-            <View style={styles.tagsSection}>
-              <ThemedText style={styles.sectionLabel}>Tags</ThemedText>
-              <View style={styles.tagsRow}>
-                {analysisResult.tags.map((tag, index) => (
-                  <View key={index} style={styles.tagBadge}>
-                    <ThemedText style={styles.tagText}>{tag}</ThemedText>
-                  </View>
-                ))}
+            <View style={styles.buttonRow}>
+              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleBackToReview}>
+                <ThemedText style={styles.secondaryButtonText}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable 
+                style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.8 }, !retryFeedback.trim() && { opacity: 0.5 }]} 
+                onPress={handleRetryAnalysis}
+                disabled={!retryFeedback.trim()}
+              >
+                <Feather name="refresh-cw" size={18} color={Colors.dark.buttonText} />
+                <ThemedText style={styles.primaryButtonText}>Re-Analyze</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAwareScrollViewCompat>
+      </ThemedView>
+    );
+  }
+
+  if (state === "editing" && editedResult) {
+    return (
+      <ThemedView style={styles.container}>
+        <KeyboardAwareScrollViewCompat contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
+          <View style={styles.card}>
+            <ThemedText style={styles.cardTitle}>Edit Listing</ThemedText>
+
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Title ({editedResult.title.length}/80)</ThemedText>
+              <TextInput
+                style={styles.textInput}
+                value={editedResult.title}
+                onChangeText={(v) => updateEditedField("title", v.slice(0, 80))}
+                maxLength={80}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Subtitle ({editedResult.subtitle?.length || 0}/55)</ThemedText>
+              <TextInput
+                style={styles.textInput}
+                value={editedResult.subtitle || ""}
+                onChangeText={(v) => updateEditedField("subtitle", v.slice(0, 55))}
+                maxLength={55}
+                placeholder="Short subtitle for eBay"
+                placeholderTextColor={Colors.dark.textSecondary}
+              />
+            </View>
+
+            <View style={styles.rowInputs}>
+              <View style={[styles.inputGroup, { flex: 1 }]}>
+                <ThemedText style={styles.inputLabel}>List Price ($)</ThemedText>
+                <TextInput
+                  style={styles.textInput}
+                  keyboardType="numeric"
+                  value={editedResult.suggestedListPrice?.toString() || ""}
+                  onChangeText={(v) => updateEditedField("suggestedListPrice", parseFloat(v) || 0)}
+                />
+              </View>
+              <View style={[styles.inputGroup, { flex: 1 }]}>
+                <ThemedText style={styles.inputLabel}>Condition</ThemedText>
+                <View style={styles.conditionButtons}>
+                  {CONDITION_OPTIONS.map((c) => (
+                    <Pressable
+                      key={c}
+                      style={[styles.conditionChip, editedResult.condition === c && styles.conditionChipActive]}
+                      onPress={() => updateEditedField("condition", c)}
+                    >
+                      <ThemedText style={[styles.conditionChipText, editedResult.condition === c && styles.conditionChipTextActive]}>
+                        {c}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
             </View>
-          ) : null}
-        </View>
 
-        <View style={styles.actionsRow}>
-          <Pressable
-            style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]}
-            onPress={handleRescan}
-            testID="button-rescan"
-          >
-            <Feather name="camera" size={20} color={Colors.dark.text} />
-            <ThemedText style={styles.secondaryButtonText}>Rescan</ThemedText>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.primaryButton,
-              pressed && { opacity: 0.8 },
-              saveMutation.isPending && { opacity: 0.6 },
-            ]}
-            onPress={handleSave}
-            disabled={saveMutation.isPending}
-            testID="button-save-stash"
-          >
-            {saveMutation.isPending ? (
-              <ActivityIndicator color={Colors.dark.buttonText} size="small" />
-            ) : (
-              <>
-                <Feather name="save" size={20} color={Colors.dark.buttonText} />
-                <ThemedText style={styles.primaryButtonText}>Save to Stash</ThemedText>
-              </>
-            )}
-          </Pressable>
-        </View>
-      </ScrollView>
-    </ThemedView>
-  );
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Short Description</ThemedText>
+              <TextInput
+                style={[styles.textInput, styles.textArea]}
+                multiline
+                numberOfLines={3}
+                value={editedResult.shortDescription || ""}
+                onChangeText={(v) => updateEditedField("shortDescription", v)}
+                placeholder="Brief description for WooCommerce"
+                placeholderTextColor={Colors.dark.textSecondary}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Full Description</ThemedText>
+              <TextInput
+                style={[styles.textInput, styles.textArea]}
+                multiline
+                numberOfLines={6}
+                value={editedResult.fullDescription || ""}
+                onChangeText={(v) => updateEditedField("fullDescription", v)}
+                placeholder="Detailed HTML description for eBay"
+                placeholderTextColor={Colors.dark.textSecondary}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Item Specifics</ThemedText>
+              <View style={styles.aspectInputRow}>
+                <TextInput
+                  style={[styles.textInput, { flex: 1 }]}
+                  placeholder="Key (e.g., Brand)"
+                  placeholderTextColor={Colors.dark.textSecondary}
+                  value={aspectKey}
+                  onChangeText={setAspectKey}
+                />
+                <TextInput
+                  style={[styles.textInput, { flex: 1 }]}
+                  placeholder="Value (e.g., Nike)"
+                  placeholderTextColor={Colors.dark.textSecondary}
+                  value={aspectValue}
+                  onChangeText={setAspectValue}
+                />
+                <Pressable style={styles.addAspectButton} onPress={addAspect}>
+                  <Feather name="plus" size={20} color={Colors.dark.primary} />
+                </Pressable>
+              </View>
+              {Object.entries(editedResult.aspects || {}).map(([key, values]) => (
+                <View key={key} style={styles.aspectRow}>
+                  <ThemedText style={styles.aspectKey}>{key}:</ThemedText>
+                  <ThemedText style={styles.aspectValue}>{values.join(", ")}</ThemedText>
+                  <Pressable onPress={() => removeAspect(key)}>
+                    <Feather name="x" size={16} color={Colors.dark.error} />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.rowInputs}>
+              <View style={[styles.inputGroup, { flex: 1 }]}>
+                <ThemedText style={styles.inputLabel}>eBay Category ID</ThemedText>
+                <TextInput
+                  style={styles.textInput}
+                  value={editedResult.ebayCategoryId || ""}
+                  onChangeText={(v) => updateEditedField("ebayCategoryId", v)}
+                />
+              </View>
+              <View style={[styles.inputGroup, { flex: 1 }]}>
+                <ThemedText style={styles.inputLabel}>WooCommerce Category</ThemedText>
+                <TextInput
+                  style={styles.textInput}
+                  value={editedResult.wooCategory || ""}
+                  onChangeText={(v) => updateEditedField("wooCategory", v)}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Tags (comma separated)</ThemedText>
+              <TextInput
+                style={styles.textInput}
+                value={editedResult.tags?.join(", ") || ""}
+                onChangeText={(v) => updateEditedField("tags", v.split(",").map((t) => t.trim()).filter(Boolean))}
+                placeholder="vintage, collectible, rare"
+                placeholderTextColor={Colors.dark.textSecondary}
+              />
+            </View>
+
+            <View style={styles.buttonRow}>
+              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleBackToReview}>
+                <ThemedText style={styles.secondaryButtonText}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable 
+                style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.8 }, saveMutation.isPending && { opacity: 0.6 }]} 
+                onPress={handleSave}
+                disabled={saveMutation.isPending}
+              >
+                {saveMutation.isPending ? (
+                  <ActivityIndicator color={Colors.dark.buttonText} size="small" />
+                ) : (
+                  <>
+                    <Feather name="save" size={18} color={Colors.dark.buttonText} />
+                    <ThemedText style={styles.primaryButtonText}>Save to Stash</ThemedText>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAwareScrollViewCompat>
+      </ThemedView>
+    );
+  }
+
+  // ==================== REVIEWING STATE ====================
+  if (state === "reviewing" && analysisResult) {
+    const result = analysisResult;
+    
+    return (
+      <ThemedView style={styles.container}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
+          <View style={styles.imagesRow}>
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: fullImageUri }} style={styles.previewImage} resizeMode="cover" />
+              <ThemedText style={styles.imageLabel}>Full Item</ThemedText>
+            </View>
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
+              <ThemedText style={styles.imageLabel}>Label</ThemedText>
+            </View>
+          </View>
+
+          {/* Header */}
+          <View style={styles.card}>
+            <View style={styles.headerRow}>
+              <View style={styles.brandBadge}>
+                <ThemedText style={styles.brandText}>{result.brand || "Unknown Brand"}</ThemedText>
+              </View>
+              <View style={[styles.confidenceBadge, { backgroundColor: CONFIDENCE_COLORS[result.confidence] + "20" }]}>
+                <View style={[styles.confidenceDot, { backgroundColor: CONFIDENCE_COLORS[result.confidence] }]} />
+                <ThemedText style={[styles.confidenceText, { color: CONFIDENCE_COLORS[result.confidence] }]}>
+                  {result.confidence} confidence
+                </ThemedText>
+              </View>
+            </View>
+            <ThemedText style={styles.itemTitle}>{result.title}</ThemedText>
+            {result.subtitle ? <ThemedText style={styles.itemSubtitle}>{result.subtitle}</ThemedText> : null}
+          </View>
+
+          {/* Value Card */}
+          <View style={styles.card}>
+            <ThemedText style={styles.cardTitle}>Market Valuation</ThemedText>
+            <View style={styles.valueRangeRow}>
+              <View style={styles.valueBox}>
+                <ThemedText style={styles.valueLabel}>Value Range</ThemedText>
+                <ThemedText style={styles.valueAmount}>${result.estimatedValueLow} - ${result.estimatedValueHigh}</ThemedText>
+              </View>
+              <View style={styles.valueBox}>
+                <ThemedText style={styles.valueLabel}>Suggested List Price</ThemedText>
+                <ThemedText style={styles.listPrice}>${result.suggestedListPrice}</ThemedText>
+              </View>
+            </View>
+            <View style={styles.conditionRow}>
+              <ThemedText style={styles.conditionLabel}>Condition:</ThemedText>
+              <ThemedText style={styles.conditionValue}>{result.condition}</ThemedText>
+            </View>
+          </View>
+
+          {/* Authentication */}
+          <View style={styles.card}>
+            <ThemedText style={styles.cardTitle}>Authentication Assessment</ThemedText>
+            <View style={styles.authHeader}>
+              <View style={[styles.authBadge, { backgroundColor: AUTHENTICITY_COLORS[result.authenticity] + "20" }]}>
+                <ThemedText style={[styles.authBadgeText, { color: AUTHENTICITY_COLORS[result.authenticity] }]}>
+                  {result.authenticity}
+                </ThemedText>
+              </View>
+              <View style={styles.confidenceBar}>
+                <View style={[styles.confidenceFill, { width: `${result.authenticityConfidence}%`, backgroundColor: AUTHENTICITY_COLORS[result.authenticity] }]} />
+              </View>
+              <ThemedText style={styles.confidencePercent}>{result.authenticityConfidence}%</ThemedText>
+            </View>
+            <ThemedText style={styles.authDetails}>{result.authenticityDetails}</ThemedText>
+            
+            <ThemedText style={styles.sectionSubtitle}>Authentication Tips</ThemedText>
+            {result.authenticationTips?.map((tip, i) => (
+              <View key={i} style={styles.tipRow}>
+                <Feather name="shield" size={14} color={Colors.dark.primary} style={styles.tipIcon} />
+                <ThemedText style={styles.tipText}>{i + 1}. {tip}</ThemedText>
+              </View>
+            ))}
+          </View>
+
+          {/* Market Analysis */}
+          <View style={styles.card}>
+            <ThemedText style={styles.cardTitle}>Market Analysis</ThemedText>
+            <ThemedText style={styles.marketText}>{result.marketAnalysis}</ThemedText>
+          </View>
+
+          {/* Listing Preview */}
+          <View style={styles.card}>
+            <ThemedText style={styles.cardTitle}>Generated Listing Preview</ThemedText>
+            <View style={styles.listingPreview}>
+              <ThemedText style={styles.previewLabel}>eBay Title</ThemedText>
+              <ThemedText style={styles.previewText}>{result.seoTitle}</ThemedText>
+              
+              <ThemedText style={styles.previewLabel}>Category</ThemedText>
+              <ThemedText style={styles.previewText}>{result.category} (eBay: {result.ebayCategoryId})</ThemedText>
+              
+              {result.aspects && Object.keys(result.aspects).length > 0 && (
+                <>
+                  <ThemedText style={styles.previewLabel}>Item Specifics</ThemedText>
+                  {Object.entries(result.aspects).slice(0, 4).map(([key, values]) => (
+                    <ThemedText key={key} style={styles.aspectPreview}>• {key}: {values.join(", ")}</ThemedText>
+                  ))}
+                </>
+              )}
+            </View>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actionButtons}>
+            <Pressable style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.8 }]} onPress={handleSave}>
+              <Feather name="check" size={20} color={Colors.dark.buttonText} />
+              <ThemedText style={styles.primaryButtonText}>Looks Good — Save</ThemedText>
+            </Pressable>
+            
+            <View style={styles.secondaryButtons}>
+              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleEdit}>
+                <Feather name="edit-2" size={18} color={Colors.dark.text} />
+                <ThemedText style={styles.secondaryButtonText}>Edit</ThemedText>
+              </Pressable>
+              
+              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleRetry}>
+                <Feather name="refresh-cw" size={18} color={Colors.dark.text} />
+                <ThemedText style={styles.secondaryButtonText}>Try Again</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </ScrollView>
+      </ThemedView>
+    );
+  }
+
+  return null;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.dark.backgroundRoot,
-  },
-  scrollContent: {
-    padding: Spacing.lg,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: Spacing["2xl"],
-  },
-  loadingAnimation: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: Colors.dark.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing["2xl"],
-  },
-  loadingTitle: {
-    ...Typography.h3,
-    color: Colors.dark.text,
-    marginBottom: Spacing.sm,
-  },
-  loadingSubtitle: {
-    ...Typography.body,
-    color: Colors.dark.textSecondary,
-    textAlign: "center",
-  },
-  errorContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: Spacing["2xl"],
-  },
-  errorIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "rgba(239, 68, 68, 0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing["2xl"],
-  },
-  errorTitle: {
-    ...Typography.h3,
-    color: Colors.dark.text,
-    marginBottom: Spacing.sm,
-  },
-  errorSubtitle: {
-    ...Typography.body,
-    color: Colors.dark.textSecondary,
-    textAlign: "center",
-    marginBottom: Spacing["2xl"],
-  },
-  retryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.dark.primary,
-    paddingHorizontal: Spacing["2xl"],
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    gap: Spacing.sm,
-  },
-  retryButtonText: {
-    ...Typography.button,
-    color: Colors.dark.buttonText,
-  },
-  imagesRow: {
-    flexDirection: "row",
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  imageContainer: {
-    flex: 1,
-  },
-  previewImage: {
-    width: "100%",
-    aspectRatio: 1,
-    borderRadius: BorderRadius.md,
-    marginBottom: Spacing.xs,
-  },
-  imageLabel: {
-    ...Typography.caption,
-    color: Colors.dark.textSecondary,
-    textAlign: "center",
-  },
-  successBadge: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-  },
-  successIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "rgba(34, 197, 94, 0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  resultCard: {
-    backgroundColor: Colors.dark.surface,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
-    marginBottom: Spacing["2xl"],
-  },
-  resultTitle: {
-    ...Typography.h3,
-    color: Colors.dark.text,
-    marginBottom: Spacing.lg,
-  },
-  valueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: Colors.dark.backgroundSecondary,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.sm,
-    marginBottom: Spacing.lg,
-  },
-  valueLabel: {
-    ...Typography.small,
-    color: Colors.dark.textSecondary,
-  },
-  valueAmount: {
-    ...Typography.h4,
-    color: Colors.dark.primary,
-    fontWeight: "700",
-  },
-  detailsGrid: {
-    flexDirection: "row",
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  detailItem: {
-    flex: 1,
-    backgroundColor: Colors.dark.backgroundSecondary,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.sm,
-  },
-  detailLabel: {
-    ...Typography.caption,
-    color: Colors.dark.textSecondary,
-    marginBottom: Spacing.xs,
-  },
-  detailValue: {
-    ...Typography.body,
-    color: Colors.dark.text,
-    fontWeight: "600",
-  },
-  descriptionSection: {
-    marginBottom: Spacing.lg,
-  },
-  sectionLabel: {
-    ...Typography.small,
-    color: Colors.dark.textSecondary,
-    marginBottom: Spacing.sm,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  descriptionText: {
-    ...Typography.body,
-    color: Colors.dark.text,
-  },
-  tagsSection: {
-    marginBottom: Spacing.sm,
-  },
-  tagsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.sm,
-  },
-  tagBadge: {
-    backgroundColor: Colors.dark.backgroundSecondary,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.xs,
-  },
-  tagText: {
-    ...Typography.caption,
-    color: Colors.dark.primary,
-  },
-  actionsRow: {
-    flexDirection: "row",
-    gap: Spacing.md,
-  },
-  secondaryButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.dark.surface,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    gap: Spacing.sm,
-  },
-  secondaryButtonText: {
-    ...Typography.button,
-    color: Colors.dark.text,
-  },
-  primaryButton: {
-    flex: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.dark.primary,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    gap: Spacing.sm,
-  },
-  primaryButtonText: {
-    ...Typography.button,
-    color: Colors.dark.buttonText,
-  },
+  container: { flex: 1, backgroundColor: Colors.dark.backgroundRoot },
+  scrollContent: { padding: Spacing.lg },
+  
+  // Loading & Error States
+  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing["2xl"] },
+  loadingAnimation: { width: 100, height: 100, borderRadius: 50, backgroundColor: Colors.dark.surface, alignItems: "center", justifyContent: "center", marginBottom: Spacing["2xl"] },
+  loadingTitle: { ...Typography.h3, color: Colors.dark.text, marginBottom: Spacing.sm },
+  loadingSubtitle: { ...Typography.body, color: Colors.dark.textSecondary, textAlign: "center" },
+  
+  errorContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing["2xl"] },
+  errorIcon: { width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(239, 68, 68, 0.15)", alignItems: "center", justifyContent: "center", marginBottom: Spacing["2xl"] },
+  errorTitle: { ...Typography.h3, color: Colors.dark.text, marginBottom: Spacing.sm },
+  errorSubtitle: { ...Typography.body, color: Colors.dark.textSecondary, textAlign: "center", marginBottom: Spacing["2xl"] },
+  retryButton: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.dark.primary, paddingHorizontal: Spacing["2xl"], paddingVertical: Spacing.md, borderRadius: BorderRadius.md, gap: Spacing.sm },
+  retryButtonText: { ...Typography.button, color: Colors.dark.buttonText },
+  
+  // Success State
+  successContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing["2xl"] },
+  successIconLarge: { width: 120, height: 120, borderRadius: 60, backgroundColor: "rgba(34, 197, 94, 0.15)", alignItems: "center", justifyContent: "center", marginBottom: Spacing["2xl"] },
+  successTitle: { ...Typography.h2, color: Colors.dark.text, marginBottom: Spacing.sm },
+  successSubtitle: { ...Typography.body, color: Colors.dark.textSecondary, marginBottom: Spacing["2xl"] },
+  
+  // Images
+  imagesRow: { flexDirection: "row", gap: Spacing.md, marginBottom: Spacing.lg },
+  imageContainer: { flex: 1 },
+  previewImage: { width: "100%", aspectRatio: 1, borderRadius: BorderRadius.md, marginBottom: Spacing.xs },
+  imageLabel: { ...Typography.caption, color: Colors.dark.textSecondary, textAlign: "center" },
+  
+  // Cards
+  card: { backgroundColor: Colors.dark.surface, borderRadius: BorderRadius.lg, padding: Spacing.lg, marginBottom: Spacing.lg },
+  cardTitle: { ...Typography.h4, color: Colors.dark.text, marginBottom: Spacing.md },
+  cardSubtitle: { ...Typography.body, color: Colors.dark.textSecondary, marginBottom: Spacing.md },
+  
+  // Review State
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.md },
+  brandBadge: { backgroundColor: Colors.dark.primary + "20", paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
+  brandText: { ...Typography.small, color: Colors.dark.primary, fontWeight: "600" },
+  confidenceBadge: { flexDirection: "row", alignItems: "center", gap: Spacing.xs, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
+  confidenceDot: { width: 8, height: 8, borderRadius: 4 },
+  confidenceText: { ...Typography.caption, fontWeight: "500" },
+  itemTitle: { ...Typography.h3, color: Colors.dark.text, marginBottom: Spacing.xs },
+  itemSubtitle: { ...Typography.body, color: Colors.dark.textSecondary },
+  
+  // Value
+  valueRangeRow: { flexDirection: "row", gap: Spacing.md, marginBottom: Spacing.md },
+  valueBox: { flex: 1, backgroundColor: Colors.dark.backgroundSecondary, padding: Spacing.md, borderRadius: BorderRadius.sm },
+  valueLabel: { ...Typography.caption, color: Colors.dark.textSecondary, marginBottom: Spacing.xs },
+  valueAmount: { ...Typography.h4, color: Colors.dark.text, fontWeight: "700" },
+  listPrice: { ...Typography.h4, color: Colors.dark.primary, fontWeight: "700" },
+  conditionRow: { flexDirection: "row", gap: Spacing.sm },
+  conditionLabel: { ...Typography.body, color: Colors.dark.textSecondary },
+  conditionValue: { ...Typography.body, color: Colors.dark.text, fontWeight: "600" },
+  
+  // Authentication
+  authHeader: { flexDirection: "row", alignItems: "center", gap: Spacing.md, marginBottom: Spacing.md },
+  authBadge: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
+  authBadgeText: { ...Typography.small, fontWeight: "600" },
+  confidenceBar: { flex: 1, height: 6, backgroundColor: Colors.dark.border, borderRadius: 3, overflow: "hidden" },
+  confidenceFill: { height: "100%", borderRadius: 3 },
+  confidencePercent: { ...Typography.small, color: Colors.dark.textSecondary, minWidth: 35 },
+  authDetails: { ...Typography.body, color: Colors.dark.text, marginBottom: Spacing.md },
+  sectionSubtitle: { ...Typography.small, color: Colors.dark.textSecondary, marginTop: Spacing.md, marginBottom: Spacing.sm, textTransform: "uppercase" },
+  tipRow: { flexDirection: "row", alignItems: "flex-start", gap: Spacing.sm, marginBottom: Spacing.sm },
+  tipIcon: { marginTop: 2 },
+  tipText: { ...Typography.body, color: Colors.dark.text, flex: 1 },
+  
+  // Market
+  marketText: { ...Typography.body, color: Colors.dark.text, lineHeight: 22 },
+  
+  // Listing Preview
+  listingPreview: { backgroundColor: Colors.dark.backgroundSecondary, padding: Spacing.md, borderRadius: BorderRadius.sm },
+  previewLabel: { ...Typography.caption, color: Colors.dark.textSecondary, marginTop: Spacing.sm },
+  previewText: { ...Typography.body, color: Colors.dark.text },
+  aspectPreview: { ...Typography.body, color: Colors.dark.textSecondary },
+  
+  // Buttons
+  actionButtons: { gap: Spacing.md, marginTop: Spacing.md },
+  primaryButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: Colors.dark.primary, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, gap: Spacing.sm },
+  primaryButtonText: { ...Typography.button, color: Colors.dark.buttonText },
+  secondaryButtons: { flexDirection: "row", gap: Spacing.md },
+  secondaryButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: Colors.dark.surface, borderWidth: 1, borderColor: Colors.dark.border, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, gap: Spacing.sm },
+  secondaryButtonText: { ...Typography.button, color: Colors.dark.text },
+  buttonRow: { flexDirection: "row", gap: Spacing.md, marginTop: Spacing.lg },
+  
+  // Edit Form
+  inputGroup: { marginBottom: Spacing.md },
+  inputLabel: { ...Typography.small, color: Colors.dark.textSecondary, marginBottom: Spacing.xs },
+  textInput: { backgroundColor: Colors.dark.backgroundSecondary, borderRadius: BorderRadius.sm, padding: Spacing.md, color: Colors.dark.text, ...Typography.body, borderWidth: 1, borderColor: Colors.dark.border },
+  textArea: { minHeight: 80, textAlignVertical: "top" },
+  rowInputs: { flexDirection: "row", gap: Spacing.md },
+  conditionButtons: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.xs },
+  conditionChip: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm, backgroundColor: Colors.dark.backgroundSecondary, borderWidth: 1, borderColor: Colors.dark.border },
+  conditionChipActive: { backgroundColor: Colors.dark.primary, borderColor: Colors.dark.primary },
+  conditionChipText: { ...Typography.caption, color: Colors.dark.textSecondary },
+  conditionChipTextActive: { color: Colors.dark.buttonText },
+  aspectInputRow: { flexDirection: "row", gap: Spacing.sm, marginBottom: Spacing.sm },
+  addAspectButton: { width: 44, height: 44, borderRadius: BorderRadius.sm, backgroundColor: Colors.dark.backgroundSecondary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.dark.border },
+  aspectRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, paddingVertical: Spacing.xs },
+  aspectKey: { ...Typography.body, color: Colors.dark.textSecondary, fontWeight: "600" },
+  aspectValue: { ...Typography.body, color: Colors.dark.text, flex: 1 },
+  
+  // Retry
+  feedbackInput: { backgroundColor: Colors.dark.backgroundSecondary, borderRadius: BorderRadius.sm, padding: Spacing.md, color: Colors.dark.text, ...Typography.body, minHeight: 100, textAlignVertical: "top", borderWidth: 1, borderColor: Colors.dark.border },
 });

@@ -107,6 +107,60 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
   createdAt: true,
 });
 
+// Push tokens for notifications
+export const pushTokens = pgTable("push_tokens", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull(),
+  platform: text("platform").notNull(), // 'ios', 'android', 'web'
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+// Price tracking for items
+export const priceTracking = pgTable("price_tracking", {
+  id: serial("id").primaryKey(),
+  stashItemId: integer("stash_item_id").notNull().references(() => stashItems.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  isActive: boolean("is_active").default(true),
+  lastPrice: integer("last_price"),
+  lastCheckedAt: timestamp("last_checked_at"),
+  nextCheckAt: timestamp("next_check_at"),
+  alertThreshold: integer("alert_threshold"), // Percentage change to trigger alert
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+// Notification history
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  stashItemId: integer("stash_item_id").references(() => stashItems.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'price_drop', 'price_increase', 'market_update'
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  data: jsonb("data"), // Additional payload data
+  isRead: boolean("is_read").default(false),
+  sentAt: timestamp("sent_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertPushTokenSchema = createInsertSchema(pushTokens).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPriceTrackingSchema = createInsertSchema(priceTracking).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  sentAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type UserSettings = typeof userSettings.$inferSelect;
@@ -119,3 +173,9 @@ export type Conversation = typeof conversations.$inferSelect;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type PushToken = typeof pushTokens.$inferSelect;
+export type InsertPushToken = z.infer<typeof insertPushTokenSchema>;
+export type PriceTracking = typeof priceTracking.$inferSelect;
+export type InsertPriceTracking = z.infer<typeof insertPriceTrackingSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;

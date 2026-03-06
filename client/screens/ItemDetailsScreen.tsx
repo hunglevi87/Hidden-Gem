@@ -17,6 +17,34 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type ItemDetailsRouteProp = RouteProp<RootStackParamList, "ItemDetails">;
 
+interface AIAnalysis {
+  title: string;
+  description: string;
+  category: string;
+  estimatedValue: string;
+  estimatedValueLow?: number;
+  estimatedValueHigh?: number;
+  suggestedListPrice?: number;
+  condition: string;
+  brand?: string;
+  subtitle?: string;
+  shortDescription?: string;
+  fullDescription?: string;
+  seoTitle: string;
+  seoDescription: string;
+  seoKeywords: string[];
+  tags: string[];
+  confidence?: "high" | "medium" | "low";
+  authenticity?: "Authentic" | "Likely Authentic" | "Uncertain" | "Likely Counterfeit" | "Counterfeit";
+  authenticityConfidence?: number;
+  authenticityDetails?: string;
+  authenticationTips?: string[];
+  marketAnalysis?: string;
+  aspects?: Record<string, string[]>;
+  ebayCategoryId?: string;
+  wooCategory?: string;
+}
+
 interface StashItem {
   id: number;
   title: string;
@@ -34,8 +62,23 @@ interface StashItem {
   publishedToEbay: boolean;
   woocommerceUrl: string | null;
   ebayUrl: string | null;
+  aiAnalysis: AIAnalysis | null;
   createdAt: string;
 }
+
+const AUTHENTICITY_COLORS: Record<string, string> = {
+  "Authentic": Colors.dark.success,
+  "Likely Authentic": "#22c55e",
+  "Uncertain": Colors.dark.warning || "#f59e0b",
+  "Likely Counterfeit": Colors.dark.error,
+  "Counterfeit": "#dc2626",
+};
+
+const CONFIDENCE_COLORS: Record<string, string> = {
+  "high": Colors.dark.success,
+  "medium": Colors.dark.warning || "#f59e0b",
+  "low": Colors.dark.error,
+};
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -69,7 +112,7 @@ export default function ItemDetailsScreen() {
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest(`/api/stash/${itemId}`, { method: "DELETE" });
+      return apiRequest("DELETE", `/api/stash/${itemId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stash"] });
@@ -293,6 +336,150 @@ export default function ItemDetailsScreen() {
               </View>
             </View>
           ) : null}
+
+          {/* Authentication Assessment Section */}
+          {item.aiAnalysis?.authenticity && (
+            <View style={styles.section}>
+              <ThemedText style={styles.sectionLabel}>Authentication Assessment</ThemedText>
+              <View style={styles.authCard}>
+                <View style={styles.authHeader}>
+                  <View
+                    style={[
+                      styles.authBadge,
+                      { backgroundColor: AUTHENTICITY_COLORS[item.aiAnalysis.authenticity] || Colors.dark.textSecondary },
+                    ]}
+                  >
+                    <ThemedText style={styles.authBadgeText}>
+                      {item.aiAnalysis.authenticity}
+                    </ThemedText>
+                  </View>
+                  {item.aiAnalysis.confidence && (
+                    <View style={styles.confidenceContainer}>
+                      <View style={styles.confidenceBar}>
+                        <View
+                          style={[
+                            styles.confidenceFill,
+                            {
+                              width:
+                                item.aiAnalysis.confidence === "high"
+                                  ? "100%"
+                                  : item.aiAnalysis.confidence === "medium"
+                                    ? "60%"
+                                    : "30%",
+                              backgroundColor: CONFIDENCE_COLORS[item.aiAnalysis.confidence],
+                            },
+                          ]}
+                        />
+                      </View>
+                      <ThemedText style={styles.confidenceText}>
+                        {item.aiAnalysis.confidence.charAt(0).toUpperCase() +
+                          item.aiAnalysis.confidence.slice(1)}{" "}
+                        Confidence
+                      </ThemedText>
+                    </View>
+                  )}
+                </View>
+                {item.aiAnalysis.authenticityDetails && (
+                  <ThemedText style={styles.authDetails}>
+                    {item.aiAnalysis.authenticityDetails}
+                  </ThemedText>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Authentication Tips Section */}
+          {item.aiAnalysis?.authenticationTips &&
+            item.aiAnalysis.authenticationTips.length > 0 && (
+              <View style={styles.section}>
+                <ThemedText style={styles.sectionLabel}>Authentication Tips</ThemedText>
+                <View style={styles.tipsCard}>
+                  {item.aiAnalysis.authenticationTips.map((tip, index) => (
+                    <View key={index} style={styles.tipItem}>
+                      <View style={styles.tipNumber}>
+                        <ThemedText style={styles.tipNumberText}>{index + 1}</ThemedText>
+                      </View>
+                      <ThemedText style={styles.tipText}>{tip}</ThemedText>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+          {/* Market Value Analysis Section */}
+          {item.aiAnalysis?.marketAnalysis && (
+            <View style={styles.section}>
+              <ThemedText style={styles.sectionLabel}>Market Value Analysis</ThemedText>
+              <View style={styles.marketCard}>
+                <ThemedText style={styles.marketText}>
+                  {item.aiAnalysis.marketAnalysis}
+                </ThemedText>
+                {(item.aiAnalysis.estimatedValueLow || item.aiAnalysis.estimatedValueHigh) && (
+                  <View style={styles.valueRange}>
+                    <ThemedText style={styles.valueRangeLabel}>AI Estimated Range</ThemedText>
+                    <ThemedText style={styles.valueRangeAmount}>
+                      ${item.aiAnalysis.estimatedValueLow || "?"} - ${
+                        item.aiAnalysis.estimatedValueHigh || "?"
+                      }
+                    </ThemedText>
+                    {item.aiAnalysis.suggestedListPrice && (
+                      <ThemedText style={styles.suggestedPrice}>
+                        Suggested List: ${item.aiAnalysis.suggestedListPrice}
+                      </ThemedText>
+                    )}
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Listing Details Section */}
+          {item.aiAnalysis && (
+            <View style={styles.section}>
+              <ThemedText style={styles.sectionLabel}>Listing Details</ThemedText>
+              <View style={styles.listingCard}>
+                {item.aiAnalysis.brand && (
+                  <View style={styles.listingRow}>
+                    <ThemedText style={styles.listingLabel}>Brand</ThemedText>
+                    <ThemedText style={styles.listingValue}>{item.aiAnalysis.brand}</ThemedText>
+                  </View>
+                )}
+                {item.aiAnalysis.subtitle && (
+                  <View style={styles.listingRow}>
+                    <ThemedText style={styles.listingLabel}>Subtitle</ThemedText>
+                    <ThemedText style={styles.listingValue}>{item.aiAnalysis.subtitle}</ThemedText>
+                  </View>
+                )}
+                {item.aiAnalysis.ebayCategoryId && (
+                  <View style={styles.listingRow}>
+                    <ThemedText style={styles.listingLabel}>eBay Category</ThemedText>
+                    <ThemedText style={styles.listingValue}>
+                      {item.aiAnalysis.ebayCategoryId}
+                    </ThemedText>
+                  </View>
+                )}
+                {item.aiAnalysis.wooCategory && (
+                  <View style={styles.listingRow}>
+                    <ThemedText style={styles.listingLabel}>WooCommerce Category</ThemedText>
+                    <ThemedText style={styles.listingValue}>
+                      {item.aiAnalysis.wooCategory}
+                    </ThemedText>
+                  </View>
+                )}
+                {item.aiAnalysis.aspects && Object.keys(item.aiAnalysis.aspects).length > 0 && (
+                  <View style={styles.aspectsSection}>
+                    <ThemedText style={styles.aspectsTitle}>Item Specifics</ThemedText>
+                    {Object.entries(item.aiAnalysis.aspects).map(([key, values]) => (
+                      <View key={key} style={styles.aspectRow}>
+                        <ThemedText style={styles.aspectKey}>{key}</ThemedText>
+                        <ThemedText style={styles.aspectValue}>{values.join(", ")}</ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
 
           <View style={styles.section}>
             <ThemedText style={styles.sectionLabel}>Publish</ThemedText>
@@ -569,5 +756,176 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.surface,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  // Authentication Section Styles
+  authCard: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  authHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    flexWrap: "wrap",
+  },
+  authBadge: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  authBadgeText: {
+    ...Typography.small,
+    color: Colors.dark.buttonText,
+    fontWeight: "700",
+  },
+  confidenceContainer: {
+    flex: 1,
+    minWidth: 120,
+  },
+  confidenceBar: {
+    height: 6,
+    backgroundColor: Colors.dark.backgroundRoot,
+    borderRadius: 3,
+    overflow: "hidden",
+    marginBottom: Spacing.xs,
+  },
+  confidenceFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  confidenceText: {
+    ...Typography.caption,
+    color: Colors.dark.textSecondary,
+  },
+  authDetails: {
+    ...Typography.body,
+    color: Colors.dark.text,
+    lineHeight: 22,
+  },
+
+  // Tips Section Styles
+  tipsCard: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  tipItem: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    alignItems: "flex-start",
+  },
+  tipNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.dark.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  tipNumberText: {
+    ...Typography.small,
+    color: Colors.dark.buttonText,
+    fontWeight: "700",
+  },
+  tipText: {
+    ...Typography.body,
+    color: Colors.dark.text,
+    flex: 1,
+    lineHeight: 22,
+  },
+
+  // Market Analysis Section Styles
+  marketCard: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    gap: Spacing.lg,
+  },
+  marketText: {
+    ...Typography.body,
+    color: Colors.dark.text,
+    lineHeight: 24,
+  },
+  valueRange: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.dark.backgroundRoot,
+    paddingTop: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  valueRangeLabel: {
+    ...Typography.small,
+    color: Colors.dark.textSecondary,
+  },
+  valueRangeAmount: {
+    ...Typography.h4,
+    color: Colors.dark.primary,
+    fontWeight: "700",
+  },
+  suggestedPrice: {
+    ...Typography.body,
+    color: Colors.dark.success,
+    fontWeight: "600",
+  },
+
+  // Listing Details Section Styles
+  listingCard: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  listingRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.backgroundRoot,
+  },
+  listingLabel: {
+    ...Typography.small,
+    color: Colors.dark.textSecondary,
+  },
+  listingValue: {
+    ...Typography.body,
+    color: Colors.dark.text,
+    fontWeight: "600",
+    flex: 1,
+    textAlign: "right",
+    marginLeft: Spacing.md,
+  },
+  aspectsSection: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.dark.backgroundRoot,
+    gap: Spacing.sm,
+  },
+  aspectsTitle: {
+    ...Typography.small,
+    color: Colors.dark.textSecondary,
+    marginBottom: Spacing.sm,
+  },
+  aspectRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: Spacing.xs,
+  },
+  aspectKey: {
+    ...Typography.small,
+    color: Colors.dark.textSecondary,
+    flex: 1,
+  },
+  aspectValue: {
+    ...Typography.small,
+    color: Colors.dark.text,
+    fontWeight: "600",
+    flex: 1,
+    textAlign: "right",
   },
 });

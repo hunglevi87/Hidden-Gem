@@ -10,6 +10,7 @@ import WooCommerceSettingsScreen from "@/screens/WooCommerceSettingsScreen";
 import EbaySettingsScreen from "@/screens/EbaySettingsScreen";
 import TermsOfServiceScreen from "@/screens/TermsOfServiceScreen";
 import PrivacyPolicyScreen from "@/screens/PrivacyPolicyScreen";
+import AIProvidersScreen from "@/screens/AIProvidersScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { Colors } from "@/constants/theme";
@@ -20,6 +21,7 @@ export type RootStackParamList = {
   Settings: undefined;
   WooCommerceSettings: undefined;
   EbaySettings: undefined;
+  AIProviders: undefined;
   TermsOfService: undefined;
   PrivacyPolicy: undefined;
   ItemDetails: { itemId: number };
@@ -114,6 +116,13 @@ export default function RootStackNavigator() {
             component={PrivacyPolicyScreen}
             options={{
               headerTitle: "Privacy Policy",
+            }}
+          />
+          <Stack.Screen
+            name="AIProviders"
+            component={AIProvidersScreen}
+            options={{
+              headerTitle: "AI Providers",
             }}
           />
         </>
