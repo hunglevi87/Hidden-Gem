@@ -4,10 +4,18 @@ import multer from "multer";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { db } from "./db";
-import { articles, stashItems } from "@shared/schema";
-import { eq, desc, count } from "drizzle-orm";
+import { articles, stashItems, products, sellers, listingsTable, syncQueue } from "@shared/schema";
+import { eq, desc, count, and } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { testProviderConnection, AIProviderConfig, analyzeItemWithRetry, AnalysisResult } from "./ai-providers";
+import { generateSEOTitle, generateDescription, generateTags, createAIRecord } from "./ai-seo";
+import { uploadProductImage, deleteProductImage } from "./supabase-storage";
+import {
+  updateEbayListing,
+  deleteEbayListing,
+  refreshEbayAccessToken,
+  type EbayCredentials,
+} from "./ebay-service";
 import {
   registerPushToken,
   unregisterPushToken,
@@ -699,6 +707,219 @@ Respond ONLY with valid JSON in this exact format:
     } catch (error) {
       console.error("Error in retry analysis:", error);
       res.status(500).json({ error: "Failed to re-analyze item" });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // FlipAgent routes — products, image upload, eBay CRUD, SEO generation
+  // -------------------------------------------------------------------------
+
+  // --- Products CRUD (FlipAgent products table) ---
+
+  app.get("/api/products", async (req: Request, res: Response) => {
+    try {
+      const sellerId = req.query.sellerId as string;
+      const query = sellerId
+        ? db.select().from(products).where(eq(products.sellerId, sellerId)).orderBy(desc(products.createdAt))
+        : db.select().from(products).orderBy(desc(products.createdAt));
+      res.json(await query);
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      res.status(500).json({ error: "Failed to fetch products" });
+    }
+  });
+
+  app.get("/api/products/:id", async (req: Request, res: Response) => {
+    try {
+      const [product] = await db
+        .select()
+        .from(products)
+        .where(eq(products.id, req.params.id));
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      res.json(product);
+    } catch (error) {
+      console.error("Error fetching product:", error);
+      res.status(500).json({ error: "Failed to fetch product" });
+    }
+  });
+
+  app.post("/api/products", async (req: Request, res: Response) => {
+    try {
+      const data = req.body;
+      const [product] = await db
+        .insert(products)
+        .values({
+          sellerId: data.sellerId,
+          sku: data.sku,
+          title: data.title,
+          description: data.description,
+          brand: data.brand,
+          styleName: data.styleName,
+          category: data.category,
+          condition: data.condition,
+          price: data.price,
+          cost: data.cost,
+          estimatedProfit: data.estimatedProfit,
+          images: data.images || {},
+          attributes: data.attributes || {},
+          tags: data.tags || [],
+        })
+        .returning();
+      res.status(201).json(product);
+    } catch (error) {
+      console.error("Error creating product:", error);
+      res.status(500).json({ error: "Failed to create product" });
+    }
+  });
+
+  app.put("/api/products/:id", async (req: Request, res: Response) => {
+    try {
+      const data = req.body;
+      const [updated] = await db
+        .update(products)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(products.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Product not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating product:", error);
+      res.status(500).json({ error: "Failed to update product" });
+    }
+  });
+
+  app.delete("/api/products/:id", async (req: Request, res: Response) => {
+    try {
+      await db.delete(products).where(eq(products.id, req.params.id));
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      res.status(500).json({ error: "Failed to delete product" });
+    }
+  });
+
+  // --- Supabase Storage image upload (replaces Multer for persisted images) ---
+
+  app.post("/api/upload/image", upload.single("image"), async (req: Request, res: Response) => {
+    try {
+      const file = (req as any).file as Express.Multer.File | undefined;
+      if (!file) return res.status(400).json({ error: "No image file provided" });
+
+      const sellerId = req.body.sellerId || "anonymous";
+      const result = await uploadProductImage(
+        file.buffer,
+        file.originalname,
+        file.mimetype,
+        sellerId,
+      );
+      res.json(result);
+    } catch (error) {
+      console.error("Image upload error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to upload image",
+      });
+    }
+  });
+
+  app.delete("/api/upload/image", async (req: Request, res: Response) => {
+    try {
+      const { path: imagePath } = req.body;
+      if (!imagePath) return res.status(400).json({ error: "path is required" });
+      await deleteProductImage(imagePath);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Image delete error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to delete image",
+      });
+    }
+  });
+
+  // --- SEO generation from AI analysis ---
+
+  app.post("/api/seo/generate", async (req: Request, res: Response) => {
+    try {
+      const { analysis, sellerId, productId, imageUrl } = req.body;
+      if (!analysis) return res.status(400).json({ error: "analysis object is required" });
+
+      const seoTitle = generateSEOTitle(analysis);
+      const description = generateDescription(analysis);
+      const tags = generateTags(analysis);
+
+      let aiRecordId: string | undefined;
+      if (sellerId && imageUrl) {
+        aiRecordId = await createAIRecord({ sellerId, productId, imageUrl, analysis });
+      }
+
+      res.json({ seoTitle, description, tags, aiRecordId });
+    } catch (error) {
+      console.error("SEO generation error:", error);
+      res.status(500).json({ error: "Failed to generate SEO data" });
+    }
+  });
+
+  // --- eBay listing update / delete / token refresh ---
+
+  app.put("/api/ebay/listing/:itemId", async (req: Request, res: Response) => {
+    try {
+      const { clientId, clientSecret, refreshToken, environment, ...input } = req.body;
+      if (!clientId || !clientSecret || !refreshToken) {
+        return res.status(400).json({ error: "eBay credentials required" });
+      }
+      const creds: EbayCredentials = { clientId, clientSecret, refreshToken, environment: environment || "sandbox" };
+      const result = await updateEbayListing(creds, req.params.itemId, input);
+      res.json(result);
+    } catch (error) {
+      console.error("eBay update error:", error);
+      res.status(500).json({ error: "Failed to update eBay listing" });
+    }
+  });
+
+  app.delete("/api/ebay/listing/:itemId", async (req: Request, res: Response) => {
+    try {
+      const { clientId, clientSecret, refreshToken, environment } = req.body;
+      if (!clientId || !clientSecret || !refreshToken) {
+        return res.status(400).json({ error: "eBay credentials required" });
+      }
+      const creds: EbayCredentials = { clientId, clientSecret, refreshToken, environment: environment || "sandbox" };
+      const result = await deleteEbayListing(creds, req.params.itemId);
+      res.json(result);
+    } catch (error) {
+      console.error("eBay delete error:", error);
+      res.status(500).json({ error: "Failed to delete eBay listing" });
+    }
+  });
+
+  app.post("/api/ebay/refresh-token", async (req: Request, res: Response) => {
+    try {
+      const { clientId, clientSecret, refreshToken, environment } = req.body;
+      if (!clientId || !clientSecret || !refreshToken) {
+        return res.status(400).json({ error: "eBay credentials required" });
+      }
+      const creds: EbayCredentials = { clientId, clientSecret, refreshToken, environment: environment || "sandbox" };
+      const tokens = await refreshEbayAccessToken(creds);
+      res.json(tokens);
+    } catch (error) {
+      console.error("eBay token refresh error:", error);
+      res.status(500).json({ error: "Failed to refresh eBay token" });
+    }
+  });
+
+  // --- Sync queue inspection (read-only for now) ---
+
+  app.get("/api/sync-queue", async (req: Request, res: Response) => {
+    try {
+      const sellerId = req.query.sellerId as string;
+      if (!sellerId) return res.status(400).json({ error: "sellerId is required" });
+      const jobs = await db
+        .select()
+        .from(syncQueue)
+        .where(eq(syncQueue.sellerId, sellerId))
+        .orderBy(desc(syncQueue.createdAt));
+      res.json(jobs);
+    } catch (error) {
+      console.error("Error fetching sync queue:", error);
+      res.status(500).json({ error: "Failed to fetch sync queue" });
     }
   });
 

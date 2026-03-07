@@ -311,3 +311,163 @@ export function mapCategoryToEbay(appCategory: string | null): string {
 
   return "1";
 }
+
+// ---------------------------------------------------------------------------
+// FlipAgent additions — full inventory CRUD + proper token refresh
+// ---------------------------------------------------------------------------
+
+export interface EbayAuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+}
+
+/**
+ * Full OAuth2 refresh that returns the new access token, refresh token, and
+ * expiry timestamp — use this when you need to persist updated credentials.
+ */
+export async function refreshEbayAccessToken(
+  creds: EbayCredentials,
+): Promise<EbayAuthTokens> {
+  const baseUrl = getBaseUrl(creds.environment);
+  const credentials = Buffer.from(
+    `${creds.clientId}:${creds.clientSecret}`,
+  ).toString("base64");
+
+  const response = await fetch(`${baseUrl}/identity/v1/oauth2/token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(creds.refreshToken)}`,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.error_description || `eBay token refresh failed: ${response.statusText}`,
+    );
+  }
+
+  const data = (await response.json()) as {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  };
+
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresAt: Date.now() + data.expires_in * 1000,
+  };
+}
+
+export interface EbayListingInput {
+  title: string;
+  description: string;
+  price: number;
+  quantity: number;
+  categoryId?: string;
+  imageUrls?: string[];
+  condition?: "NEW" | "LIKE_NEW" | "GOOD" | "ACCEPTABLE";
+}
+
+export interface EbayListingResponse {
+  itemId: string;
+  status: "success" | "error";
+  message: string;
+  url?: string;
+}
+
+/**
+ * Update an existing eBay inventory item (PUT).
+ */
+export async function updateEbayListing(
+  creds: EbayCredentials,
+  itemId: string,
+  input: Partial<EbayListingInput>,
+): Promise<EbayListingResponse> {
+  try {
+    const accessToken = await getAccessToken(creds);
+    const baseUrl = getBaseUrl(creds.environment);
+    const webUrl = getWebUrl(creds.environment);
+
+    const response = await fetch(
+      `${baseUrl}/sell/inventory/v1/inventory_item/${encodeURIComponent(itemId)}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "Content-Language": "en-US",
+        },
+        body: JSON.stringify(input),
+      },
+    );
+
+    if (!response.ok && response.status !== 204) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(
+        error.errors?.[0]?.message ||
+          `eBay API error: ${response.statusText}`,
+      );
+    }
+
+    return {
+      itemId,
+      status: "success",
+      message: "Listing updated successfully",
+      url: `${webUrl}/itm/${itemId}`,
+    };
+  } catch (error) {
+    return {
+      itemId,
+      status: "error",
+      message: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Delete an eBay inventory item (DELETE with 204 handling).
+ */
+export async function deleteEbayListing(
+  creds: EbayCredentials,
+  itemId: string,
+): Promise<EbayListingResponse> {
+  try {
+    const accessToken = await getAccessToken(creds);
+    const baseUrl = getBaseUrl(creds.environment);
+
+    const response = await fetch(
+      `${baseUrl}/sell/inventory/v1/inventory_item/${encodeURIComponent(itemId)}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+
+    if (!response.ok && response.status !== 204) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(
+        error.errors?.[0]?.message ||
+          `eBay API error: ${response.statusText}`,
+      );
+    }
+
+    return {
+      itemId,
+      status: "success",
+      message: "Listing deleted successfully",
+    };
+  } catch (error) {
+    return {
+      itemId,
+      status: "error",
+      message: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}

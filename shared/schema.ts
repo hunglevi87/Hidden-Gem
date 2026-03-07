@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, boolean, jsonb, uuid, numeric, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -107,6 +107,154 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
   createdAt: true,
 });
 
+// ---------------------------------------------------------------------------
+// FlipAgent tables — seller profiles, product inventory, marketplace listings,
+// AI audit trail, and async sync queue
+// ---------------------------------------------------------------------------
+
+export const sellers = pgTable("sellers", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  shopName: text("shop_name").notNull(),
+  shopDescription: text("shop_description"),
+  avatarUrl: text("avatar_url"),
+  stripeCustomerId: text("stripe_customer_id"),
+  subscriptionTier: text("subscription_tier").default("free"),
+  subscriptionExpiresAt: timestamp("subscription_expires_at"),
+  createdAt: timestamp("created_at").default(sql`NOW()`),
+  updatedAt: timestamp("updated_at").default(sql`NOW()`),
+});
+
+export const products = pgTable("products", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  sellerId: uuid("seller_id").notNull().references(() => sellers.id, { onDelete: "cascade" }),
+  sku: text("sku").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  brand: text("brand"),
+  styleName: text("style_name"),
+  category: text("category"),
+  condition: text("condition"),
+  price: numeric("price", { precision: 10, scale: 2 }),
+  cost: numeric("cost", { precision: 10, scale: 2 }),
+  estimatedProfit: numeric("estimated_profit", { precision: 10, scale: 2 }),
+  images: jsonb("images").default({}),
+  attributes: jsonb("attributes").default({}),
+  tags: text("tags").array().default(sql`ARRAY[]::TEXT[]`),
+  listings: jsonb("listings").default({}),
+  syncStatus: jsonb("sync_status").default({}),
+  syncLastAt: timestamp("sync_last_at"),
+  createdAt: timestamp("created_at").default(sql`NOW()`),
+  updatedAt: timestamp("updated_at").default(sql`NOW()`),
+}, (table) => [
+  uniqueIndex("products_seller_sku_unique").on(table.sellerId, table.sku),
+]);
+
+export const listingsTable = pgTable("listings", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  sellerId: uuid("seller_id").notNull().references(() => sellers.id, { onDelete: "cascade" }),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  marketplace: text("marketplace").notNull(),
+  marketplaceId: text("marketplace_id"),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  seoTags: text("seo_tags").array().default(sql`ARRAY[]::TEXT[]`),
+  categoryId: text("category_id"),
+  sku: text("sku"),
+  price: numeric("price", { precision: 10, scale: 2 }),
+  quantity: integer("quantity").default(1),
+  status: text("status").default("draft"),
+  publishedAt: timestamp("published_at"),
+  syncError: text("sync_error"),
+  rawApiResponse: jsonb("raw_api_response"),
+  createdAt: timestamp("created_at").default(sql`NOW()`),
+  updatedAt: timestamp("updated_at").default(sql`NOW()`),
+});
+
+export const aiGenerations = pgTable("ai_generations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  sellerId: uuid("seller_id").notNull().references(() => sellers.id, { onDelete: "cascade" }),
+  productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+  inputImageUrl: text("input_image_url"),
+  inputText: text("input_text"),
+  modelUsed: text("model_used"),
+  outputListing: jsonb("output_listing"),
+  tokensUsed: integer("tokens_used"),
+  cost: numeric("cost", { precision: 8, scale: 4 }),
+  qualityScore: numeric("quality_score", { precision: 3, scale: 2 }),
+  userFeedback: text("user_feedback"),
+  createdAt: timestamp("created_at").default(sql`NOW()`),
+});
+
+export const syncQueue = pgTable("sync_queue", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  sellerId: uuid("seller_id").notNull().references(() => sellers.id, { onDelete: "cascade" }),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  marketplace: text("marketplace").notNull(),
+  action: text("action").notNull(),
+  payload: jsonb("payload"),
+  status: text("status").default("pending"),
+  errorMessage: text("error_message"),
+  retryCount: integer("retry_count").default(0),
+  maxRetries: integer("max_retries").default(3),
+  createdAt: timestamp("created_at").default(sql`NOW()`),
+  scheduledAt: timestamp("scheduled_at").default(sql`NOW() + INTERVAL '5 seconds'`),
+  completedAt: timestamp("completed_at"),
+});
+
+export const integrations = pgTable("integrations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  sellerId: uuid("seller_id").notNull().references(() => sellers.id, { onDelete: "cascade" }),
+  service: text("service").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  credentials: jsonb("credentials").default({}),
+  isActive: boolean("is_active").default(true),
+  lastSyncedAt: timestamp("last_synced_at"),
+  syncCount: integer("sync_count").default(0),
+  createdAt: timestamp("created_at").default(sql`NOW()`),
+  updatedAt: timestamp("updated_at").default(sql`NOW()`),
+}, (table) => [
+  uniqueIndex("integrations_seller_service_unique").on(table.sellerId, table.service),
+]);
+
+// Insert schemas for new tables
+export const insertSellerSchema = createInsertSchema(sellers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertProductSchema = createInsertSchema(products).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertListingSchema = createInsertSchema(listingsTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertAiGenerationSchema = createInsertSchema(aiGenerations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSyncQueueSchema = createInsertSchema(syncQueue).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
+export const insertIntegrationSchema = createInsertSchema(integrations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Push tokens for notifications
 export const pushTokens = pgTable("push_tokens", {
   id: serial("id").primaryKey(),
@@ -179,3 +327,17 @@ export type PriceTracking = typeof priceTracking.$inferSelect;
 export type InsertPriceTracking = z.infer<typeof insertPriceTrackingSchema>;
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+// FlipAgent table types
+export type Seller = typeof sellers.$inferSelect;
+export type InsertSeller = z.infer<typeof insertSellerSchema>;
+export type Product = typeof products.$inferSelect;
+export type InsertProduct = z.infer<typeof insertProductSchema>;
+export type Listing = typeof listingsTable.$inferSelect;
+export type InsertListing = z.infer<typeof insertListingSchema>;
+export type AIGeneration = typeof aiGenerations.$inferSelect;
+export type InsertAIGeneration = z.infer<typeof insertAiGenerationSchema>;
+export type SyncQueueItem = typeof syncQueue.$inferSelect;
+export type InsertSyncQueueItem = z.infer<typeof insertSyncQueueSchema>;
+export type Integration = typeof integrations.$inferSelect;
+export type InsertIntegration = z.infer<typeof insertIntegrationSchema>;
