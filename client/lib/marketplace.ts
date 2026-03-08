@@ -80,17 +80,22 @@ export async function getEbaySettings(): Promise<EbaySettings | null> {
 
 export async function publishToWooCommerce(
   itemId: number,
-  settings: WooCommerceSettings
-): Promise<{ success: boolean; productUrl?: string; error?: string }> {
+  settings: WooCommerceSettings,
+  skipThresholdCheck = false
+): Promise<{ success: boolean; productUrl?: string; error?: string; held?: boolean; suggestedPrice?: number; threshold?: number; message?: string }> {
   try {
-    const response = await apiRequest(`/api/stash/${itemId}/publish/woocommerce`, {
-      method: "POST",
-      body: JSON.stringify({
-        storeUrl: settings.storeUrl,
-        consumerKey: settings.consumerKey,
-        consumerSecret: settings.consumerSecret,
-      }),
+    const res = await apiRequest("POST", `/api/stash/${itemId}/publish/woocommerce`, {
+      storeUrl: settings.storeUrl,
+      consumerKey: settings.consumerKey,
+      consumerSecret: settings.consumerSecret,
+      skipThresholdCheck,
     });
+    
+    const response = await res.json();
+    
+    if (response.held) {
+      return { success: false, held: true, suggestedPrice: response.suggestedPrice, threshold: response.threshold, message: response.message };
+    }
     
     if (response.error) {
       return { success: false, error: response.error };
@@ -104,18 +109,23 @@ export async function publishToWooCommerce(
 
 export async function publishToEbay(
   itemId: number,
-  settings: EbaySettings
-): Promise<{ success: boolean; listingUrl?: string; error?: string }> {
+  settings: EbaySettings,
+  skipThresholdCheck = false
+): Promise<{ success: boolean; listingUrl?: string; error?: string; held?: boolean; suggestedPrice?: number; threshold?: number; message?: string }> {
   try {
-    const response = await apiRequest(`/api/stash/${itemId}/publish/ebay`, {
-      method: "POST",
-      body: JSON.stringify({
-        clientId: settings.clientId,
-        clientSecret: settings.clientSecret,
-        refreshToken: settings.refreshToken,
-        environment: settings.environment,
-      }),
+    const res = await apiRequest("POST", `/api/stash/${itemId}/publish/ebay`, {
+      clientId: settings.clientId,
+      clientSecret: settings.clientSecret,
+      refreshToken: settings.refreshToken,
+      environment: settings.environment,
+      skipThresholdCheck,
     });
+    
+    const response = await res.json();
+    
+    if (response.held) {
+      return { success: false, held: true, suggestedPrice: response.suggestedPrice, threshold: response.threshold, message: response.message };
+    }
     
     if (response.error) {
       return { success: false, error: response.error };

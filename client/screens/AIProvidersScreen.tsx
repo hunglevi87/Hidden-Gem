@@ -18,11 +18,14 @@ const OPENAI_API_KEY = "openai_api_key";
 const OPENAI_MODEL_KEY = "openai_model";
 const ANTHROPIC_API_KEY = "anthropic_api_key";
 const ANTHROPIC_MODEL_KEY = "anthropic_model";
+const OPENFANG_API_KEY = "openfang_api_key";
+const OPENFANG_BASE_URL_KEY = "openfang_base_url";
+const OPENFANG_MODEL_KEY = "openfang_model";
 const CUSTOM_ENDPOINT_KEY = "custom_ai_endpoint";
 const CUSTOM_API_KEY = "custom_ai_api_key";
 const CUSTOM_MODEL_KEY = "custom_ai_model_name";
 
-type AIProvider = "gemini" | "openai" | "anthropic" | "custom";
+type AIProvider = "gemini" | "openai" | "anthropic" | "openfang" | "custom";
 
 const OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"];
 const ANTHROPIC_MODELS = ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"];
@@ -114,6 +117,10 @@ export default function AIProvidersScreen() {
   const [anthropicKey, setAnthropicKey] = useState("");
   const [showAnthropicKey, setShowAnthropicKey] = useState(false);
   const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4-20250514");
+  const [openfangKey, setOpenfangKey] = useState("");
+  const [showOpenfangKey, setShowOpenfangKey] = useState(false);
+  const [openfangBaseUrl, setOpenfangBaseUrl] = useState("");
+  const [openfangModel, setOpenfangModel] = useState("");
   const [customEndpoint, setCustomEndpoint] = useState("");
   const [customApiKey, setCustomApiKey] = useState("");
   const [showCustomKey, setShowCustomKey] = useState(false);
@@ -128,7 +135,7 @@ export default function AIProvidersScreen() {
   const loadSettings = async () => {
     try {
       const active = await AsyncStorage.getItem(ACTIVE_PROVIDER_KEY);
-      if (active === "gemini" || active === "openai" || active === "anthropic" || active === "custom") {
+      if (active === "gemini" || active === "openai" || active === "anthropic" || active === "openfang" || active === "custom") {
         setActiveProvider(active);
       }
 
@@ -144,6 +151,13 @@ export default function AIProvidersScreen() {
       if (aKey) setAnthropicKey(aKey);
       const aModel = await AsyncStorage.getItem(ANTHROPIC_MODEL_KEY);
       if (aModel) setAnthropicModel(aModel);
+
+      const ofKey = await secureGet(OPENFANG_API_KEY);
+      if (ofKey) setOpenfangKey(ofKey);
+      const ofUrl = await AsyncStorage.getItem(OPENFANG_BASE_URL_KEY);
+      if (ofUrl) setOpenfangBaseUrl(ofUrl);
+      const ofModel = await AsyncStorage.getItem(OPENFANG_MODEL_KEY);
+      if (ofModel) setOpenfangModel(ofModel);
 
       const cEndpoint = await AsyncStorage.getItem(CUSTOM_ENDPOINT_KEY);
       if (cEndpoint) setCustomEndpoint(cEndpoint);
@@ -180,6 +194,22 @@ export default function AIProvidersScreen() {
         await secureDelete(ANTHROPIC_API_KEY);
       }
       await AsyncStorage.setItem(ANTHROPIC_MODEL_KEY, anthropicModel);
+
+      if (openfangKey) {
+        await secureSet(OPENFANG_API_KEY, openfangKey.trim());
+      } else {
+        await secureDelete(OPENFANG_API_KEY);
+      }
+      if (openfangBaseUrl) {
+        await AsyncStorage.setItem(OPENFANG_BASE_URL_KEY, openfangBaseUrl.trim());
+      } else {
+        await AsyncStorage.removeItem(OPENFANG_BASE_URL_KEY);
+      }
+      if (openfangModel) {
+        await AsyncStorage.setItem(OPENFANG_MODEL_KEY, openfangModel.trim());
+      } else {
+        await AsyncStorage.removeItem(OPENFANG_MODEL_KEY);
+      }
 
       if (customEndpoint) {
         await AsyncStorage.setItem(CUSTOM_ENDPOINT_KEY, customEndpoint.trim());
@@ -227,6 +257,14 @@ export default function AIProvidersScreen() {
         }
         body.apiKey = anthropicKey.trim();
         body.model = anthropicModel;
+      } else if (provider === "openfang") {
+        if (!openfangKey) {
+          Alert.alert("Missing API Key", "Please enter your OpenFang API key first.");
+          return;
+        }
+        body.apiKey = openfangKey.trim();
+        if (openfangBaseUrl) body.endpoint = openfangBaseUrl.trim();
+        if (openfangModel) body.model = openfangModel.trim();
       } else if (provider === "custom") {
         if (!customEndpoint) {
           Alert.alert("Missing Endpoint", "Please enter your custom endpoint URL first.");
@@ -272,6 +310,7 @@ export default function AIProvidersScreen() {
   const geminiConfigured = true;
   const openaiConfigured = !!openaiKey;
   const anthropicConfigured = !!anthropicKey;
+  const openfangConfigured = !!openfangKey;
   const customConfigured = !!customEndpoint;
 
   const providerLabel = (p: AIProvider) => {
@@ -279,6 +318,7 @@ export default function AIProvidersScreen() {
       case "gemini": return "Gemini";
       case "openai": return "OpenAI";
       case "anthropic": return "Anthropic";
+      case "openfang": return "OpenFang";
       case "custom": return "Custom / Local";
     }
   };
@@ -469,6 +509,89 @@ export default function AIProvidersScreen() {
               testID="button-test-anthropic"
             >
               {testingProvider === "anthropic" ? (
+                <ActivityIndicator color={Colors.dark.text} size="small" />
+              ) : (
+                <>
+                  <Feather name="wifi" size={16} color={Colors.dark.text} />
+                  <ThemedText style={styles.testButtonText}>Test</ThemedText>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </ProviderSection>
+
+        <ProviderSection
+          title="OpenFang"
+          icon="layers"
+          isActive={activeProvider === "openfang"}
+          isConfigured={openfangConfigured}
+          onSetActive={() => handleSetActive("openfang")}
+        >
+          <View style={styles.providerBody}>
+            <View style={styles.infoRow}>
+              <Feather name="info" size={14} color={Colors.dark.textSecondary} />
+              <ThemedText style={styles.infoText}>Multi-model AI routing with automatic vision model selection</ThemedText>
+            </View>
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>API Key</ThemedText>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  value={openfangKey}
+                  onChangeText={setOpenfangKey}
+                  placeholder="Your OpenFang API key"
+                  placeholderTextColor={Colors.dark.textSecondary}
+                  secureTextEntry={!showOpenfangKey}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.textInput}
+                  testID="input-openfang-key"
+                />
+                <Pressable onPress={() => setShowOpenfangKey(!showOpenfangKey)} style={styles.eyeButton}>
+                  <Feather name={showOpenfangKey ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Base URL (Optional)</ThemedText>
+              <View style={styles.inputContainer}>
+                <Feather name="globe" size={18} color={Colors.dark.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  value={openfangBaseUrl}
+                  onChangeText={setOpenfangBaseUrl}
+                  placeholder="https://api.openfang.io"
+                  placeholderTextColor={Colors.dark.textSecondary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  style={styles.textInput}
+                  testID="input-openfang-base-url"
+                />
+              </View>
+              <ThemedText style={styles.inputHint}>Leave blank to use env default or OPENFANG_BASE_URL</ThemedText>
+            </View>
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Model (Optional)</ThemedText>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  value={openfangModel}
+                  onChangeText={setOpenfangModel}
+                  placeholder="auto (recommended)"
+                  placeholderTextColor={Colors.dark.textSecondary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.textInput}
+                  testID="input-openfang-model"
+                />
+              </View>
+              <ThemedText style={styles.inputHint}>Leave blank for automatic model routing</ThemedText>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.testButton, pressed && { opacity: 0.8 }]}
+              onPress={() => testConnection("openfang")}
+              disabled={testingProvider !== null}
+              testID="button-test-openfang"
+            >
+              {testingProvider === "openfang" ? (
                 <ActivityIndicator color={Colors.dark.text} size="small" />
               ) : (
                 <>
