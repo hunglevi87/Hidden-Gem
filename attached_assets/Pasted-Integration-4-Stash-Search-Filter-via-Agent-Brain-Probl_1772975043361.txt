@@ -1,0 +1,99 @@
+Integration #4 — Stash Search/Filter via Agent Brain
+Problem: "Search/filter functionality in Stash" is explicitly listed as not yet implemented in HiddenGem .
+
+OpenFang Solution: Instead of building a traditional search UI with filters, expose a natural-language query endpoint backed by OpenFang. Users type "show me all Louis Vuitton bags under $300 not yet published" and OpenFang translates it to a Drizzle query.
+
+typescript
+// server/routes/stash-search.ts
+app.post("/api/stash/search", async (req, res) => {
+  const { naturalQuery } = req.body;
+
+  // Ask OpenFang to convert NL to SQL filter params
+  const parsed = await openFangClient.chat.completions.create({
+    model: "gemini-2.5-flash",
+    messages: [{
+      role: "system",
+      content: `You are a query parser for a reseller inventory system. 
+        Return JSON only: { brand, maxPrice, publishStatus, category }. 
+        Use null for unspecified fields.`
+    }, {
+      role: "user", content: naturalQuery
+    }],
+    response_format: { type: "json_object" }
+  });
+
+  const filters = JSON.parse(parsed.choices[0].message.content);
+
+  // Build dynamic Drizzle query from parsed filters
+  const results = await db.select().from(stashItems)
+    .where(and(
+      filters.brand ? ilike(stashItems.brand, `%${filters.brand}%`) : undefined,
+      filters.maxPrice ? lte(stashItems.appraisalValue, filters.maxPrice) : undefined,
+      filters.publishStatus ? eq(stashItems.publishStatus, filters.publishStatus) : undefined
+    ));
+
+  res.json(results);
+});
+Benefit: Delivers your missing search feature AND feels premium/AI-native — fitting for HiddenGem's "curator's tool" aesthetic .
+
+Integration #5 — MCP Server for The Relic Shop Cross-Pollination
+Problem: You're building two separate businesses (HiddenGem + The Relic Shop) with overlapping tech needs (inventory, eBay sync, label printing).
+
+OpenFang Solution: OpenFang fully supports the Model Context Protocol (MCP), acting as both client and server. You can expose HiddenGem's stashItems API as an MCP server endpoint, then have your Relic Shop automation scripts and HiddenGem agents both consume the same tool definitions — no duplication.
+​
+
+typescript
+// server/mcp-server.ts — expose HiddenGem as MCP tool server
+import { MCPServer } from "@openfang/mcp";
+
+const hgMcpServer = new MCPServer({
+  name: "hiddengem-inventory",
+  tools: [
+    {
+      name: "list_stash_items",
+      description: "List all inventory items with optional filters",
+      parameters: { brand: "string?", publishStatus: "string?" },
+      handler: async (params) => db.select().from(stashItems).where(...)
+    },
+    {
+      name: "publish_item",
+      description: "Publish a stash item to eBay and WooCommerce",
+      parameters: { itemId: "number", platforms: "string[]" },
+      handler: async ({ itemId, platforms }) => publishItem(itemId, platforms)
+    }
+  ]
+});
+
+// Now your Relic Shop Python scripts can call HiddenGem's inventory too
+hgMcpServer.listen(3001);
+Benefit: Your existing TypeScript sync scripts for The Relic Shop can call HiddenGem tools via MCP without a full API rebuild.
+​
+
+Integration #6 — Human-in-the-Loop Approval Gate for Publish
+Problem: Auto-publishing rare/high-value items without review is risky — a wrong price on a $2,000 bag is costly .
+
+OpenFang Solution: OpenFang enforces mandatory approval gates for sensitive actions via its dashboard. Wrap your publish flow in an OpenFang approval request that pings you on Telegram before any item over a threshold goes live.
+​
+
+typescript
+// In your listing-publisher Hand
+if (item.appraisalValue > 500) {
+  const approved = await openFang.requestApproval({
+    channel: "telegram",
+    message: `🛑 High-value item pending publish:
+      Item: ${item.name}
+      Appraised: $${item.appraisalValue}
+      Listing Price: $${seoListing.price}
+      [Approve] or [Reject]`,
+    timeout: "2h" // auto-reject if no response in 2 hours
+  });
+
+  if (!approved) {
+    await db.update(stashItems)
+      .set({ publishStatus: "held_for_review" })
+      .where(eq(stashItems.id, item.id));
+    return;
+  }
+}
+Benefit: You get autonomous listing automation but never lose control of big-ticket items — same vibe as how you trust your own judgment over automation.
+​
