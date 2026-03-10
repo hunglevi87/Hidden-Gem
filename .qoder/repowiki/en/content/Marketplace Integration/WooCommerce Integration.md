@@ -4,12 +4,13 @@
 **Referenced Files in This Document**
 - [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx)
 - [marketplace.ts](file://client/lib/marketplace.ts)
-- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx)
 - [query-client.ts](file://client/lib/query-client.ts)
 - [routes.ts](file://server/routes.ts)
 - [index.ts](file://server/index.ts)
 - [schema.ts](file://shared/schema.ts)
-- [ENVIRONMENT.md](file://ENVIRONMENT.md)
+- [0001_flipagent_tables.sql](file://migrations/0001_flipagent_tables.sql)
+- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx)
+- [woocommerce_settings_flow.yml](file://.maestro/woocommerce_settings_flow.yml)
 - [package.json](file://package.json)
 </cite>
 
@@ -23,351 +24,358 @@
 7. [Performance Considerations](#performance-considerations)
 8. [Troubleshooting Guide](#troubleshooting-guide)
 9. [Conclusion](#conclusion)
+10. [Appendices](#appendices)
 
 ## Introduction
-This document explains the WooCommerce marketplace integration for the HiddenGem application. It covers REST API authentication, product publishing workflow, credential management, and practical examples. The integration enables users to connect their WooCommerce store, securely manage credentials, and publish stash items as WooCommerce products with proper data mapping, image handling, and pricing conversion.
+This document explains how the application integrates with WooCommerce via a secure, two-tier approach:
+- A frontend screen to configure store URL, API credentials, and test connectivity.
+- A backend route that validates credentials, publishes a product to WooCommerce using Basic Authentication against the WooCommerce REST API, and records the listing metadata.
+
+It covers REST API configuration, product publishing workflow, order management integration points, marketplace settings screen functionality, error handling, security considerations, and practical troubleshooting.
 
 ## Project Structure
-The integration spans three layers:
-- Frontend (React Native): Settings screen for credential entry, secure storage, and publishing actions.
-- Client library: Centralized helpers for retrieving credentials and invoking backend APIs.
-- Backend (Express): Routes that validate inputs, convert stash item data to WooCommerce product fields, and call the WooCommerce REST API.
+The integration spans three primary areas:
+- Frontend settings screen and helpers for secure credential storage and API requests
+- Backend routes for publishing to WooCommerce and general API orchestration
+- Shared schema and migration artifacts for product and listing metadata
 
 ```mermaid
 graph TB
 subgraph "Frontend"
-UI_Settings["WooCommerceSettingsScreen.tsx"]
-UI_ItemDetails["ItemDetailsScreen.tsx"]
-Lib_Marketplace["marketplace.ts"]
-Lib_Query["query-client.ts"]
+UI["WooCommerceSettingsScreen.tsx"]
+MP["marketplace.ts"]
+QC["query-client.ts"]
 end
 subgraph "Backend"
-Server_Routes["routes.ts"]
-Server_Index["index.ts"]
-Shared_Schema["schema.ts"]
+SRV["server/index.ts"]
+ROUTES["server/routes.ts"]
 end
-UI_Settings --> Lib_Marketplace
-UI_ItemDetails --> Lib_Marketplace
-Lib_Marketplace --> Lib_Query
-Lib_Query --> Server_Index
-Server_Index --> Server_Routes
-Server_Routes --> Shared_Schema
+subgraph "Data"
+SCHEMA["shared/schema.ts"]
+MIG["migrations/0001_flipagent_tables.sql"]
+end
+UI --> MP
+MP --> QC
+QC --> SRV
+SRV --> ROUTES
+ROUTES --> SCHEMA
+SCHEMA --> MIG
 ```
 
 **Diagram sources**
 - [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L1-L512)
-- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx#L1-L574)
 - [marketplace.ts](file://client/lib/marketplace.ts#L1-L129)
-- [query-client.ts](file://client/lib/query-client.ts#L1-L80)
-- [routes.ts](file://server/routes.ts#L1-L493)
-- [index.ts](file://server/index.ts#L1-L247)
-- [schema.ts](file://shared/schema.ts#L1-L122)
+- [query-client.ts](file://client/lib/query-client.ts#L1-L51)
+- [index.ts](file://server/index.ts#L1-L262)
+- [routes.ts](file://server/routes.ts#L387-L455)
+- [schema.ts](file://shared/schema.ts#L115-L220)
+- [0001_flipagent_tables.sql](file://migrations/0001_flipagent_tables.sql#L35-L75)
 
 **Section sources**
 - [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L1-L512)
 - [marketplace.ts](file://client/lib/marketplace.ts#L1-L129)
-- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx#L1-L574)
-- [query-client.ts](file://client/lib/query-client.ts#L1-L80)
-- [routes.ts](file://server/routes.ts#L1-L493)
-- [index.ts](file://server/index.ts#L1-L247)
-- [schema.ts](file://shared/schema.ts#L1-L122)
+- [query-client.ts](file://client/lib/query-client.ts#L1-L51)
+- [index.ts](file://server/index.ts#L1-L262)
+- [routes.ts](file://server/routes.ts#L387-L455)
+- [schema.ts](file://shared/schema.ts#L115-L220)
+- [0001_flipagent_tables.sql](file://migrations/0001_flipagent_tables.sql#L35-L75)
 
 ## Core Components
-- Credential management and storage:
-  - Secure local storage for consumer key and secret on native platforms; fallback to AsyncStorage on web.
-  - Status flag to indicate connection state.
-- Publishing workflow:
-  - Frontend triggers a backend endpoint to create a WooCommerce product using stash item data.
-  - Backend validates inputs, constructs product payload, authenticates with Basic Auth, and updates the stash item record with published metadata.
-- Data mapping:
-  - Title, description, short description, price, and image mapping from stash item to WooCommerce product fields.
-- Error handling:
-  - Frontend displays user-friendly alerts for missing credentials, already-published items, and API errors.
-  - Backend returns structured error responses for API failures.
+- Marketplace settings screen: Captures store URL, consumer key, and consumer secret; persists securely; tests connectivity; supports removal of credentials.
+- Frontend helpers: Retrieve stored credentials and publish to WooCommerce via the backend.
+- Backend route: Validates inputs, constructs Basic Auth credentials, posts to the WooCommerce REST API, and writes listing metadata to the database.
+- Schema and migrations: Define product and listing tables used by the integration.
 
 **Section sources**
 - [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L15-L184)
 - [marketplace.ts](file://client/lib/marketplace.ts#L19-L103)
-- [routes.ts](file://server/routes.ts#L228-L296)
-- [schema.ts](file://shared/schema.ts#L29-L50)
+- [routes.ts](file://server/routes.ts#L387-L455)
+- [schema.ts](file://shared/schema.ts#L115-L220)
+- [0001_flipagent_tables.sql](file://migrations/0001_flipagent_tables.sql#L35-L75)
 
 ## Architecture Overview
 The integration follows a client-server pattern:
-- The frontend collects credentials and item data, then calls the backend.
-- The backend validates the request, converts stash item data to WooCommerce product fields, and performs Basic Auth against the WooCommerce REST API.
-- On success, the backend persists the published state and product identifiers.
+- The frontend collects and stores credentials securely.
+- The frontend invokes a backend endpoint to publish.
+- The backend authenticates with WooCommerce using Basic Authentication and writes metadata to the database.
 
 ```mermaid
 sequenceDiagram
 participant User as "User"
-participant UI as "ItemDetailsScreen.tsx"
-participant Market as "marketplace.ts"
-participant Query as "query-client.ts"
-participant API as "routes.ts"
-participant WC as "WooCommerce Store"
-User->>UI : Tap "Publish to WooCommerce"
-UI->>Market : getWooCommerceSettings()
-Market-->>UI : {storeUrl, consumerKey, consumerSecret}
-UI->>Market : publishToWooCommerce(itemId, settings)
-Market->>Query : apiRequest("/api/stash/ : id/publish/woocommerce", body)
-Query->>API : POST /api/stash/ : id/publish/woocommerce
-API->>API : Validate inputs and fetch stash item
-API->>WC : POST /wp-json/wc/v3/products (Basic Auth)
-WC-->>API : Product JSON
-API->>API : Update stash item with productId and published flag
-API-->>Query : {success, productId, productUrl}
-Query-->>Market : Response
-Market-->>UI : {success, productUrl}
-UI-->>User : Success alert with product URL
+participant UI as "WooCommerceSettingsScreen.tsx"
+participant MP as "marketplace.ts"
+participant QC as "query-client.ts"
+participant S as "server/index.ts"
+participant R as "server/routes.ts"
+participant WC as "WooCommerce REST API"
+User->>UI : "Enter Store URL, Consumer Key, Consumer Secret"
+UI->>UI : "Save settings (SecureStore/AsyncStorage)"
+User->>MP : "Tap Publish"
+MP->>QC : "POST /api/stash/{id}/publish/woocommerce"
+QC->>S : "Forward request"
+S->>R : "Route handler"
+R->>WC : "POST /wp-json/wc/v3/products (Basic Auth)"
+WC-->>R : "Product JSON"
+R->>R : "Persist listing metadata"
+R-->>QC : "{success, productId, productUrl}"
+QC-->>MP : "Response"
+MP-->>UI : "Show success or error"
 ```
 
 **Diagram sources**
-- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx#L105-L150)
+- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L108-L146)
 - [marketplace.ts](file://client/lib/marketplace.ts#L81-L103)
 - [query-client.ts](file://client/lib/query-client.ts#L26-L43)
-- [routes.ts](file://server/routes.ts#L228-L296)
+- [index.ts](file://server/index.ts#L227-L261)
+- [routes.ts](file://server/routes.ts#L387-L455)
 
 ## Detailed Component Analysis
 
-### Credential Management and Storage
-- Keys and status are persisted separately:
-  - Store URL and connection status are stored in AsyncStorage.
-  - Consumer key and secret are stored in SecureStore on native platforms; AsyncStorage on web.
-- The settings screen supports:
-  - Loading existing credentials.
-  - Saving formatted store URL (ensuring scheme and removing trailing slash).
-  - Testing connection using Basic Auth against the WooCommerce system status endpoint.
-  - Clearing stored credentials and resetting connection status.
+### REST API Configuration Screen
+- Stores:
+  - Store URL in AsyncStorage with a dedicated status flag.
+  - Consumer Key and Consumer Secret using SecureStore on native platforms and AsyncStorage on web.
+- Behavior:
+  - Loads existing settings on mount.
+  - Saves normalized URL (HTTPS, no trailing slash).
+  - Tests connectivity by calling the WooCommerce system status endpoint with Basic Authentication.
+  - Supports clearing credentials and reconnecting.
 
 ```mermaid
 flowchart TD
-Start(["Load Settings"]) --> GetURL["Get store URL from AsyncStorage"]
-GetURL --> GetStatus["Get connection status"]
-GetStatus --> Platform{"Platform is web?"}
-Platform --> |Yes| LoadWeb["Load consumer key/secret from AsyncStorage"]
-Platform --> |No| LoadNative["Load consumer key/secret from SecureStore"]
-LoadWeb --> Done(["Settings Loaded"])
-LoadNative --> Done
+Start(["Open Settings"]) --> Load["Load stored settings"]
+Load --> Form["Render URL, Key, Secret inputs"]
+Form --> Save["Save settings"]
+Save --> Normalize["Normalize URL<br/>HTTPS + trim '/'"]
+Normalize --> Persist["Persist URL + Status<br/>Persist Credentials (SecureStore/AsyncStorage)"]
+Persist --> Done(["Settings Saved"])
+Form --> Test["Test Connection"]
+Test --> CallAPI["Call /wp-json/wc/v3/system_status with Basic Auth"]
+CallAPI --> Resp{"HTTP 200?"}
+Resp --> |Yes| Success(["Success Alert"])
+Resp --> |No| AuthFail{"401?"}
+AuthFail --> |Yes| CredsErr(["Authentication Failed Alert"])
+AuthFail --> |No| ConnErr(["Connection Failed Alert"])
 ```
 
 **Diagram sources**
-- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L43-L66)
+- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L39-L146)
 
 **Section sources**
 - [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L15-L184)
-- [marketplace.ts](file://client/lib/marketplace.ts#L19-L44)
 
-### Publishing Workflow
-- Frontend flow:
-  - Validates connection status and checks if the item was already published.
-  - Retrieves credentials via the marketplace helper.
-  - Calls the backend publish endpoint with stash item ID and credentials.
-- Backend flow:
-  - Validates presence of store URL, consumer key, and consumer secret.
-  - Fetches the stash item and ensures it hasn't been published yet.
-  - Extracts numeric price from the stash item's estimated value.
-  - Builds a WooCommerce product payload mapping stash fields to WooCommerce fields.
-  - Performs Basic Auth against the WooCommerce REST API to create the product.
-  - Updates the stash item with published flag and product ID.
-  - Returns success with product ID and URL.
-
-```mermaid
-flowchart TD
-A["User taps Publish"] --> B["getWooCommerceSettings()"]
-B --> C["publishToWooCommerce(itemId, settings)"]
-C --> D["apiRequest POST /api/stash/:id/publish/woocommerce"]
-D --> E["Backend validates inputs"]
-E --> F["Fetch stash item"]
-F --> G["Extract price from estimatedValue"]
-G --> H["Build product payload"]
-H --> I["POST to /wp-json/wc/v3/products (Basic Auth)"]
-I --> J{"WooCommerce OK?"}
-J --> |Yes| K["Update stash item: published flag + productId"]
-K --> L["Return {success, productId, productUrl}"]
-J --> |No| M["Return error response"]
-```
-
-**Diagram sources**
-- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx#L105-L150)
-- [marketplace.ts](file://client/lib/marketplace.ts#L81-L103)
-- [routes.ts](file://server/routes.ts#L228-L296)
-
-**Section sources**
-- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx#L105-L150)
-- [marketplace.ts](file://client/lib/marketplace.ts#L81-L103)
-- [routes.ts](file://server/routes.ts#L228-L296)
-
-### Data Mapping and Product Creation
-- Mapping from stash item to WooCommerce product fields:
-  - Name: stash item title
-  - Type: simple
-  - Regular price: extracted numeric value from estimatedValue
-  - Description: seoDescription or description
-  - Short description: first 200 characters of description
-  - Categories: empty array (can be extended)
-  - Images: full image URL if present
-  - Status: publish
-- Pricing conversion:
-  - Extracts the numeric amount from the estimatedValue string (supports dollar sign and commas).
-  - Falls back to zero if no match is found.
-
-```mermaid
-flowchart TD
-S["Stash Item"] --> P["Product Payload"]
-S --> V["Price Extraction"]
-V --> N["Numeric Price"]
-N --> P
-S --> T["Title -> Name"]
-S --> D["Description -> Description"]
-S --> SD["Short Description -> First 200 chars"]
-S --> I["Full Image URL -> Images"]
-P --> W["WooCommerce API Call"]
-```
-
-**Diagram sources**
-- [routes.ts](file://server/routes.ts#L246-L259)
-
-**Section sources**
-- [routes.ts](file://server/routes.ts#L246-L259)
-
-### Authentication Mechanism
-- Basic Auth with consumer credentials:
-  - Frontend test connection encodes "consumerKey:consumerSecret" and sends it as an Authorization header to the WooCommerce system status endpoint.
-  - Backend creates the same encoding and uses it to POST the product creation request to the WooCommerce REST API.
-- Store URL configuration:
-  - The settings screen normalizes the URL to HTTPS and removes trailing slashes before saving or testing.
+### Frontend Publishing Helper
+- Retrieves stored credentials using platform-aware secure storage.
+- Invokes the backend publish endpoint with the item identifier and credentials.
+- Handles errors returned by the backend and surfaces user-friendly messages.
 
 ```mermaid
 sequenceDiagram
-participant UI as "WooCommerceSettingsScreen.tsx"
-participant WC as "WooCommerce Store"
-UI->>UI : Encode "consumerKey : consumerSecret"
-UI->>WC : GET /wp-json/wc/v3/system_status (Authorization : Basic)
-WC-->>UI : 200 OK or 401 Unauthorized
+participant UI as "ItemDetailsScreen.tsx"
+participant MP as "marketplace.ts"
+participant QC as "query-client.ts"
+participant S as "server/index.ts"
+participant R as "server/routes.ts"
+UI->>MP : "getWooCommerceSettings()"
+MP-->>UI : "{storeUrl, consumerKey, consumerSecret}"
+UI->>MP : "publishToWooCommerce(id, settings)"
+MP->>QC : "POST /api/stash/{id}/publish/woocommerce"
+QC->>S : "Forward request"
+S->>R : "Route handler"
+R-->>QC : "{success, productId, productUrl}"
+QC-->>MP : "Response"
+MP-->>UI : "{success, productUrl or error}"
 ```
 
 **Diagram sources**
-- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L124-L129)
-- [routes.ts](file://server/routes.ts#L264-L267)
+- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx#L148-L193)
+- [marketplace.ts](file://client/lib/marketplace.ts#L81-L103)
+- [query-client.ts](file://client/lib/query-client.ts#L26-L43)
+- [routes.ts](file://server/routes.ts#L387-L455)
 
 **Section sources**
-- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L74-L80)
-- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L124-L129)
-- [routes.ts](file://server/routes.ts#L246-L267)
+- [marketplace.ts](file://client/lib/marketplace.ts#L19-L103)
+- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx#L148-L193)
 
-### Error Handling and Validation
+### Backend Publishing Route
+- Validates presence of store URL, consumer key, and consumer secret.
+- Fetches the stash item and checks if already published.
+- Constructs Basic Authentication credentials and posts to the WooCommerce REST API.
+- Persists listing metadata (published flag, remote product ID) upon success.
+
+```mermaid
+flowchart TD
+Req["POST /api/stash/:id/publish/woocommerce"] --> Validate["Validate inputs"]
+Validate --> NotFound{"Item exists?"}
+NotFound --> |No| Err404["Return 404"]
+NotFound --> |Yes| Already{"Already published?"}
+Already --> |Yes| Err400["Return 400"]
+Already --> |No| Build["Build Basic Auth + Product payload"]
+Build --> Post["POST /wp-json/wc/v3/products"]
+Post --> Ok{"HTTP 200?"}
+Ok --> |No| ErrResp["Return error with message/status"]
+Ok --> |Yes| Save["Update stash item with published flag + product ID"]
+Save --> Resp["Return {success, productId, productUrl}"]
+```
+
+**Diagram sources**
+- [routes.ts](file://server/routes.ts#L387-L455)
+
+**Section sources**
+- [routes.ts](file://server/routes.ts#L387-L455)
+
+### Order Management Integration
+- Current implementation focuses on product publishing to WooCommerce.
+- No backend endpoints are present for fetching orders or updating statuses.
+- To integrate orders, implement backend endpoints to:
+  - Fetch orders from WooCommerce using the REST API.
+  - Update local order records and statuses.
+  - Trigger fulfillment actions based on order state.
+
+[No sources needed since this section provides general guidance]
+
+### Marketplace Settings Screen Functionality
+- Provides a guided form for entering and validating WooCommerce credentials.
+- Uses platform-specific secure storage for credentials.
+- Offers a “Test Connection” action to verify REST API accessibility and authentication.
+
+**Section sources**
+- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L182-L184)
+
+### Security Considerations
+- Credential storage:
+  - Native platforms: SecureStore for consumer key and secret.
+  - Web: AsyncStorage fallback; a warning is displayed advising mobile for best security.
+- Transport:
+  - REST API calls use HTTPS for the store URL and Basic Authentication headers.
+- Environment:
+  - API base URL is resolved from an environment variable; ensure it resolves to a secure origin.
+
+**Section sources**
+- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L204-L211)
+- [marketplace.ts](file://client/lib/marketplace.ts#L29-L35)
+- [query-client.ts](file://client/lib/query-client.ts#L7-L17)
+
+### Error Handling
 - Frontend:
-  - Prevents publishing if not connected or if the item is already published.
-  - Displays user-friendly alerts for missing information, connection failures, and API errors.
+  - Missing fields, save errors, and connection test failures surface alerts.
+  - Network errors are caught and reported.
 - Backend:
-  - Validates presence of credentials and stash item existence.
-  - Returns structured error responses for API failures, including HTTP status and message.
-  - Guards against duplicate publishing attempts.
-
-```mermaid
-flowchart TD
-Start(["Publish Request"]) --> CheckCreds{"Credentials present?"}
-CheckCreds --> |No| ErrCreds["Return 400 Missing credentials"]
-CheckCreds --> |Yes| FetchItem["Fetch stash item"]
-FetchItem --> Exists{"Item exists?"}
-Exists --> |No| ErrNotFound["Return 404 Item not found"]
-Exists --> |Yes| Already{"Already published?"}
-Already --> |Yes| ErrDup["Return 400 Already published"]
-Already --> |No| Proceed["Proceed to create product"]
-```
-
-**Diagram sources**
-- [routes.ts](file://server/routes.ts#L233-L244)
+  - Missing inputs return 400.
+  - Item not found returns 404.
+  - Authentication failures return 401-like messages.
+  - Non-200 responses from WooCommerce propagate error details.
 
 **Section sources**
-- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx#L108-L123)
-- [routes.ts](file://server/routes.ts#L233-L244)
+- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L108-L146)
+- [routes.ts](file://server/routes.ts#L392-L394)
+- [routes.ts](file://server/routes.ts#L429-L434)
 
-### Product Publishing Workflow Details
-- Endpoint: POST /api/stash/:id/publish/woocommerce
-- Request body: storeUrl, consumerKey, consumerSecret
-- Response: success flag, productId, productUrl
-- Post-success actions:
-  - Frontend invalidates queries to refresh UI.
-  - Backend updates stash item with publishedToWoocommerce flag and woocommerceProductId.
-
-```mermaid
-sequenceDiagram
-participant API as "routes.ts"
-participant DB as "Database"
-participant WC as "WooCommerce Store"
-API->>DB : Select stash item by ID
-API->>WC : POST /wp-json/wc/v3/products
-WC-->>API : Product JSON
-API->>DB : Update stash item (publishedToWoocommerce=true, woocommerceProductId)
-API-->>Caller : {success, productId, productUrl}
-```
-
-**Diagram sources**
-- [routes.ts](file://server/routes.ts#L237-L291)
+### Product Publishing Workflow
+- Data mapping:
+  - Title, description, short description, images, and price are mapped from the stash item to the WooCommerce product payload.
+  - Price parsing extracts numeric value from a formatted string.
+- Lifecycle:
+  - Validate inputs and existence.
+  - Authenticate and post product.
+  - Persist remote product ID and update published flags.
 
 **Section sources**
-- [routes.ts](file://server/routes.ts#L228-L296)
-- [schema.ts](file://shared/schema.ts#L44-L47)
+- [routes.ts](file://server/routes.ts#L409-L418)
+- [routes.ts](file://server/routes.ts#L406-L407)
+
+### Order Management Integration (Planned)
+- Fetch orders from WooCommerce REST API endpoints.
+- Update local order records and statuses.
+- Coordinate fulfillment actions.
+
+[No sources needed since this section provides general guidance]
 
 ## Dependency Analysis
-- Frontend dependencies:
-  - SecureStore for native secure storage.
-  - AsyncStorage for cross-platform credential persistence.
-  - React Query for API requests and caching.
-- Backend dependencies:
-  - Express for routing and HTTP handling.
-  - Drizzle ORM for database operations.
-  - Multer for file uploads (used elsewhere in the app).
-- Environment configuration:
-  - EXPO_PUBLIC_DOMAIN drives the API base URL for frontend requests.
+- Frontend depends on:
+  - SecureStore/AsyncStorage for credentials.
+  - React Query client for API requests.
+- Backend depends on:
+  - Express for routing and CORS.
+  - PostgreSQL via Drizzle ORM for persistence.
+- Runtime dependencies include Express and related middleware.
 
 ```mermaid
 graph LR
-FE["Frontend (React Native)"] --> QS["SecureStore/AsyncStorage"]
-FE --> RQ["React Query"]
-RQ --> BE["Backend (Express)"]
-BE --> ORM["Drizzle ORM"]
-BE --> WC["WooCommerce REST API"]
+MP["client/lib/marketplace.ts"] --> QC["client/lib/query-client.ts"]
+UI["client/screens/WooCommerceSettingsScreen.tsx"] --> MP
+QC --> IDX["server/index.ts"]
+IDX --> RT["server/routes.ts"]
+RT --> DB["shared/schema.ts"]
+DB --> MIG["migrations/0001_flipagent_tables.sql"]
 ```
 
 **Diagram sources**
-- [package.json](file://package.json#L1-L85)
-- [query-client.ts](file://client/lib/query-client.ts#L7-L17)
-- [routes.ts](file://server/routes.ts#L1-L493)
+- [marketplace.ts](file://client/lib/marketplace.ts#L1-L129)
+- [query-client.ts](file://client/lib/query-client.ts#L1-L51)
+- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L1-L512)
+- [index.ts](file://server/index.ts#L1-L262)
+- [routes.ts](file://server/routes.ts#L387-L455)
+- [schema.ts](file://shared/schema.ts#L115-L220)
+- [0001_flipagent_tables.sql](file://migrations/0001_flipagent_tables.sql#L35-L75)
 
 **Section sources**
-- [package.json](file://package.json#L1-L85)
-- [query-client.ts](file://client/lib/query-client.ts#L7-L17)
-- [routes.ts](file://server/routes.ts#L1-L493)
+- [package.json](file://package.json#L24-L76)
+- [index.ts](file://server/index.ts#L19-L56)
 
 ## Performance Considerations
-- Network efficiency:
-  - Minimize redundant requests by checking connection status and published state before attempting publish.
-  - Use query invalidation to refresh UI efficiently after successful publish.
-- Data processing:
-  - Price extraction uses a single regex pass; ensure stash item estimatedValue format remains consistent to avoid extra conversions.
-- Storage:
-  - Prefer SecureStore on native platforms for sensitive credentials to reduce risk and improve trust boundaries.
+- Avoid repeated network calls by caching validated settings locally.
+- Batch publishing operations if scaling to multiple items.
+- Monitor backend response times and implement retries with backoff for transient failures.
+
+[No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-Common issues and resolutions:
+- Connection test fails:
+  - Ensure the store URL is reachable and uses HTTPS.
+  - Confirm the WooCommerce REST API is enabled and accessible.
+  - Verify the consumer key and secret are correct.
 - Authentication failures:
-  - Verify consumer key and secret are correct and that the WooCommerce REST API is enabled.
-  - Use the "Test Connection" action to confirm credentials and store URL.
-- Store URL problems:
-  - Ensure the URL starts with a scheme and does not end with a slash.
-- Duplicate publishing:
-  - Items already marked as published will be rejected by the backend.
-- API errors:
-  - Inspect returned error messages from the backend for specific failure reasons.
-- Environment setup:
-  - Confirm EXPO_PUBLIC_DOMAIN is set so the frontend can reach the backend API.
+  - Check that the consumer key/secret pair matches the store’s credentials.
+- Publishing errors:
+  - Confirm the item exists and has not already been published.
+  - Review the backend error response for specific reasons.
+- Web deployment:
+  - Prefer native app for secure credential storage; if using web, expect warnings and reduced security.
 
 **Section sources**
-- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L131-L142)
-- [routes.ts](file://server/routes.ts#L270-L275)
-- [ENVIRONMENT.md](file://ENVIRONMENT.md#L69-L113)
+- [WooCommerceSettingsScreen.tsx](file://client/screens/WooCommerceSettingsScreen.tsx#L108-L146)
+- [routes.ts](file://server/routes.ts#L392-L394)
+- [routes.ts](file://server/routes.ts#L429-L434)
 
 ## Conclusion
-The HiddenGem application integrates with WooCommerce through a secure, user-friendly workflow. Users configure credentials once, and the system handles data mapping, pricing conversion, and product creation with robust error handling. The backend centralizes authentication and validation, while the frontend provides clear feedback and maintains connection state.
+The integration provides a secure, straightforward path to publish products to WooCommerce. It leverages platform-aware secure storage, Basic Authentication, and a clear publish flow. Extending to order management and advanced inventory features would involve adding backend endpoints to synchronize orders and statuses.
+
+[No sources needed since this section summarizes without analyzing specific files]
+
+## Appendices
+
+### API Definitions
+- Publish to WooCommerce
+  - Method: POST
+  - Path: /api/stash/:id/publish/woocommerce
+  - Body fields: storeUrl, consumerKey, consumerSecret
+  - Success response: { success: true, productId, productUrl }
+  - Error responses: 400 (missing inputs or already published), 404 (item not found), 500 (general failure)
+
+**Section sources**
+- [routes.ts](file://server/routes.ts#L387-L455)
+
+### Data Model Notes
+- Product and listing metadata are persisted in the products and listings tables.
+- The stash items table tracks publication flags and remote identifiers.
+
+**Section sources**
+- [schema.ts](file://shared/schema.ts#L115-L220)
+- [0001_flipagent_tables.sql](file://migrations/0001_flipagent_tables.sql#L35-L75)
+
+### Test Automation
+- Maestro flow verifies credential entry and save actions.
+
+**Section sources**
+- [.maestro/woocommerce_settings_flow.yml](file://.maestro/woocommerce_settings_flow.yml#L1-L45)

@@ -2,13 +2,13 @@
 
 <cite>
 **Referenced Files in This Document**
-- [ENVIRONMENT.md](file://ENVIRONMENT.md)
-- [marketplace.ts](file://client/lib/marketplace.ts)
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx)
-- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx)
-- [query-client.ts](file://client/lib/query-client.ts)
+- [ebay-service.ts](file://server/ebay-service.ts)
 - [routes.ts](file://server/routes.ts)
-- [schema.ts](file://shared/schema.ts)
+- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx)
+- [marketplace.ts](file://client/lib/marketplace.ts)
+- [query-client.ts](file://client/lib/query-client.ts)
+- [ENVIRONMENT.md](file://ENVIRONMENT.md)
+- [index.ts](file://server/index.ts)
 </cite>
 
 ## Table of Contents
@@ -21,335 +21,342 @@
 7. [Performance Considerations](#performance-considerations)
 8. [Troubleshooting Guide](#troubleshooting-guide)
 9. [Conclusion](#conclusion)
+10. [Appendices](#appendices)
 
 ## Introduction
-This document explains the eBay marketplace integration in the project, focusing on:
-- eBay Developer Portal setup and credential management
-- OAuth authentication flow and environment configuration (sandbox vs production)
-- API client configuration and secure storage
-- Multi-step listing process: inventory item creation, offer creation, and publishing
-- eBay API endpoints used, request/response formats, and error handling
-- Practical examples, credential validation, and troubleshooting common authentication and policy errors
-- Condition mapping, SKU generation, and listing URL construction
-- eBay-specific requirements such as business policies and merchant location keys
+This document explains the eBay marketplace integration for the HiddenGem project. It covers OAuth2 authentication, refresh token management, access token generation, listing retrieval, inventory management, and CRUD operations for eBay offers and inventory items. It also documents the category mapping system, listing creation workflow, price and quantity updates, listing termination, error handling, rate limiting considerations, API response parsing, security best practices, and practical usage patterns.
 
 ## Project Structure
 The eBay integration spans three layers:
-- Frontend (React Native) settings screen and helpers for secure credential storage and API requests
-- Backend (Express) routes implementing the eBay publishing pipeline
-- Shared schema modeling persisted listing state
+- Frontend (React Native): Settings screen and marketplace utilities for credential storage and API calls
+- Backend (Express): Routes that proxy eBay APIs and manage token refresh
+- Shared service library: Reusable eBay API client functions
 
 ```mermaid
 graph TB
 subgraph "Frontend"
-UI["EbaySettingsScreen.tsx<br/>Settings UI and validation"]
-MP["marketplace.ts<br/>Credential retrieval and publish helpers"]
-QC["query-client.ts<br/>API client and error handling"]
+ESS["EbaySettingsScreen.tsx"]
+MP["marketplace.ts"]
+QC["query-client.ts"]
 end
 subgraph "Backend"
-RT["routes.ts<br/>POST /api/stash/:id/publish/ebay"]
+R["routes.ts"]
+ES["ebay-service.ts"]
+IDX["index.ts"]
 end
-subgraph "Shared"
-DB["schema.ts<br/>stashItems: publishedToEbay, ebayListingId"]
-end
-UI --> MP
+ESS --> MP
 MP --> QC
-QC --> RT
-RT --> DB
+MP --> R
+R --> ES
+ES --> IDX
 ```
 
 **Diagram sources**
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L1-L370)
+- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L1-L568)
 - [marketplace.ts](file://client/lib/marketplace.ts#L1-L129)
 - [query-client.ts](file://client/lib/query-client.ts#L1-L80)
-- [routes.ts](file://server/routes.ts#L298-L488)
-- [schema.ts](file://shared/schema.ts#L29-L50)
+- [routes.ts](file://server/routes.ts#L44-L929)
+- [ebay-service.ts](file://server/ebay-service.ts#L1-L474)
+- [index.ts](file://server/index.ts#L1-L262)
 
 **Section sources**
-- [ENVIRONMENT.md](file://ENVIRONMENT.md#L63-L67)
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L1-L370)
+- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L1-L568)
 - [marketplace.ts](file://client/lib/marketplace.ts#L1-L129)
-- [query-client.ts](file://client/lib/query-client.ts#L1-L80)
-- [routes.ts](file://server/routes.ts#L298-L488)
-- [schema.ts](file://shared/schema.ts#L29-L50)
+- [routes.ts](file://server/routes.ts#L44-L929)
+- [ebay-service.ts](file://server/ebay-service.ts#L1-L474)
+- [index.ts](file://server/index.ts#L1-L262)
 
 ## Core Components
-- Credential storage and retrieval:
-  - Frontend stores Client ID, Client Secret, optional Refresh Token, and environment selection in secure storage (device-specific) and AsyncStorage for web fallback.
-  - Backend validates presence of credentials and refresh token before attempting eBay API calls.
-- Publishing workflow:
-  - Frontend triggers a publish action that calls the backend endpoint with eBay credentials and environment.
-  - Backend performs OAuth token exchange, creates inventory item, posts offer, publishes listing, updates database, and returns listing URL.
+- eBay credentials management and environment selection in the frontend settings screen
+- Frontend marketplace utilities to publish items to eBay and retrieve settings
+- Backend routes to handle eBay publishing, listing updates/deletes, and token refresh
+- Shared eBay service library for token acquisition, listing retrieval, inventory operations, and category mapping
 
 Key responsibilities:
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L40-L110) loads and saves credentials and environment
-- [marketplace.ts](file://client/lib/marketplace.ts#L46-L79) retrieves stored credentials
-- [marketplace.ts](file://client/lib/marketplace.ts#L105-L128) invokes backend publish endpoint
-- [query-client.ts](file://client/lib/query-client.ts#L26-L43) wraps API requests with error handling
-- [routes.ts](file://server/routes.ts#L298-L488) implements the eBay publishing pipeline
-- [schema.ts](file://shared/schema.ts#L29-L50) persists listing state
+- OAuth2 token acquisition and refresh
+- Listing retrieval (active listings and inventory items)
+- Inventory item updates (price, quantity, metadata)
+- Offer lifecycle management (create, publish, update, delete)
+- Category mapping for automatic eBay category assignment
 
 **Section sources**
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L40-L110)
+- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L14-L187)
 - [marketplace.ts](file://client/lib/marketplace.ts#L46-L79)
-- [marketplace.ts](file://client/lib/marketplace.ts#L105-L128)
-- [query-client.ts](file://client/lib/query-client.ts#L26-L43)
-- [routes.ts](file://server/routes.ts#L298-L488)
-- [schema.ts](file://shared/schema.ts#L29-L50)
+- [routes.ts](file://server/routes.ts#L457-L647)
+- [ebay-service.ts](file://server/ebay-service.ts#L42-L62)
+- [ebay-service.ts](file://server/ebay-service.ts#L111-L150)
+- [ebay-service.ts](file://server/ebay-service.ts#L386-L430)
+- [ebay-service.ts](file://server/ebay-service.ts#L435-L473)
+- [ebay-service.ts](file://server/ebay-service.ts#L274-L313)
 
 ## Architecture Overview
-End-to-end eBay publishing flow from UI to eBay APIs:
+The integration follows a proxy pattern: the frontend calls backend routes, which authenticate with eBay and perform operations against the eBay APIs. Tokens are refreshed as needed, and responses are normalized for the frontend.
 
 ```mermaid
 sequenceDiagram
-participant User as "User"
-participant UI as "ItemDetailsScreen.tsx"
+participant UI as "EbaySettingsScreen.tsx"
 participant MP as "marketplace.ts"
-participant QC as "query-client.ts"
-participant BE as "routes.ts"
-participant EB as "eBay API"
-User->>UI : Tap "Publish to eBay"
-UI->>MP : publishToEbay(itemId, settings)
-MP->>QC : apiRequest(..., body : {clientId, clientSecret, refreshToken, environment})
-QC->>BE : POST /api/stash/ : id/publish/ebay
-BE->>EB : POST /identity/v1/oauth2/token (refresh_token)
-EB-->>BE : {access_token}
-BE->>EB : PUT /sell/inventory/v1/inventory_item/{sku}
-EB-->>BE : 204 or error
-BE->>EB : POST /sell/inventory/v1/offer
-EB-->>BE : {offerId}
-BE->>EB : POST /sell/inventory/v1/offer/{offerId}/publish
-EB-->>BE : {listingId}
-BE->>BE : Update stashItems (publishedToEbay, ebayListingId)
-BE-->>QC : {success, listingId, listingUrl, message}
-QC-->>MP : Response
-MP-->>UI : {success, listingUrl}
-UI-->>User : Success alert with listing URL
+participant API as "routes.ts"
+participant SVC as "ebay-service.ts"
+participant EBAY as "eBay API"
+UI->>MP : Save credentials and environment
+MP->>API : POST /api/stash/ : id/publish/ebay
+API->>EBAY : POST /identity/v1/oauth2/token (refresh_token)
+EBAY-->>API : {access_token, refresh_token, expires_in}
+API->>EBAY : PUT /sell/inventory/v1/inventory_item/{sku}
+API->>EBAY : POST /sell/inventory/v1/offer
+API->>EBAY : POST /sell/inventory/v1/offer/{offerId}/publish
+EBAY-->>API : {listingId}
+API-->>MP : {success, listingId, listingUrl}
+MP-->>UI : Publish result
 ```
 
 **Diagram sources**
-- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx#L170-L197)
+- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L75-L110)
 - [marketplace.ts](file://client/lib/marketplace.ts#L105-L128)
-- [query-client.ts](file://client/lib/query-client.ts#L26-L43)
-- [routes.ts](file://server/routes.ts#L298-L488)
+- [routes.ts](file://server/routes.ts#L457-L647)
+- [ebay-service.ts](file://server/ebay-service.ts#L42-L62)
 
 ## Detailed Component Analysis
 
-### eBay Settings Screen (Frontend)
-- Purpose: Collect and validate eBay credentials, environment, and optional refresh token; test connection against eBay identity endpoint.
-- Secure storage:
-  - Stores Client ID, Client Secret, optional Refresh Token, environment, and connection status in platform-specific secure storage or AsyncStorage for web.
-- Validation and UX:
-  - Tests OAuth client credentials against the appropriate eBay API base URL (sandbox or production).
-  - Alerts on success, invalid credentials (401), or other errors.
+### OAuth2 Authentication Flow
+- Client credentials setup: Client ID and Client Secret are stored securely in the frontend and passed to backend routes for token refresh.
+- Refresh token management: The backend performs a refresh grant to obtain an access token and optionally a new refresh token with expiry timestamp.
+- Access token generation: The eBay service acquires an access token using the refresh token and environment (sandbox/production).
 
 ```mermaid
-flowchart TD
-Start(["Open Settings"]) --> Load["Load stored credentials and environment"]
-Load --> Edit{"Edit fields?"}
-Edit --> |Yes| Save["Save to secure storage"]
-Edit --> |No| Test{"Test connection?"}
-Save --> Test
-Test --> |Yes| CallAPI["Fetch /identity/v1/oauth2/token<br/>grant_type=client_credentials"]
-CallAPI --> Resp{"HTTP 200 OK?"}
-Resp --> |Yes| Success["Alert 'Connected'"]
-Resp --> |No| Error["Alert error details"]
-Test --> |No| Disconnect{"Disconnect?"}
-Disconnect --> Clear["Remove stored keys and status"]
+sequenceDiagram
+participant FE as "Frontend"
+participant BE as "routes.ts"
+participant EB as "eBay Identity API"
+FE->>BE : POST /api/ebay/refresh-token
+BE->>EB : POST /identity/v1/oauth2/token (refresh_token)
+EB-->>BE : {access_token, refresh_token, expires_in}
+BE-->>FE : {accessToken, refreshToken, expiresAt}
 ```
 
 **Diagram sources**
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L40-L110)
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L118-L150)
+- [routes.ts](file://server/routes.ts#L893-L906)
+- [ebay-service.ts](file://server/ebay-service.ts#L329-L364)
 
 **Section sources**
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L40-L110)
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L118-L150)
+- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L14-L18)
+- [routes.ts](file://server/routes.ts#L893-L906)
+- [ebay-service.ts](file://server/ebay-service.ts#L319-L364)
 
-### Credential Retrieval and Publish Helpers (Frontend)
-- Retrieves stored eBay settings (environment, credentials) and invokes backend publish endpoint.
-- Returns structured results with success flag, optional listing URL, and error message.
+### Listing Retrieval
+- Active listings: Fetches offers with pagination support and constructs listing summaries with URLs.
+- Inventory items: Retrieves inventory items and maps product details and availability.
 
 ```mermaid
-flowchart TD
-Get(["getEbaySettings()"]) --> CheckEnv["Check environment and status"]
-CheckEnv --> HasCreds{"Has Client ID + Secret?"}
-HasCreds --> |No| Null["Return null"]
-HasCreds --> |Yes| Return["Return {clientId, clientSecret, refreshToken, environment}"]
-Publish(["publishToEbay(itemId, settings)"]) --> CallAPI["apiRequest('/api/stash/:id/publish/ebay', settings)"]
-CallAPI --> Resp{"Response has error?"}
-Resp --> |Yes| Fail["Return {success: false, error}"]
-Resp --> |No| Ok["Return {success: true, listingUrl}"]
+sequenceDiagram
+participant FE as "Frontend"
+participant BE as "routes.ts"
+participant SVC as "ebay-service.ts"
+participant EB as "eBay Inventory API"
+FE->>BE : GET /api/ebay/listings
+BE->>SVC : getActiveListings()
+SVC->>EB : GET /sell/inventory/v1/offer
+EB-->>SVC : {offers[], total}
+SVC-->>BE : {listings[], total}
+BE-->>FE : Listings summary
 ```
 
 **Diagram sources**
+- [routes.ts](file://server/routes.ts#L64-L109)
+- [ebay-service.ts](file://server/ebay-service.ts#L64-L109)
+
+**Section sources**
+- [routes.ts](file://server/routes.ts#L64-L109)
+- [ebay-service.ts](file://server/ebay-service.ts#L8-L28)
+- [ebay-service.ts](file://server/ebay-service.ts#L64-L109)
+
+### Inventory Management and CRUD Operations
+- Update inventory item: PUT to update product details and availability.
+- Update listing price: Retrieve current offer, modify pricing, and PUT back.
+- Update listing quantity: Retrieve inventory item, modify availability, and PUT back.
+- Delete listing: DELETE offer by offerId.
+- Delete inventory item: DELETE inventory item by SKU.
+
+```mermaid
+flowchart TD
+Start(["Update Price"]) --> GetOffer["GET /sell/inventory/v1/offer/{offerId}"]
+GetOffer --> ParseOffer["Parse offer data"]
+ParseOffer --> ModifyPrice["Set pricingSummary.price"]
+ModifyPrice --> PutOffer["PUT /sell/inventory/v1/offer/{offerId}"]
+PutOffer --> Done(["Return success"])
+```
+
+**Diagram sources**
+- [ebay-service.ts](file://server/ebay-service.ts#L177-L224)
+
+**Section sources**
+- [ebay-service.ts](file://server/ebay-service.ts#L177-L224)
+- [ebay-service.ts](file://server/ebay-service.ts#L226-L272)
+- [ebay-service.ts](file://server/ebay-service.ts#L152-L175)
+- [ebay-service.ts](file://server/ebay-service.ts#L386-L430)
+- [ebay-service.ts](file://server/ebay-service.ts#L435-L473)
+
+### Category Mapping System
+Automatic category assignment based on item types:
+- A category map defines app category names to eBay category IDs.
+- A mapping function normalizes input and finds the best match, falling back to a generic category if none found.
+
+```mermaid
+flowchart TD
+Input["App category name"] --> Normalize["Trim and normalize"]
+Normalize --> Exact{"Exact match?"}
+Exact --> |Yes| ReturnExact["Return mapped ID"]
+Exact --> |No| Fuzzy["Fuzzy match loop"]
+Fuzzy --> Match{"Contains or included?"}
+Match --> |Yes| ReturnFuzzy["Return matched ID"]
+Match --> |No| Fallback["Return default category ID"]
+```
+
+**Diagram sources**
+- [ebay-service.ts](file://server/ebay-service.ts#L274-L313)
+
+**Section sources**
+- [ebay-service.ts](file://server/ebay-service.ts#L274-L313)
+
+### Listing Creation Workflow
+End-to-end listing creation:
+- Publish endpoint validates credentials and refresh token, obtains an access token, creates inventory item, creates offer, publishes offer, and persists listing metadata.
+
+```mermaid
+sequenceDiagram
+participant UI as "UI"
+participant API as "routes.ts"
+participant EB as "eBay API"
+UI->>API : POST /api/stash/ : id/publish/ebay
+API->>EB : POST /identity/v1/oauth2/token (refresh_token)
+API->>EB : PUT /sell/inventory/v1/inventory_item/{sku}
+API->>EB : POST /sell/inventory/v1/offer
+API->>EB : POST /sell/inventory/v1/offer/{offerId}/publish
+EB-->>API : {listingId}
+API-->>UI : {success, listingId, listingUrl}
+```
+
+**Diagram sources**
+- [routes.ts](file://server/routes.ts#L457-L647)
+
+**Section sources**
+- [routes.ts](file://server/routes.ts#L457-L647)
+
+### Frontend Credential Management and Publishing
+- Secure storage: Client ID, Client Secret, and Refresh Token are stored using platform-appropriate secure stores.
+- Environment toggle: Supports sandbox and production modes.
+- Publishing: The marketplace utility posts to backend routes with eBay credentials and triggers listing creation.
+
+```mermaid
+sequenceDiagram
+participant Screen as "EbaySettingsScreen.tsx"
+participant Store as "SecureStore/AsyncStorage"
+participant MP as "marketplace.ts"
+participant API as "routes.ts"
+Screen->>Store : Save credentials and environment
+MP->>API : POST /api/stash/ : id/publish/ebay
+API-->>MP : {success, listingUrl}
+```
+
+**Diagram sources**
+- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L75-L110)
+- [marketplace.ts](file://client/lib/marketplace.ts#L105-L128)
+
+**Section sources**
+- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L14-L187)
 - [marketplace.ts](file://client/lib/marketplace.ts#L46-L79)
 - [marketplace.ts](file://client/lib/marketplace.ts#L105-L128)
-- [query-client.ts](file://client/lib/query-client.ts#L26-L43)
-
-**Section sources**
-- [marketplace.ts](file://client/lib/marketplace.ts#L46-L79)
-- [marketplace.ts](file://client/lib/marketplace.ts#L105-L128)
-- [query-client.ts](file://client/lib/query-client.ts#L26-L43)
-
-### eBay Publishing Pipeline (Backend)
-- Validates credentials and refresh token; prevents duplicate listings.
-- Exchanges refresh token for access token using eBay identity endpoint.
-- Creates inventory item with mapped condition and product metadata.
-- Posts offer with pricing, policies placeholders, and merchant location key.
-- Publishes offer and records listing ID; constructs listing URL based on environment.
-
-```mermaid
-flowchart TD
-Start(["POST /api/stash/:id/publish/ebay"]) --> Validate["Validate clientId, clientSecret, refreshToken"]
-Validate --> FetchItem["Fetch stash item by id"]
-FetchItem --> Exists{"Item exists and not published?"}
-Exists --> |No| Err400["Return 400/404"]
-Exists --> |Yes| Token["POST /identity/v1/oauth2/token (refresh_token)"]
-Token --> TokOK{"Token OK?"}
-TokOK --> |No| TokErr["Return error with description"]
-TokOK --> |Yes| AccessToken["Use access_token"]
-AccessToken --> Inv["PUT /sell/inventory/v1/inventory_item/{sku}"]
-Inv --> InvOK{"204 or OK?"}
-InvOK --> |No| InvErr["Return inventory error"]
-InvOK --> Offer["POST /sell/inventory/v1/offer"]
-Offer --> OfferResp{"Offer OK or 201?"}
-OfferResp --> |No| OfferErr["Parse errors; detect policy requirement"]
-OfferErr --> |Policy required| PolicyErr["Return policy setup message"]
-OfferErr --> |Other| OfferErr2["Return offer error"]
-OfferResp --> |Yes| OfferId["Extract offerId"]
-OfferId --> Pub["POST /sell/inventory/v1/offer/{offerId}/publish"]
-Pub --> PubOK{"Publish OK?"}
-PubOK --> |Yes| ListingId["Extract listingId"]
-PubOK --> |No| SkipPub["Continue without listingId"]
-ListingId --> Update["Update stashItems: publishedToEbay=true, ebayListingId"]
-SkipPub --> Update
-Update --> Url["Build listing URL (prod/sandbox)"]
-Url --> Done["Return {success, listingId, listingUrl, message}"]
-```
-
-**Diagram sources**
-- [routes.ts](file://server/routes.ts#L298-L488)
-
-**Section sources**
-- [routes.ts](file://server/routes.ts#L298-L488)
-
-### Data Model and State Persistence
-- The stash items table tracks whether an item has been published to eBay and stores the eBay listing identifier.
-
-```mermaid
-erDiagram
-STASH_ITEMS {
-int id PK
-string user_id FK
-string title
-string description
-string category
-string estimated_value
-string condition
-string[] tags
-string full_image_url
-string label_image_url
-jsonb ai_analysis
-string seo_title
-string seo_description
-string[] seo_keywords
-boolean published_to_woocommerce
-boolean published_to_ebay
-string woocommerce_product_id
-string ebay_listing_id
-timestamp created_at
-timestamp updated_at
-}
-```
-
-**Diagram sources**
-- [schema.ts](file://shared/schema.ts#L29-L50)
-
-**Section sources**
-- [schema.ts](file://shared/schema.ts#L29-L50)
 
 ## Dependency Analysis
 - Frontend depends on:
   - Secure storage for credentials
-  - API client for backend communication
-  - eBay identity and inventory endpoints
+  - Query client for API communication
+  - Backend routes for eBay operations
 - Backend depends on:
-  - eBay identity and inventory endpoints
-  - Database to persist listing state
-- Environment configuration:
-  - Sandbox vs production base URLs selected by environment setting
+  - eBay service library for API interactions
+  - Environment configuration for base URLs
+  - Database for persistence of listing metadata
 
 ```mermaid
 graph LR
-UI["EbaySettingsScreen.tsx"] --> SEC["SecureStore/AsyncStorage"]
-UI --> MP["marketplace.ts"]
+ESS["EbaySettingsScreen.tsx"] --> MP["marketplace.ts"]
 MP --> QC["query-client.ts"]
-QC --> BE["routes.ts"]
-BE --> EB["eBay API"]
-BE --> DB["stashItems (schema.ts)"]
+MP --> R["routes.ts"]
+R --> ES["ebay-service.ts"]
+ES --> IDX["index.ts"]
 ```
 
 **Diagram sources**
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L1-L370)
+- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L1-L568)
 - [marketplace.ts](file://client/lib/marketplace.ts#L1-L129)
 - [query-client.ts](file://client/lib/query-client.ts#L1-L80)
-- [routes.ts](file://server/routes.ts#L298-L488)
-- [schema.ts](file://shared/schema.ts#L29-L50)
+- [routes.ts](file://server/routes.ts#L44-L929)
+- [ebay-service.ts](file://server/ebay-service.ts#L1-L474)
+- [index.ts](file://server/index.ts#L1-L262)
 
 **Section sources**
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L1-L370)
-- [marketplace.ts](file://client/lib/marketplace.ts#L1-L129)
-- [query-client.ts](file://client/lib/query-client.ts#L1-L80)
-- [routes.ts](file://server/routes.ts#L298-L488)
-- [schema.ts](file://shared/schema.ts#L29-L50)
+- [routes.ts](file://server/routes.ts#L44-L929)
+- [ebay-service.ts](file://server/ebay-service.ts#L1-L474)
+- [index.ts](file://server/index.ts#L1-L262)
 
 ## Performance Considerations
-- Network retries: The API client disables retries by default; handle transient failures gracefully in UI.
-- Token reuse: Access tokens are requested per publish operation; avoid unnecessary repeated calls.
-- Image handling: Ensure images are optimized to reduce payload sizes for inventory item creation.
-- Environment selection: Prefer sandbox during development to minimize API usage and risk.
+- Pagination: Listing retrieval supports limit and offset to avoid large payloads.
+- Token reuse: Access tokens are acquired per operation; consider caching with expiry checks to reduce redundant refresh calls.
+- Network efficiency: Batch operations where feasible; minimize round trips by combining updates when eBay allows.
+- Rate limiting: Respect eBay API rate limits; implement retries with exponential backoff and circuit breaker patterns.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-
-Common authentication errors:
-- Missing credentials: Ensure Client ID and Client Secret are present before testing or publishing.
-- Invalid credentials: The identity endpoint returns 401 when Client ID/Secret are wrong; verify in the eBay Developer Portal.
-- Refresh token required: Publishing requires a user OAuth refresh token; without it, the backend returns a clear error instructing to generate one.
-
-Business policies configuration:
-- If the offer creation fails with policy-related errors, configure shipping, payment, and return policies in your eBay Seller Hub before listing.
-
-Environment configuration:
-- Toggle between sandbox and production in the settings screen; the base URLs change accordingly.
-
-Credential validation tips:
-- Use the “Test Connection” button to validate Client ID and Client Secret against the selected environment.
-- On web, credentials are stored in AsyncStorage; for best security, use the mobile app.
-
-Error handling in code:
-- Frontend helpers return structured error messages; display them to the user.
-- Backend routes return descriptive errors for token failures, inventory errors, offer errors, and policy requirements.
-
-Practical checks:
-- Confirm the item exists and has not already been published.
-- Verify eBay listing conditions and pricing derived from item metadata.
-- Ensure the merchant location key is set appropriately if required by your account configuration.
+Common issues and resolutions:
+- Authentication failures:
+  - Verify Client ID and Client Secret; test connection from the settings screen.
+  - Ensure refresh token is present for listing operations.
+- Business policies required:
+  - eBay requires configured shipping, payment, and return policies; the backend detects policy errors and returns actionable messages.
+- API errors:
+  - Inspect error bodies for detailed messages; handle non-2xx responses gracefully.
+- Environment mismatch:
+  - Confirm environment selection (sandbox vs production) aligns with credentials and expected behavior.
 
 **Section sources**
-- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L118-L150)
-- [routes.ts](file://server/routes.ts#L303-L311)
-- [routes.ts](file://server/routes.ts#L449-L462)
-- [routes.ts](file://server/routes.ts#L453-L457)
-- [ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx#L189-L191)
+- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L112-L150)
+- [routes.ts](file://server/routes.ts#L457-L647)
+- [routes.ts](file://server/routes.ts#L608-L621)
 
 ## Conclusion
-The eBay integration provides a secure, end-to-end publishing pipeline:
-- Credentials are stored securely and validated before use.
-- The backend orchestrates OAuth, inventory creation, offer posting, and publishing.
-- The UI surfaces environment selection, credential management, and publishing feedback.
-- Robust error handling and environment-aware endpoints support both development and production workflows.
+The eBay integration provides a robust foundation for listing management, inventory operations, and seamless authentication with refresh token handling. By leveraging secure credential storage, backend proxies, and structured error handling, the system supports reliable marketplace operations across sandbox and production environments.
 
 [No sources needed since this section summarizes without analyzing specific files]
+
+## Appendices
+
+### Security Best Practices
+- Store credentials securely:
+  - Use platform-specific secure storage for Client ID, Client Secret, and Refresh Token.
+- Environment configuration:
+  - Toggle between sandbox and production environments as needed.
+- Token rotation:
+  - Persist updated refresh tokens and expiry timestamps after successful refresh.
+- Least privilege:
+  - Use appropriate OAuth scopes and restrict permissions to required endpoints.
+
+**Section sources**
+- [EbaySettingsScreen.tsx](file://client/screens/EbaySettingsScreen.tsx#L14-L18)
+- [ENVIRONMENT.md](file://ENVIRONMENT.md#L63-L68)
+- [ebay-service.ts](file://server/ebay-service.ts#L319-L364)
+
+### Practical Usage Patterns
+- Publish to eBay:
+  - Retrieve settings via marketplace utilities and post to the backend publish endpoint.
+- Update listing:
+  - Use backend routes to update price or quantity; the eBay service handles token acquisition and API calls.
+- Terminate listing:
+  - Call the delete endpoint to remove offers and inventory items.
+
+**Section sources**
+- [marketplace.ts](file://client/lib/marketplace.ts#L105-L128)
+- [routes.ts](file://server/routes.ts#L863-L891)
+- [ebay-service.ts](file://server/ebay-service.ts#L152-L175)
+- [ebay-service.ts](file://server/ebay-service.ts#L435-L473)

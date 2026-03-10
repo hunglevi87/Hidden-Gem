@@ -2,20 +2,14 @@
 
 <cite>
 **Referenced Files in This Document**
-- [server/index.ts](file://server/index.ts)
-- [server/routes.ts](file://server/routes.ts)
-- [server/db.ts](file://server/db.ts)
-- [server/replit_integrations/chat/routes.ts](file://server/replit_integrations/chat/routes.ts)
-- [server/replit_integrations/chat/storage.ts](file://server/replit_integrations/chat/storage.ts)
-- [server/replit_integrations/image/client.ts](file://server/replit_integrations/image/client.ts)
-- [server/replit_integrations/image/routes.ts](file://server/replit_integrations/image/routes.ts)
-- [client/screens/ScanScreen.tsx](file://client/screens/ScanScreen.tsx)
-- [client/screens/AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx)
-- [client/lib/marketplace.ts](file://client/lib/marketplace.ts)
-- [client/lib/query-client.ts](file://client/lib/query-client.ts)
-- [shared/schema.ts](file://shared/schema.ts)
-- [package.json](file://package.json)
+- [ai-providers.ts](file://server/ai-providers.ts)
+- [ai-seo.ts](file://server/ai-seo.ts)
+- [routes.ts](file://server/routes.ts)
+- [AIProvidersScreen.tsx](file://client/screens/AIProvidersScreen.tsx)
+- [AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx)
 - [ENVIRONMENT.md](file://ENVIRONMENT.md)
+- [schema.ts](file://shared/schema.ts)
+- [utils.ts](file://server/replit_integrations/batch/utils.ts)
 </cite>
 
 ## Table of Contents
@@ -31,373 +25,371 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document explains the AI integration system centered on Google Gemini API usage and the image processing pipeline. It covers AI configuration, prompt engineering strategies, response processing workflows, dual-image capture for item analysis, image upload handling, multipart request processing, the AI-powered appraisal engine, error handling, rate limiting considerations, fallback mechanisms, chat integration, and practical examples for AI API usage, prompt templates, and response parsing. It also addresses performance optimization, caching strategies, and cost management for AI service usage.
+This document explains Hidden-Gem’s AI integration system, focusing on the AI provider factory supporting Google Gemini, OpenAI, Anthropic, and custom/local endpoints. It covers configuration options, API key management, provider selection logic, the item analysis workflow from image capture through AI processing to authentication results and market valuation, SEO optimization for marketplace listings, retry mechanisms, error handling, and fallback strategies. It also documents the AI analysis pipeline, result interpretation, integration with the marketplace publishing system, performance considerations, cost optimization, and rate limiting strategies.
 
 ## Project Structure
-The AI integration spans the backend Express server, shared database schema, and the React Native client. Key areas include:
-- Backend AI routes for item analysis and publishing
-- Replit AI Integrations for chat and image generation
-- Client-side dual-image capture and analysis flow
-- Database schema for storing stash items and chat conversations
+The AI integration spans three layers:
+- Frontend (React Native): Screens for configuring AI providers and reviewing analysis results.
+- Backend (Express): Routes for image analysis, retry analysis, and SEO generation; provider abstraction and parsing logic.
+- Shared/Infrastructure: Database schema for AI records and batch utilities for rate-limited processing.
 
 ```mermaid
 graph TB
-subgraph "Client"
-SS["ScanScreen.tsx"]
-AS["AnalysisScreen.tsx"]
-QC["query-client.ts"]
-MP["marketplace.ts"]
+subgraph "Frontend"
+A["AIProvidersScreen.tsx<br/>Configure providers and keys"]
+B["AnalysisScreen.tsx<br/>Trigger analysis, retry, edit, save"]
 end
-subgraph "Server"
-IDX["server/index.ts"]
-RT["server/routes.ts"]
-DB["server/db.ts"]
-CHAT_RT["server/replit_integrations/chat/routes.ts"]
-CHAT_ST["server/replit_integrations/chat/storage.ts"]
-IMG_CLI["server/replit_integrations/image/client.ts"]
-IMG_RT["server/replit_integrations/image/routes.ts"]
+subgraph "Backend"
+C["routes.ts<br/>POST /api/analyze<br/>POST /api/analyze/retry<br/>POST /api/seo/generate"]
+D["ai-providers.ts<br/>Provider factory, prompts, parsing, retries"]
+E["ai-seo.ts<br/>SEO title/description/tags + audit record"]
 end
-subgraph "Shared"
-SCH["shared/schema.ts"]
+subgraph "Shared/DB"
+F["schema.ts<br/>ai_generations table"]
 end
-SS --> AS
-AS --> QC
-AS --> RT
-SS --> RT
-RT --> DB
-CHAT_RT --> CHAT_ST
-CHAT_RT --> DB
-IMG_RT --> IMG_CLI
-IMG_CLI --> DB
-DB --> SCH
+A --> C
+B --> C
+C --> D
+C --> E
+E --> F
 ```
 
 **Diagram sources**
-- [server/index.ts](file://server/index.ts#L1-L247)
-- [server/routes.ts](file://server/routes.ts#L1-L493)
-- [server/db.ts](file://server/db.ts#L1-L19)
-- [server/replit_integrations/chat/routes.ts](file://server/replit_integrations/chat/routes.ts#L1-L126)
-- [server/replit_integrations/chat/storage.ts](file://server/replit_integrations/chat/storage.ts#L1-L44)
-- [server/replit_integrations/image/client.ts](file://server/replit_integrations/image/client.ts#L1-L38)
-- [server/replit_integrations/image/routes.ts](file://server/replit_integrations/image/routes.ts#L1-L41)
-- [client/screens/ScanScreen.tsx](file://client/screens/ScanScreen.tsx#L1-L394)
-- [client/screens/AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L1-L484)
-- [client/lib/query-client.ts](file://client/lib/query-client.ts#L1-L80)
-- [client/lib/marketplace.ts](file://client/lib/marketplace.ts#L1-L129)
-- [shared/schema.ts](file://shared/schema.ts#L1-L122)
+- [AIProvidersScreen.tsx](file://client/screens/AIProvidersScreen.tsx#L104-L263)
+- [AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L78-L143)
+- [routes.ts](file://server/routes.ts#L672-L711)
+- [ai-providers.ts](file://server/ai-providers.ts#L380-L442)
+- [ai-seo.ts](file://server/ai-seo.ts#L80-L111)
+- [schema.ts](file://shared/schema.ts#L174-L187)
 
 **Section sources**
-- [server/index.ts](file://server/index.ts#L1-L247)
-- [server/routes.ts](file://server/routes.ts#L1-L493)
-- [server/db.ts](file://server/db.ts#L1-L19)
-- [server/replit_integrations/chat/routes.ts](file://server/replit_integrations/chat/routes.ts#L1-L126)
-- [server/replit_integrations/chat/storage.ts](file://server/replit_integrations/chat/storage.ts#L1-L44)
-- [server/replit_integrations/image/client.ts](file://server/replit_integrations/image/client.ts#L1-L38)
-- [server/replit_integrations/image/routes.ts](file://server/replit_integrations/image/routes.ts#L1-L41)
-- [client/screens/ScanScreen.tsx](file://client/screens/ScanScreen.tsx#L1-L394)
-- [client/screens/AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L1-L484)
-- [client/lib/query-client.ts](file://client/lib/query-client.ts#L1-L80)
-- [client/lib/marketplace.ts](file://client/lib/marketplace.ts#L1-L129)
-- [shared/schema.ts](file://shared/schema.ts#L1-L122)
+- [ENVIRONMENT.md](file://ENVIRONMENT.md#L12-L68)
+- [routes.ts](file://server/routes.ts#L44-L711)
+- [ai-providers.ts](file://server/ai-providers.ts#L1-L696)
+- [ai-seo.ts](file://server/ai-seo.ts#L1-L112)
+- [schema.ts](file://shared/schema.ts#L174-L187)
 
 ## Core Components
-- AI configuration and Gemini client initialization for both analysis and image generation
-- Dual-image capture workflow on the client and multipart upload handling on the server
-- AI-powered appraisal engine with structured prompt engineering and JSON response parsing
-- Chat integration with streaming responses and persistent storage
-- Marketplace publishing utilities for WooCommerce and eBay
-- Database schema for stash items and chat conversations
+- AI Provider Factory: Selects and invokes the appropriate provider (Gemini, OpenAI, Anthropic, Custom) with validated configuration and images.
+- Analysis Prompt and Result Parsing: A structured prompt drives a comprehensive appraisal; results are parsed into a unified AnalysisResult shape with robust fallbacks.
+- Retry Mechanism: Seller feedback triggers a refined analysis using a retry prompt template.
+- SEO Generation: Produces eBay-compliant titles, formatted descriptions, and tags; optionally persists an audit trail.
+- Frontend Provider Configuration: Secure local storage for keys; model selection; connection tests per provider.
+- Marketplace Integration: Results feed into listing previews and can be saved to stash for later publishing.
 
 **Section sources**
-- [server/routes.ts](file://server/routes.ts#L11-L17)
-- [server/replit_integrations/image/client.ts](file://server/replit_integrations/image/client.ts#L1-L38)
-- [client/screens/ScanScreen.tsx](file://client/screens/ScanScreen.tsx#L17-L62)
-- [client/screens/AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L66-L112)
-- [server/replit_integrations/chat/routes.ts](file://server/replit_integrations/chat/routes.ts#L72-L123)
-- [client/lib/marketplace.ts](file://client/lib/marketplace.ts#L81-L128)
-- [shared/schema.ts](file://shared/schema.ts#L29-L76)
+- [ai-providers.ts](file://server/ai-providers.ts#L380-L442)
+- [ai-providers.ts](file://server/ai-providers.ts#L131-L180)
+- [ai-providers.ts](file://server/ai-providers.ts#L398-L442)
+- [ai-seo.ts](file://server/ai-seo.ts#L17-L74)
+- [AIProvidersScreen.tsx](file://client/screens/AIProvidersScreen.tsx#L104-L263)
+- [AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L78-L143)
 
 ## Architecture Overview
-The AI integration architecture leverages Replit’s AI Integrations service to access Google Gemini APIs without requiring a direct API key. The client captures two images (full item and label) and sends them as multipart form data to the backend. The server composes a structured prompt, invokes the Gemini model, parses the JSON response, and persists the result. Chat and image generation endpoints use similar patterns with streaming and modalities.
-
-```mermaid
-sequenceDiagram
-participant Client as "Client App"
-participant Scan as "ScanScreen.tsx"
-participant Analysis as "AnalysisScreen.tsx"
-participant API as "server/routes.ts"
-participant Gemini as "GoogleGenAI"
-participant DB as "server/db.ts"
-Client->>Scan : "Open scanner"
-Scan->>Scan : "Capture full item image"
-Scan->>Scan : "Capture label image"
-Scan->>Analysis : "Navigate with URIs"
-Analysis->>API : "POST /api/analyze (multipart)"
-API->>Gemini : "generateContent(model, contents)"
-Gemini-->>API : "JSON response"
-API->>DB : "Persist stash item"
-API-->>Analysis : "Structured result"
-Analysis-->>Client : "Display valuation and metadata"
-```
-
-**Diagram sources**
-- [client/screens/ScanScreen.tsx](file://client/screens/ScanScreen.tsx#L26-L62)
-- [client/screens/AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L66-L112)
-- [server/routes.ts](file://server/routes.ts#L140-L226)
-- [server/db.ts](file://server/db.ts#L1-L19)
-
-## Detailed Component Analysis
-
-### AI Configuration and Gemini Client
-- The server initializes the GoogleGenAI client using Replit AI Integrations variables for API key and base URL.
-- The client exposes a reusable AI instance and a convenience function to generate images with multimodal responses.
-
-```mermaid
-classDiagram
-class GoogleGenAI {
-+apiKey
-+httpOptions
-+models
-}
-class AI_Client {
-+ai : GoogleGenAI
-+generateImage(prompt) Promise~string~
-}
-AI_Client --> GoogleGenAI : "uses"
-```
-
-**Diagram sources**
-- [server/replit_integrations/image/client.ts](file://server/replit_integrations/image/client.ts#L1-L38)
-
-**Section sources**
-- [server/routes.ts](file://server/routes.ts#L11-L17)
-- [server/replit_integrations/image/client.ts](file://server/replit_integrations/image/client.ts#L1-L38)
-- [ENVIRONMENT.md](file://ENVIRONMENT.md#L43-L46)
-
-### Dual-Image Capture Workflow
-- The client implements a two-step capture flow: full item image followed by label close-up.
-- Navigation passes both URIs to the analysis screen, which triggers the AI analysis.
-
-```mermaid
-flowchart TD
-Start(["Open Scanner"]) --> Full["Capture Full Item Image"]
-Full --> Label["Capture Label/Tag Image"]
-Label --> Navigate["Navigate to Analysis Screen"]
-Navigate --> Analyze["Trigger Analysis"]
-Analyze --> End(["Show Results"])
-```
-
-**Diagram sources**
-- [client/screens/ScanScreen.tsx](file://client/screens/ScanScreen.tsx#L17-L62)
-- [client/screens/AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L34-L64)
-
-**Section sources**
-- [client/screens/ScanScreen.tsx](file://client/screens/ScanScreen.tsx#L17-L62)
-- [client/screens/AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L34-L64)
-
-### Image Upload Handling and Multi-Part Requests
-- The server defines a multipart upload field configuration for two images: fullImage and labelImage.
-- The upload middleware enforces a 10 MB file size limit and stores files in memory.
-
-```mermaid
-flowchart TD
-Receive["HTTP POST /api/analyze"] --> Parse["Parse multipart fields"]
-Parse --> Validate{"Files present?"}
-Validate --> |Yes| Compose["Compose prompt + images"]
-Validate --> |No| Error["Return 400"]
-Compose --> Call["Call Gemini generateContent"]
-Call --> ParseJSON["Parse JSON response"]
-ParseJSON --> Persist["Persist stash item"]
-Persist --> Done["Return structured result"]
-```
-
-**Diagram sources**
-- [server/routes.ts](file://server/routes.ts#L19-L22)
-- [server/routes.ts](file://server/routes.ts#L140-L226)
-
-**Section sources**
-- [server/routes.ts](file://server/routes.ts#L19-L22)
-- [server/routes.ts](file://server/routes.ts#L140-L226)
-
-### AI-Powered Appraisal Engine
-- Prompt engineering focuses on extracting a concise title, detailed description, category, value range, condition, SEO-optimized metadata, and tags.
-- The server constructs a parts array with text prompt and optional inline image data.
-- The model responds with JSON; the server attempts to parse it and falls back to a default structured response if parsing fails.
+The AI pipeline begins when the frontend captures item and label images and sends them to the backend. The backend selects the active provider, constructs a multimodal prompt with images, queries the provider, parses the response, and returns a rich analysis. The frontend displays results, allows edits, and supports retry with feedback. SEO generation produces marketplace-ready content and optionally stores an audit record.
 
 ```mermaid
 sequenceDiagram
 participant UI as "AnalysisScreen.tsx"
-participant S as "server/routes.ts"
-participant G as "GoogleGenAI"
-participant D as "server/db.ts"
-UI->>S : "POST /api/analyze (multipart)"
-S->>G : "generateContent with prompt + images"
-G-->>S : "text (JSON)"
-S->>S : "JSON.parse(text)"
-alt "Parse success"
-S->>D : "INSERT stash item"
-S-->>UI : "Structured result"
-else "Parse fail"
-S-->>UI : "Default structured result"
-end
+participant API as "routes.ts"
+participant Prov as "ai-providers.ts"
+participant Model as "Provider API"
+participant SEO as "ai-seo.ts"
+UI->>API : POST /api/analyze (multipart images)
+API->>Prov : analyzeItem(config, images)
+Prov->>Model : generateContent (prompt + images)
+Model-->>Prov : JSON text response
+Prov-->>API : AnalysisResult
+API-->>UI : AnalysisResult
+UI->>API : POST /api/seo/generate (analysis payload)
+API->>SEO : generateSEOTitle/description/tags
+SEO-->>API : {seoTitle, description, tags}
+API-->>UI : SEO data
 ```
 
 **Diagram sources**
-- [client/screens/AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L66-L112)
-- [server/routes.ts](file://server/routes.ts#L140-L226)
-- [server/db.ts](file://server/db.ts#L1-L19)
+- [AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L111-L143)
+- [routes.ts](file://server/routes.ts#L672-L711)
+- [ai-providers.ts](file://server/ai-providers.ts#L380-L396)
+- [ai-seo.ts](file://server/ai-seo.ts#L80-L111)
+
+## Detailed Component Analysis
+
+### AI Provider Factory and Configuration
+- Provider Types: Supports “gemini”, “openai”, “anthropic”, and “custom”.
+- Configuration Options:
+  - provider: Selected AI provider.
+  - apiKey: Optional; falls back to environment variables for Gemini.
+  - endpoint: Required for “custom”; validated against private/internal address patterns.
+  - model: Provider-specific model name; defaults applied when omitted.
+- Environment Variables:
+  - Gemini: AI_INTEGRATIONS_GEMINI_API_KEY and AI_INTEGRATIONS_GEMINI_BASE_URL (auto-configured on Replit).
+- Frontend Storage:
+  - Secure local storage for API keys and model preferences; supports web and native secure stores.
+- Provider Selection Logic:
+  - analyzeItem dispatches to provider-specific handlers based on config.provider.
+  - testProviderConnection validates connectivity for each provider.
+
+```mermaid
+flowchart TD
+Start(["Select Provider"]) --> CheckType{"Provider type?"}
+CheckType --> |gemini| Gemini["analyzeWithGemini()"]
+CheckType --> |openai| OpenAI["analyzeWithOpenAI()"]
+CheckType --> |anthropic| Anthropic["analyzeWithAnthropic()"]
+CheckType --> |custom| Custom["analyzeWithCustom()"]
+Gemini --> Parse["parseAnalysisResult()"]
+OpenAI --> Parse
+Anthropic --> Parse
+Custom --> Parse
+Parse --> Result["AnalysisResult"]
+```
+
+**Diagram sources**
+- [ai-providers.ts](file://server/ai-providers.ts#L380-L396)
+- [ai-providers.ts](file://server/ai-providers.ts#L131-L180)
 
 **Section sources**
-- [server/routes.ts](file://server/routes.ts#L150-L174)
-- [server/routes.ts](file://server/routes.ts#L196-L221)
+- [ai-providers.ts](file://server/ai-providers.ts#L3-L41)
+- [ai-providers.ts](file://server/ai-providers.ts#L182-L222)
+- [ai-providers.ts](file://server/ai-providers.ts#L380-L396)
+- [AIProvidersScreen.tsx](file://client/screens/AIProvidersScreen.tsx#L104-L263)
+- [ENVIRONMENT.md](file://ENVIRONMENT.md#L43-L46)
 
-### Response Processing and Structured Output
-- The server expects a strict JSON schema and validates the response before persisting.
-- A fallback mechanism ensures the client receives a usable structure even if the AI response is malformed.
+### Analysis Prompt and Result Interpretation
+- Prompt Scope: Authentication assessment, market valuation, item identification, SEO metadata, and item specifics (aspects).
+- Output Schema: Unified AnalysisResult with legacy and enhanced fields (brand, subtitles, descriptions, value ranges, confidence, authenticity, market analysis, aspects, marketplace categories).
+- Parsing and Fallback:
+  - Attempts strict JSON parse; if that fails, extracts JSON substring; falls back to predefined default result if parsing fails.
+  - Merges partial results with fallback defaults to maintain backward compatibility.
+
+```mermaid
+flowchart TD
+A["Raw text from provider"] --> B{"JSON parse ok?"}
+B --> |Yes| C["Return parsed result"]
+B --> |No| D["Try extract JSON substring"]
+D --> E{"Substring parse ok?"}
+E --> |Yes| C
+E --> |No| F["Return FALLBACK_RESULT"]
+```
+
+**Diagram sources**
+- [ai-providers.ts](file://server/ai-providers.ts#L131-L180)
+- [ai-providers.ts](file://server/ai-providers.ts#L101-L129)
 
 **Section sources**
-- [server/routes.ts](file://server/routes.ts#L163-L174)
-- [server/routes.ts](file://server/routes.ts#L206-L221)
+- [ai-providers.ts](file://server/ai-providers.ts#L48-L99)
+- [ai-providers.ts](file://server/ai-providers.ts#L131-L180)
+- [ai-providers.ts](file://server/ai-providers.ts#L101-L129)
 
-### Chat Integration for User Assistance
-- The chat endpoint supports creating conversations, retrieving histories, and streaming AI responses.
-- Messages are persisted to the database and streamed via Server-Sent Events.
+### Retry Mechanism and Feedback Loop
+- Retry Prompt Template: Incorporates prior analysis and seller feedback to refine the assessment.
+- Retry Flow:
+  - Frontend collects feedback and re-sends images plus previous result and feedback.
+  - Backend reconstructs a retry prompt and calls analyzeItemWithRetry.
+  - Provider-specific retry handlers execute the updated prompt.
+- Use Cases: Correcting misidentified brands, overlooked details, condition assessments, or authenticity concerns.
 
 ```mermaid
 sequenceDiagram
-participant Client as "Client"
-participant ChatRT as "chat/routes.ts"
-participant Storage as "chat/storage.ts"
-participant Gemini as "GoogleGenAI"
-Client->>ChatRT : "POST /api/conversations/ : id/messages"
-ChatRT->>Storage : "Create user message"
-ChatRT->>Storage : "Load conversation messages"
-ChatRT->>Gemini : "generateContentStream"
-Gemini-->>ChatRT : "Stream chunks"
-ChatRT->>Storage : "Create assistant message"
-ChatRT-->>Client : "SSE stream"
+participant UI as "AnalysisScreen.tsx"
+participant API as "routes.ts"
+participant Prov as "ai-providers.ts"
+UI->>API : POST /api/analyze/retry (images + previousResult + feedback)
+API->>Prov : analyzeItemWithRetry(config, images, previousResult, feedback)
+Prov->>Prov : Build retryPrompt
+Prov->>Prov : analyzeWithXxxRetry(...)
+Prov-->>API : Updated AnalysisResult
+API-->>UI : Updated AnalysisResult
 ```
 
 **Diagram sources**
-- [server/replit_integrations/chat/routes.ts](file://server/replit_integrations/chat/routes.ts#L72-L123)
-- [server/replit_integrations/chat/storage.ts](file://server/replit_integrations/chat/storage.ts#L14-L42)
+- [AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L145-L179)
+- [routes.ts](file://server/routes.ts#L672-L711)
+- [ai-providers.ts](file://server/ai-providers.ts#L418-L442)
 
 **Section sources**
-- [server/replit_integrations/chat/routes.ts](file://server/replit_integrations/chat/routes.ts#L19-L123)
-- [server/replit_integrations/chat/storage.ts](file://server/replit_integrations/chat/storage.ts#L14-L42)
-- [shared/schema.ts](file://shared/schema.ts#L64-L76)
+- [ai-providers.ts](file://server/ai-providers.ts#L398-L442)
+- [routes.ts](file://server/routes.ts#L672-L711)
+- [AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L145-L179)
 
-### Image Generation Endpoint
-- The image generation endpoint accepts a text prompt and returns base64-encoded image data with proper MIME type.
-- It uses multimodal configuration to produce both text and image responses.
+### SEO Optimization and Audit Trail
+- SEO Content Generation:
+  - generateSEOTitle: Builds eBay-compliant titles under 80 characters.
+  - generateDescription: Formats marketplace descriptions with condition, brand, category, materials, color, dimensions, features, and market value.
+  - generateTags: Produces SEO tags from brand, category, color, style, condition, material, and features.
+- Audit Trail:
+  - createAIRecord persists the analysis and generated listing to the ai_generations table, including model used, tokens used, cost estimate, and quality score.
+
+```mermaid
+flowchart TD
+A["AnalysisResult"] --> B["generateSEOTitle()"]
+A --> C["generateDescription()"]
+A --> D["generateTags()"]
+A --> E["createAIRecord() -> ai_generations"]
+B --> F["SEO Payload"]
+C --> F
+D --> F
+E --> G["Persisted Record ID"]
+```
+
+**Diagram sources**
+- [ai-seo.ts](file://server/ai-seo.ts#L17-L74)
+- [ai-seo.ts](file://server/ai-seo.ts#L80-L111)
+- [schema.ts](file://shared/schema.ts#L174-L187)
 
 **Section sources**
-- [server/replit_integrations/image/routes.ts](file://server/replit_integrations/image/routes.ts#L6-L38)
-- [server/replit_integrations/image/client.ts](file://server/replit_integrations/image/client.ts#L16-L36)
+- [ai-seo.ts](file://server/ai-seo.ts#L17-L111)
+- [schema.ts](file://shared/schema.ts#L174-L187)
 
-### Marketplace Publishing Utilities
-- The client provides helpers to publish items to WooCommerce and eBay using stored credentials.
-- The server exposes endpoints to perform the external API calls and update local records.
+### Frontend Provider Configuration and Testing
+- Configuration Screen:
+  - Allows selecting the active provider and toggling between providers.
+  - Stores API keys securely (SecureStore on native, AsyncStorage on web).
+  - Supports model selection for OpenAI and Anthropic; endpoint and model for custom providers.
+- Connection Testing:
+  - Tests connectivity per provider using testProviderConnection and surfaces success/error messages.
+
+```mermaid
+sequenceDiagram
+participant UI as "AIProvidersScreen.tsx"
+participant API as "routes.ts"
+participant Prov as "ai-providers.ts"
+UI->>API : POST /api/ai-providers/test (provider + keys/models/endpoints)
+API->>Prov : testProviderConnection(config)
+Prov-->>API : {success, message}
+API-->>UI : Result
+```
+
+**Diagram sources**
+- [AIProvidersScreen.tsx](file://client/screens/AIProvidersScreen.tsx#L211-L263)
+- [routes.ts](file://server/routes.ts#L604-L695)
+- [ai-providers.ts](file://server/ai-providers.ts#L604-L695)
 
 **Section sources**
-- [client/lib/marketplace.ts](file://client/lib/marketplace.ts#L81-L128)
-- [server/routes.ts](file://server/routes.ts#L228-L296)
-- [server/routes.ts](file://server/routes.ts#L298-L488)
+- [AIProvidersScreen.tsx](file://client/screens/AIProvidersScreen.tsx#L104-L263)
+- [routes.ts](file://server/routes.ts#L604-L695)
+- [ENVIRONMENT.md](file://ENVIRONMENT.md#L43-L46)
 
-### Database Schema for AI Workflows
-- Stash items include fields for title, description, category, estimated value, condition, tags, image URLs, SEO metadata, and publication flags.
-- Chat conversations and messages support persistent storage of user-assisted interactions.
+### Marketplace Publishing Integration
+- Listing Preview: The frontend renders eBay title, category, and aspects from the analysis result.
+- Stashing: Users can save the item to their stash with the AI analysis included.
+- eBay Integration: Separate endpoints manage listing updates, deletions, and token refresh.
+
+```mermaid
+graph LR
+AR["AnalysisResult"] --> LP["Listing Preview"]
+AR --> STASH["Save to Stash"]
+AR --> SEO["SEO Payload"]
+SEO --> EBAY["Publish to Marketplaces"]
+```
+
+**Diagram sources**
+- [AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L590-L633)
+- [routes.ts](file://server/routes.ts#L838-L859)
+- [routes.ts](file://server/routes.ts#L861-L906)
 
 **Section sources**
-- [shared/schema.ts](file://shared/schema.ts#L29-L76)
+- [AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L590-L633)
+- [routes.ts](file://server/routes.ts#L838-L906)
 
 ## Dependency Analysis
-The AI integration relies on several key dependencies and environment configurations:
-- GoogleGenAI SDK for Gemini API access
-- Multer for multipart uploads
-- Drizzle ORM and PostgreSQL for persistence
-- React Query for client-side caching and data fetching
-- Expo ecosystem for camera and image picking
+- Provider Abstraction:
+  - routes.ts depends on ai-providers.ts for analysis and retry logic.
+  - ai-seo.ts depends on shared schema types and db for audit records.
+- Security and Validation:
+  - ai-providers.ts enforces custom endpoint URL validity and blocks private/internal addresses.
+  - Frontend uses secure storage for API keys.
+- Rate Limiting Utilities:
+  - batch utilities support concurrency control and exponential backoff for batch processing.
 
 ```mermaid
 graph TB
-PKG["package.json"]
-RT["server/routes.ts"]
-IMGCLI["server/replit_integrations/image/client.ts"]
-CHATRT["server/replit_integrations/chat/routes.ts"]
-QUERY["client/lib/query-client.ts"]
-PKG --> RT
-PKG --> IMGCLI
-PKG --> CHATRT
-PKG --> QUERY
+R["routes.ts"] --> P["ai-providers.ts"]
+R --> S["ai-seo.ts"]
+S --> DB["schema.ts (ai_generations)"]
+P --> SEC["Endpoint validation"]
+UI["AIProvidersScreen.tsx"] --> R
+UI2["AnalysisScreen.tsx"] --> R
 ```
 
 **Diagram sources**
-- [package.json](file://package.json#L19-L67)
-- [server/routes.ts](file://server/routes.ts#L1-L17)
-- [server/replit_integrations/image/client.ts](file://server/replit_integrations/image/client.ts#L1-L10)
-- [server/replit_integrations/chat/routes.ts](file://server/replit_integrations/chat/routes.ts#L1-L17)
-- [client/lib/query-client.ts](file://client/lib/query-client.ts#L1-L80)
+- [routes.ts](file://server/routes.ts#L9-L18)
+- [ai-providers.ts](file://server/ai-providers.ts#L188-L222)
+- [ai-seo.ts](file://server/ai-seo.ts#L13-L15)
+- [schema.ts](file://shared/schema.ts#L174-L187)
+- [AIProvidersScreen.tsx](file://client/screens/AIProvidersScreen.tsx#L104-L263)
+- [AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L78-L143)
 
 **Section sources**
-- [package.json](file://package.json#L19-L67)
-- [ENVIRONMENT.md](file://ENVIRONMENT.md#L43-L46)
+- [ai-providers.ts](file://server/ai-providers.ts#L188-L222)
+- [utils.ts](file://server/replit_integrations/batch/utils.ts#L48-L89)
 
 ## Performance Considerations
-- Image size limits and multipart handling reduce payload overhead.
-- Client-side caching via React Query minimizes redundant network calls.
-- Streaming chat responses improve perceived latency.
-- Recommendations:
-  - Implement client-side image compression before upload.
-  - Add optimistic updates for stash saves and marketplace publishes.
-  - Introduce exponential backoff for AI API retries.
-  - Cache frequently accessed prompts and default responses.
-  - Monitor AI quota usage and implement circuit breakers.
+- Concurrency and Retries:
+  - Use batch utilities to limit concurrent requests and retry on rate limit/quota errors with exponential backoff.
+- Cost Optimization:
+  - Prefer lower-cost models for initial analysis; reserve higher-capability models for retries or complex items.
+  - Monitor tokens used and adjust prompts to reduce length.
+- Rate Limiting Strategies:
+  - Respect provider quotas; implement jittered delays and capped concurrency.
+  - Use SSE-friendly batch processing for long-running tasks.
+- Image Handling:
+  - Keep images within size limits; compress where possible to reduce payload sizes.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-Common issues and remedies:
-- AI API failures
-  - Verify AI integrations environment variables are configured.
-  - Check server logs for detailed error messages.
-  - Implement fallback responses when JSON parsing fails.
-- Rate limiting and quotas
-  - Monitor usage and throttle requests.
-  - Use exponential backoff and circuit breaker patterns.
-- Marketplace publishing errors
-  - Validate credentials and tokens.
-  - Inspect external service responses and error payloads.
-- Database connectivity
-  - Confirm DATABASE_URL and SSL settings.
-  - Ensure migrations are applied.
+- Provider Connectivity:
+  - Use the provider test function to validate keys, endpoints, and models.
+  - Check environment variables for Gemini integration.
+- Parsing Failures:
+  - If AI returns non-JSON or malformed JSON, the parser extracts a JSON substring; otherwise, a fallback result is returned.
+- Retry Failures:
+  - Ensure previousResult and feedback are provided; verify provider configuration matches the original analysis.
+- SEO Generation Errors:
+  - Confirm analysis object is present; check audit record creation if sellerId and imageUrl are provided.
 
 **Section sources**
+- [AIProvidersScreen.tsx](file://client/screens/AIProvidersScreen.tsx#L211-L263)
 - [ENVIRONMENT.md](file://ENVIRONMENT.md#L191-L195)
-- [server/routes.ts](file://server/routes.ts#L222-L225)
-- [client/lib/marketplace.ts](file://client/lib/marketplace.ts#L81-L128)
-- [server/db.ts](file://server/db.ts#L7-L16)
+- [ai-providers.ts](file://server/ai-providers.ts#L131-L180)
+- [routes.ts](file://server/routes.ts#L672-L711)
+- [routes.ts](file://server/routes.ts#L840-L859)
 
 ## Conclusion
-The AI integration system combines a robust Gemini client, structured prompt engineering, and a streamlined dual-image capture workflow to deliver accurate item appraisals. The backend handles multipart uploads, AI response parsing, and persistence, while the client provides a seamless user experience with camera capture and analysis results. Chat and image generation endpoints extend the AI capabilities, and marketplace publishing utilities integrate with external platforms. By following the recommended performance and troubleshooting practices, the system can maintain reliability and cost efficiency.
+Hidden-Gem’s AI integration provides a robust, extensible pipeline for item analysis, authentication, market valuation, and SEO optimization. The provider factory supports multiple backends with secure configuration and validation, while the frontend enables seamless provider selection, testing, and result iteration. The system includes retry logic, fallback parsing, and an audit trail for traceability, integrating smoothly with marketplace publishing workflows.
 
 [No sources needed since this section summarizes without analyzing specific files]
 
 ## Appendices
 
-### Practical Examples and Templates
-- Example AI API usage
-  - Initialize client with environment variables and call generateContent with structured parts.
-  - Reference: [server/routes.ts](file://server/routes.ts#L11-L17), [server/replit_integrations/image/client.ts](file://server/replit_integrations/image/client.ts#L1-L38)
-- Prompt templates
-  - Use a strict JSON schema prompt to guide the model to return structured data.
-  - Reference: [server/routes.ts](file://server/routes.ts#L150-L174)
-- Response parsing
-  - Attempt JSON.parse and fall back to a default structured object on failure.
-  - Reference: [server/routes.ts](file://server/routes.ts#L206-L221)
+### Provider Configuration Examples
+- Gemini (Replit integration):
+  - Leave API key blank to use Replit’s configured key; optional custom key overrides.
+- OpenAI:
+  - Provide API key and select model (e.g., gpt-4o).
+- Anthropic:
+  - Provide API key and select model (e.g., claude-sonnet-4-20250514).
+- Custom/Local:
+  - Provide endpoint URL (OpenAI-compatible), optional API key, and model name.
 
 **Section sources**
-- [server/routes.ts](file://server/routes.ts#L11-L17)
-- [server/replit_integrations/image/client.ts](file://server/replit_integrations/image/client.ts#L1-L38)
-- [server/routes.ts](file://server/routes.ts#L150-L174)
-- [server/routes.ts](file://server/routes.ts#L206-L221)
+- [AIProvidersScreen.tsx](file://client/screens/AIProvidersScreen.tsx#L311-L563)
+- [ENVIRONMENT.md](file://ENVIRONMENT.md#L43-L46)
+
+### Analysis Workflow Patterns
+- Initial Analysis: Send full item and label images; receive structured result with authentication, valuation, and SEO metadata.
+- Editing: Adjust title, subtitle, price, condition, descriptions, aspects, and categories.
+- Retry: Provide feedback to refine the analysis; resend images and previous result.
+
+**Section sources**
+- [AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx#L111-L179)
+- [routes.ts](file://server/routes.ts#L672-L711)
+
+### Result Processing Patterns
+- Use generateSEOTitle, generateDescription, and generateTags for marketplace-ready content.
+- Persist audit records with createAIRecord for compliance and analytics.
+
+**Section sources**
+- [ai-seo.ts](file://server/ai-seo.ts#L17-L111)
+- [schema.ts](file://shared/schema.ts#L174-L187)
