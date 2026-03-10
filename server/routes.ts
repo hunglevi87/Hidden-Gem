@@ -4,8 +4,8 @@ import multer from "multer";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { db } from "./db";
-import { articles, stashItems, products, sellers, listingsTable, syncQueue } from "@shared/schema";
-import { eq, desc, count, and } from "drizzle-orm";
+import { articles, stashItems, userSettings, products, sellers, listingsTable, syncQueue } from "@shared/schema";
+import { eq, desc, count, and, ilike, lte, gte, or, SQL } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { testProviderConnection, AIProviderConfig, analyzeItemWithRetry, AnalysisResult } from "./ai-providers";
 import { generateSEOTitle, generateDescription, generateTags, createAIRecord } from "./ai-seo";
@@ -384,10 +384,79 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
+  app.get("/api/settings/threshold", async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) {
+        return res.json({ threshold: 500 });
+      }
+      const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+      res.json({ threshold: settings?.highValueThreshold ?? 500 });
+    } catch (error) {
+      console.error("Error fetching threshold:", error);
+      res.json({ threshold: 500 });
+    }
+  });
+
+  app.put("/api/settings/threshold", async (req: Request, res: Response) => {
+    try {
+      const { userId, threshold } = req.body;
+      if (!userId || threshold === undefined) {
+        return res.status(400).json({ error: "userId and threshold are required" });
+      }
+      const [existing] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+      if (existing) {
+        await db.update(userSettings)
+          .set({ highValueThreshold: threshold, updatedAt: new Date() })
+          .where(eq(userSettings.userId, userId));
+      } else {
+        await db.insert(userSettings).values({ userId, highValueThreshold: threshold });
+      }
+      res.json({ success: true, threshold });
+    } catch (error) {
+      console.error("Error updating threshold:", error);
+      res.status(500).json({ error: "Failed to update threshold" });
+    }
+  });
+
+  app.post("/api/stash/:id/hold-for-review", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const [item] = await db.select().from(stashItems).where(eq(stashItems.id, id));
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      await db.update(stashItems)
+        .set({ publishStatus: "held_for_review", updatedAt: new Date() })
+        .where(eq(stashItems.id, id));
+      res.json({ success: true, publishStatus: "held_for_review" });
+    } catch (error) {
+      console.error("Error holding item for review:", error);
+      res.status(500).json({ error: "Failed to hold item for review" });
+    }
+  });
+
+  app.post("/api/stash/:id/approve-publish", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const [item] = await db.select().from(stashItems).where(eq(stashItems.id, id));
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      await db.update(stashItems)
+        .set({ publishStatus: "approved", updatedAt: new Date() })
+        .where(eq(stashItems.id, id));
+      res.json({ success: true, publishStatus: "approved" });
+    } catch (error) {
+      console.error("Error approving item:", error);
+      res.status(500).json({ error: "Failed to approve item" });
+    }
+  });
+
   app.post("/api/stash/:id/publish/woocommerce", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      const { storeUrl, consumerKey, consumerSecret } = req.body;
+      const { storeUrl, consumerKey, consumerSecret, skipThresholdCheck } = req.body;
       
       if (!storeUrl || !consumerKey || !consumerSecret) {
         return res.status(400).json({ error: "Missing WooCommerce credentials" });
@@ -400,6 +469,28 @@ Respond ONLY with valid JSON in this exact format:
       
       if (item.publishedToWoocommerce) {
         return res.status(400).json({ error: "Item already published to WooCommerce" });
+      }
+
+      if (!skipThresholdCheck) {
+        const aiAnalysis = item.aiAnalysis as any;
+        const suggestedPrice = aiAnalysis?.suggestedListPrice;
+        if (suggestedPrice) {
+          const userId = (req.body.userId as string) || item.userId;
+          const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+          const threshold = settings?.highValueThreshold ?? 500;
+          if (suggestedPrice > threshold && item.publishStatus !== "approved") {
+            await db.update(stashItems)
+              .set({ publishStatus: "held_for_review", updatedAt: new Date() })
+              .where(eq(stashItems.id, id));
+            return res.status(202).json({
+              held: true,
+              reason: "high_value",
+              suggestedPrice,
+              threshold,
+              message: `This item's suggested price ($${suggestedPrice}) exceeds your approval threshold ($${threshold}). Please review and confirm before publishing.`,
+            });
+          }
+        }
       }
       
       const credentials = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
@@ -457,7 +548,7 @@ Respond ONLY with valid JSON in this exact format:
   app.post("/api/stash/:id/publish/ebay", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      const { clientId, clientSecret, refreshToken, environment, merchantLocationKey } = req.body;
+      const { clientId, clientSecret, refreshToken, environment, merchantLocationKey, skipThresholdCheck } = req.body;
       
       if (!clientId || !clientSecret) {
         return res.status(400).json({ error: "Missing eBay credentials" });
@@ -476,6 +567,28 @@ Respond ONLY with valid JSON in this exact format:
       
       if (item.publishedToEbay) {
         return res.status(400).json({ error: "Item already published to eBay" });
+      }
+
+      if (!skipThresholdCheck) {
+        const aiAnalysis = item.aiAnalysis as any;
+        const suggestedPrice = aiAnalysis?.suggestedListPrice;
+        if (suggestedPrice) {
+          const userId = (req.body.userId as string) || item.userId;
+          const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+          const threshold = settings?.highValueThreshold ?? 500;
+          if (suggestedPrice > threshold && item.publishStatus !== "approved") {
+            await db.update(stashItems)
+              .set({ publishStatus: "held_for_review", updatedAt: new Date() })
+              .where(eq(stashItems.id, id));
+            return res.status(202).json({
+              held: true,
+              reason: "high_value",
+              suggestedPrice,
+              threshold,
+              message: `This item's suggested price ($${suggestedPrice}) exceeds your approval threshold ($${threshold}). Please review and confirm before publishing.`,
+            });
+          }
+        }
       }
       
       const baseUrl = environment === "production"
@@ -920,6 +1033,115 @@ Respond ONLY with valid JSON in this exact format:
     } catch (error) {
       console.error("Error fetching sync queue:", error);
       res.status(500).json({ error: "Failed to fetch sync queue" });
+    }
+  });
+
+  app.post("/api/stash/search", async (req: Request, res: Response) => {
+    try {
+      const { query, userId } = req.body;
+      if (!userId || typeof userId !== "string") {
+        return res.status(400).json({ error: "userId is required" });
+      }
+      if (!query || typeof query !== "string" || query.trim().length === 0) {
+        return res.status(400).json({ error: "Search query is required" });
+      }
+
+      const parsePrompt = `You are a search query parser for a reseller inventory app. Parse the following natural-language search query into structured filter parameters.
+
+Query: "${query.trim()}"
+
+Extract the following filters (use null for any filter not mentioned):
+- brand: string or null (brand name like "Louis Vuitton", "Gucci", "Nike", etc.)
+- maxPrice: number or null (maximum price in dollars, extract from phrases like "under $300", "less than 500", "below $200")
+- minPrice: number or null (minimum price in dollars, extract from phrases like "over $100", "more than 50", "above $75")
+- category: string or null (item category like "Handbag", "Watch", "Clothing", "Shoes", "Electronics", "Collectible", etc.)
+- condition: string or null (one of: "New", "Like New", "Very Good", "Good", "Acceptable", "For Parts", "Excellent", "Fair", "Poor")
+- publishStatus: string or null (one of: "draft", "published", "held_for_review", "approved")
+- keywords: string[] (array of additional search keywords that don't fit the above filters)
+
+Respond ONLY with valid JSON. Example:
+{"brand":"Louis Vuitton","maxPrice":300,"minPrice":null,"category":"Handbag","condition":null,"publishStatus":null,"keywords":["bags"]}`;
+
+      let filters: any = {};
+      try {
+        const parseResponse = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: [{ role: "user", parts: [{ text: parsePrompt }] }],
+          config: { responseMimeType: "application/json" },
+        });
+        const parseText = parseResponse.text || "{}";
+        filters = JSON.parse(parseText);
+      } catch (parseErr) {
+        filters = { keywords: query.trim().split(/\s+/) };
+      }
+
+      const conditions: SQL[] = [];
+
+      if (filters.brand && typeof filters.brand === "string") {
+        conditions.push(
+          or(
+            ilike(stashItems.title, `%${filters.brand}%`),
+            ilike(stashItems.description, `%${filters.brand}%`),
+            ilike(stashItems.seoTitle, `%${filters.brand}%`)
+          )!
+        );
+      }
+
+      if (filters.category && typeof filters.category === "string") {
+        conditions.push(ilike(stashItems.category, `%${filters.category}%`));
+      }
+
+      if (filters.condition && typeof filters.condition === "string") {
+        conditions.push(ilike(stashItems.condition, `%${filters.condition}%`));
+      }
+
+      if (filters.publishStatus && typeof filters.publishStatus === "string") {
+        conditions.push(eq(stashItems.publishStatus, filters.publishStatus));
+      }
+
+      if (filters.keywords && Array.isArray(filters.keywords) && filters.keywords.length > 0) {
+        const keywordConditions = filters.keywords.map((kw: string) =>
+          or(
+            ilike(stashItems.title, `%${kw}%`),
+            ilike(stashItems.description, `%${kw}%`),
+            ilike(stashItems.seoTitle, `%${kw}%`),
+            ilike(stashItems.category, `%${kw}%`)
+          )!
+        );
+        conditions.push(...keywordConditions);
+      }
+
+      conditions.unshift(eq(stashItems.userId, userId));
+
+      let results;
+      results = await db
+        .select()
+        .from(stashItems)
+        .where(and(...conditions))
+        .orderBy(desc(stashItems.createdAt));
+
+      if (filters.maxPrice && typeof filters.maxPrice === "number") {
+        results = results.filter((item) => {
+          const priceMatch = item.estimatedValue?.match(/\$(\d+(?:,\d{3})*)/);
+          if (!priceMatch) return true;
+          const price = parseInt(priceMatch[1].replace(/,/g, ""), 10);
+          return price <= filters.maxPrice;
+        });
+      }
+
+      if (filters.minPrice && typeof filters.minPrice === "number") {
+        results = results.filter((item) => {
+          const priceMatch = item.estimatedValue?.match(/\$(\d+(?:,\d{3})*)/);
+          if (!priceMatch) return false;
+          const price = parseInt(priceMatch[1].replace(/,/g, ""), 10);
+          return price >= filters.minPrice;
+        });
+      }
+
+      res.json({ results, filters, total: results.length });
+    } catch (error) {
+      console.error("Stash search error:", error);
+      res.status(500).json({ error: "Failed to search stash" });
     }
   });
 

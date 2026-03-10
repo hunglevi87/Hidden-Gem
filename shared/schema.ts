@@ -22,6 +22,10 @@ export const userSettings = pgTable("user_settings", {
   woocommerceKey: text("woocommerce_key"),
   woocommerceSecret: text("woocommerce_secret"),
   ebayToken: text("ebay_token"),
+  openfangApiKey: text("openfang_api_key"),
+  openfangBaseUrl: text("openfang_base_url"),
+  preferredOpenfangModel: text("preferred_openfang_model"),
+  highValueThreshold: integer("high_value_threshold").default(500),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -41,6 +45,7 @@ export const stashItems = pgTable("stash_items", {
   seoTitle: text("seo_title"),
   seoDescription: text("seo_description"),
   seoKeywords: text("seo_keywords").array(),
+  publishStatus: text("publish_status").default("draft"),
   publishedToWoocommerce: boolean("published_to_woocommerce").default(false),
   publishedToEbay: boolean("published_to_ebay").default(false),
   woocommerceProductId: text("woocommerce_product_id"),

@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-export type AIProviderType = "gemini" | "openai" | "anthropic" | "custom";
+export type AIProviderType = "gemini" | "openai" | "anthropic" | "custom" | "openfang";
 
 export interface AIProviderConfig {
   provider: AIProviderType;
@@ -179,7 +179,7 @@ function parseAnalysisResult(text: string): AnalysisResult {
   };
 }
 
-const VALID_PROVIDERS = new Set(["gemini", "openai", "anthropic", "custom"]);
+const VALID_PROVIDERS = new Set(["gemini", "openai", "anthropic", "custom", "openfang"]);
 
 function validateProvider(provider: string): provider is AIProviderType {
   return VALID_PROVIDERS.has(provider);
@@ -331,6 +331,63 @@ async function analyzeWithAnthropic(
   return parseAnalysisResult(text);
 }
 
+async function analyzeWithOpenFang(
+  images: ImageInput[],
+  config: AIProviderConfig
+): Promise<AnalysisResult> {
+  const baseUrl = (config.endpoint || process.env.OPENFANG_BASE_URL || "").replace(/\/+$/, "");
+  const apiKey = config.apiKey || process.env.OPENFANG_API_KEY || "";
+
+  if (!baseUrl) {
+    throw new Error("OpenFang base URL is required. Set OPENFANG_BASE_URL or configure in settings.");
+  }
+  if (!apiKey) {
+    throw new Error("OpenFang API key is required. Set OPENFANG_API_KEY or configure in settings.");
+  }
+
+  const content: any[] = [{ type: "text", text: ANALYSIS_PROMPT }];
+  for (const img of images) {
+    content.push({
+      type: "image_url",
+      image_url: { url: `data:${img.mimeType};base64,${img.data}` },
+    });
+  }
+
+  const url = baseUrl.includes("/v1/chat/completions")
+    ? baseUrl
+    : `${baseUrl}/v1/chat/completions`;
+
+  const body: any = {
+    model: config.model || "auto",
+    messages: [{ role: "user", content }],
+    response_format: { type: "json_object" },
+    extra_body: {
+      routing: {
+        prefer: ["vision"],
+        fallback: ["gpt-4o", "gemini-2.5-flash", "claude-sonnet-4-20250514"],
+      },
+    },
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error?.message || `OpenFang API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content || "";
+  return parseAnalysisResult(text);
+}
+
 async function analyzeWithCustom(
   images: ImageInput[],
   config: AIProviderConfig
@@ -390,6 +447,8 @@ export async function analyzeItem(
       return analyzeWithAnthropic(images, config);
     case "custom":
       return analyzeWithCustom(images, config);
+    case "openfang":
+      return analyzeWithOpenFang(images, config);
     default:
       throw new Error(`Unsupported AI provider: ${config.provider}`);
   }
@@ -436,6 +495,8 @@ export async function analyzeItemWithRetry(
       return analyzeWithAnthropicRetry(images, retryConfig, retryPrompt);
     case "custom":
       return analyzeWithCustomRetry(images, retryConfig, retryPrompt);
+    case "openfang":
+      return analyzeWithOpenFangRetry(images, retryConfig, retryPrompt);
     default:
       throw new Error(`Unsupported AI provider: ${config.provider}`);
   }
@@ -551,6 +612,64 @@ async function analyzeWithAnthropicRetry(
 
   const data = await response.json();
   const text = data.content?.[0]?.text || "";
+  return parseAnalysisResult(text);
+}
+
+async function analyzeWithOpenFangRetry(
+  images: ImageInput[],
+  config: AIProviderConfig,
+  retryPrompt: string
+): Promise<AnalysisResult> {
+  const baseUrl = (config.endpoint || process.env.OPENFANG_BASE_URL || "").replace(/\/+$/, "");
+  const apiKey = config.apiKey || process.env.OPENFANG_API_KEY || "";
+
+  if (!baseUrl) {
+    throw new Error("OpenFang base URL is required. Set OPENFANG_BASE_URL or configure in settings.");
+  }
+  if (!apiKey) {
+    throw new Error("OpenFang API key is required. Set OPENFANG_API_KEY or configure in settings.");
+  }
+
+  const content: any[] = [{ type: "text", text: retryPrompt }];
+  for (const img of images) {
+    content.push({
+      type: "image_url",
+      image_url: { url: `data:${img.mimeType};base64,${img.data}` },
+    });
+  }
+
+  const url = baseUrl.includes("/v1/chat/completions")
+    ? baseUrl
+    : `${baseUrl}/v1/chat/completions`;
+
+  const body: any = {
+    model: config.model || "auto",
+    messages: [{ role: "user", content }],
+    response_format: { type: "json_object" },
+    extra_body: {
+      routing: {
+        prefer: ["vision"],
+        fallback: ["gpt-4o", "gemini-2.5-flash", "claude-sonnet-4-20250514"],
+      },
+    },
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error?.message || `OpenFang API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content || "";
   return parseAnalysisResult(text);
 }
 
@@ -684,6 +803,31 @@ export async function testProviderConnection(
         if (response.ok) return { success: true, message: "Custom endpoint connection successful" };
         const error = await response.json().catch(() => ({}));
         return { success: false, message: error.error?.message || `Connection failed: ${response.status}` };
+      }
+
+      case "openfang": {
+        const ofBaseUrl = (config.endpoint || process.env.OPENFANG_BASE_URL || "").replace(/\/+$/, "");
+        const ofApiKey = config.apiKey || process.env.OPENFANG_API_KEY || "";
+        if (!ofBaseUrl) return { success: false, message: "OpenFang base URL is required" };
+        if (!ofApiKey) return { success: false, message: "OpenFang API key is required" };
+        const ofUrl = ofBaseUrl.includes("/v1/chat/completions")
+          ? ofBaseUrl
+          : `${ofBaseUrl}/v1/chat/completions`;
+        const response = await fetch(ofUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${ofApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: config.model || "auto",
+            messages: [{ role: "user", content: "Reply with: OK" }],
+            max_tokens: 5,
+          }),
+        });
+        if (response.ok) return { success: true, message: "OpenFang connection successful" };
+        const error = await response.json().catch(() => ({}));
+        return { success: false, message: error.error?.message || `OpenFang error: ${response.status}` };
       }
 
       default:

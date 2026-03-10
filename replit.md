@@ -23,7 +23,7 @@ Preferred communication style: Simple, everyday language.
 ### Backend Architecture
 - **Server**: Express.js with TypeScript
 - **Database**: PostgreSQL with Drizzle ORM
-- **AI Integration**: Google Gemini via Replit AI Integrations for item analysis and image generation
+- **AI Integration**: Multi-provider support via OpenFang routing, Google Gemini, OpenAI, Anthropic, and custom endpoints
 - **File Uploads**: Multer with memory storage for image processing
 
 ### Authentication
@@ -33,16 +33,17 @@ Preferred communication style: Simple, everyday language.
 
 ### Data Models
 - **users**: Core user accounts with username/password
-- **userSettings**: Per-user API keys and marketplace credentials (Gemini, HuggingFace, WooCommerce, eBay)
-- **stashItems**: Inventory items with images, AI analysis, SEO metadata, and marketplace publish status
+- **userSettings**: Per-user API keys (Gemini, OpenFang, OpenAI, Anthropic), marketplace credentials, high-value threshold
+- **stashItems**: Inventory items with images, AI analysis, SEO metadata, marketplace publish status, and approval status (publishStatus)
 - **articles**: Educational content for the Discover tab
 - **conversations/messages**: Chat history for AI interactions
+- **FlipAgent tables**: sellers, products, listings, aiGenerations, syncQueue, integrations
 
 ### Key Features by Screen
 - **Discover Tab**: Curated articles fetched from API, featured card layout
 - **Scan Tab**: Camera-based two-step capture (full item, then label), sends to AI analysis
-- **Stash Tab**: Grid view of inventory items with publish status badges
-- **Settings**: Marketplace integrations (WooCommerce, eBay), account management
+- **Stash Tab**: Grid view of inventory items with publish status badges, natural-language search
+- **Settings**: Marketplace integrations (WooCommerce, eBay), AI provider configuration, account management
 
 ### Path Aliases
 - `@/` maps to `./client/`
@@ -55,10 +56,12 @@ Preferred communication style: Simple, everyday language.
 - **Configuration**: Requires `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` environment variables
 - **Behavior**: App works in unauthenticated mode if credentials not provided
 
-### Google Gemini (via Replit AI Integrations)
-- **Purpose**: AI-powered item analysis, appraisals, and image generation
-- **Models**: gemini-2.5-flash (fast), gemini-2.5-pro (advanced), gemini-2.5-flash-image (images)
-- **Configuration**: Uses `AI_INTEGRATIONS_GEMINI_API_KEY` and `AI_INTEGRATIONS_GEMINI_BASE_URL`
+### AI Providers
+- **Google Gemini** (via Replit AI Integrations): Default provider, uses `AI_INTEGRATIONS_GEMINI_API_KEY` and `AI_INTEGRATIONS_GEMINI_BASE_URL`
+- **OpenFang**: Multi-model AI routing layer with intelligent model selection. Uses `OPENFANG_BASE_URL` and `OPENFANG_API_KEY` env vars. Routes to best model per item category with fallback chain (vision-capable models preferred). OpenAI-compatible `/v1/chat/completions` endpoint.
+- **OpenAI**: Direct GPT-4o integration, requires user-provided API key
+- **Anthropic**: Direct Claude integration, requires user-provided API key
+- **Custom**: Any OpenAI-compatible endpoint (Ollama, LM Studio, etc.)
 
 ### PostgreSQL
 - **Purpose**: Persistent data storage for users, items, articles, and settings
@@ -88,21 +91,25 @@ Preferred communication style: Simple, everyday language.
 - eBay integration: Save credentials (SecureStore), test connection, publish items from ItemDetailsScreen
 - Terms of Service and Privacy Policy screens (accessible from Settings)
 - Item scanning: Two-photo capture workflow (full item + label close-up) with camera and gallery support
-- AI analysis: Google Gemini integration for item identification and appraisal
+- AI analysis: Multi-provider support (Gemini, OpenFang, OpenAI, Anthropic, Custom) for item identification and appraisal
 - Stash (inventory) management: Grid view with item details, publish status badges
+- Natural-language stash search: AI-powered search parsing (e.g., "Louis Vuitton bags under $300")
+- High-value publish approval gate: Configurable threshold (default $500), items exceeding threshold require explicit approval before publishing
 - Discover tab: Curated articles with featured card layout
 - Backend API: Express.js with PostgreSQL/Drizzle, marketplace proxy endpoints
+- FlipAgent backend: Seller profiles, product inventory, marketplace listings, AI audit trail, sync queue
 
 ### Not Yet Implemented
-- HuggingFace as secondary AI model
 - Full SEO-optimized listing generation (backend stubs exist)
-- Advanced publish status tracking across marketplaces
-- Search/filter functionality in Stash
 - Theme switching (light mode)
 - Push notifications
 - Onboarding/welcome screen
 
 ## Recent Changes
+- 2026-03-08: Added OpenFang as multi-model AI routing provider (replaces HuggingFace as secondary model)
+- 2026-03-08: Added natural-language stash search via AI query parsing
+- 2026-03-08: Added human-in-the-loop approval gate for high-value item publishing
+- 2026-03-08: Added OpenFang configuration UI in AI Providers settings
 - 2026-02-06: Added Terms of Service and Privacy Policy screens
 - 2026-02-06: Added environment setup documentation (ENVIRONMENT.md)
 - 2026-02-06: Added E2E testing infrastructure with Maestro

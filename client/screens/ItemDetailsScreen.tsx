@@ -58,6 +58,7 @@ interface StashItem {
   seoTitle: string | null;
   seoDescription: string | null;
   seoKeywords: string[] | null;
+  publishStatus: string | null;
   publishedToWoocommerce: boolean;
   publishedToEbay: boolean;
   woocommerceUrl: string | null;
@@ -94,6 +95,13 @@ export default function ItemDetailsScreen() {
   const [ebayConnected, setEbayConnected] = useState(false);
   const [publishingWoo, setPublishingWoo] = useState(false);
   const [publishingEbay, setPublishingEbay] = useState(false);
+  const [approvalGate, setApprovalGate] = useState<{
+    visible: boolean;
+    platform: "woocommerce" | "ebay" | null;
+    suggestedPrice: number;
+    threshold: number;
+    message: string;
+  }>({ visible: false, platform: null, suggestedPrice: 0, threshold: 500, message: "" });
 
   useEffect(() => {
     checkConnections();
@@ -145,7 +153,7 @@ export default function ItemDetailsScreen() {
     ]);
   };
 
-  const handlePublishWooCommerce = async () => {
+  const handlePublishWooCommerce = async (skipThresholdCheck = false) => {
     if (!item) return;
     
     if (!wooConnected) {
@@ -173,7 +181,19 @@ export default function ItemDetailsScreen() {
         return;
       }
       
-      const result = await publishToWooCommerce(itemId, settings);
+      const result = await publishToWooCommerce(itemId, settings, skipThresholdCheck);
+      
+      if ((result as any).held) {
+        setApprovalGate({
+          visible: true,
+          platform: "woocommerce",
+          suggestedPrice: (result as any).suggestedPrice,
+          threshold: (result as any).threshold,
+          message: (result as any).message,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
+        return;
+      }
       
       if (result.success) {
         if (Platform.OS !== "web") {
@@ -192,7 +212,7 @@ export default function ItemDetailsScreen() {
     }
   };
   
-  const handlePublishEbay = async () => {
+  const handlePublishEbay = async (skipThresholdCheck = false) => {
     if (!item) return;
     
     if (!ebayConnected) {
@@ -220,7 +240,19 @@ export default function ItemDetailsScreen() {
         return;
       }
       
-      const result = await publishToEbay(itemId, settings);
+      const result = await publishToEbay(itemId, settings, skipThresholdCheck);
+      
+      if ((result as any).held) {
+        setApprovalGate({
+          visible: true,
+          platform: "ebay",
+          suggestedPrice: (result as any).suggestedPrice,
+          threshold: (result as any).threshold,
+          message: (result as any).message,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
+        return;
+      }
       
       if (result.success) {
         if (Platform.OS !== "web") {
@@ -237,6 +269,29 @@ export default function ItemDetailsScreen() {
     } finally {
       setPublishingEbay(false);
     }
+  };
+
+  const handleApproveAndPublish = async () => {
+    if (!approvalGate.platform) return;
+    
+    try {
+      await apiRequest("POST", `/api/stash/${itemId}/approve-publish`);
+      queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
+      
+      setApprovalGate({ visible: false, platform: null, suggestedPrice: 0, threshold: 500, message: "" });
+      
+      if (approvalGate.platform === "woocommerce") {
+        handlePublishWooCommerce(true);
+      } else {
+        handlePublishEbay(true);
+      }
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to approve item");
+    }
+  };
+
+  const handleDismissApproval = () => {
+    setApprovalGate({ visible: false, platform: null, suggestedPrice: 0, threshold: 500, message: "" });
   };
 
   if (isLoading) {
@@ -481,6 +536,69 @@ export default function ItemDetailsScreen() {
             </View>
           )}
 
+          {item.publishStatus === "held_for_review" ? (
+            <View style={styles.section}>
+              <ThemedText style={styles.sectionLabel}>Review Required</ThemedText>
+              <View style={styles.approvalCard}>
+                <View style={styles.approvalIconRow}>
+                  <View style={styles.approvalIconCircle}>
+                    <Feather name="alert-triangle" size={24} color={Colors.dark.warning} />
+                  </View>
+                </View>
+                <ThemedText style={styles.approvalTitle}>High-Value Item</ThemedText>
+                <ThemedText style={styles.approvalMessage}>
+                  This item has been held for review because its suggested price exceeds your approval threshold. Please review the details and confirm before publishing.
+                </ThemedText>
+                {item.aiAnalysis?.suggestedListPrice ? (
+                  <View style={styles.approvalPriceRow}>
+                    <ThemedText style={styles.approvalPriceLabel}>Suggested Price</ThemedText>
+                    <ThemedText style={styles.approvalPriceValue}>${item.aiAnalysis.suggestedListPrice}</ThemedText>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
+          {approvalGate.visible ? (
+            <View style={styles.section}>
+              <ThemedText style={styles.sectionLabel}>Approval Required</ThemedText>
+              <View style={styles.approvalCard}>
+                <View style={styles.approvalIconRow}>
+                  <View style={styles.approvalIconCircle}>
+                    <Feather name="shield" size={24} color={Colors.dark.warning} />
+                  </View>
+                </View>
+                <ThemedText style={styles.approvalTitle}>Confirm High-Value Publish</ThemedText>
+                <ThemedText style={styles.approvalMessage}>{approvalGate.message}</ThemedText>
+                <View style={styles.approvalPriceRow}>
+                  <ThemedText style={styles.approvalPriceLabel}>Suggested Price</ThemedText>
+                  <ThemedText style={styles.approvalPriceValue}>${approvalGate.suggestedPrice}</ThemedText>
+                </View>
+                <View style={styles.approvalPriceRow}>
+                  <ThemedText style={styles.approvalPriceLabel}>Your Threshold</ThemedText>
+                  <ThemedText style={styles.approvalThresholdValue}>${approvalGate.threshold}</ThemedText>
+                </View>
+                <View style={styles.approvalActions}>
+                  <Pressable
+                    style={({ pressed }) => [styles.approvalCancelButton, pressed && { opacity: 0.7 }]}
+                    onPress={handleDismissApproval}
+                    testID="button-dismiss-approval"
+                  >
+                    <ThemedText style={styles.approvalCancelText}>Cancel</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [styles.approvalConfirmButton, pressed && { opacity: 0.7 }]}
+                    onPress={handleApproveAndPublish}
+                    testID="button-approve-publish"
+                  >
+                    <Feather name="check-circle" size={18} color={Colors.dark.buttonText} />
+                    <ThemedText style={styles.approvalConfirmText}>Approve & Publish</ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
           <View style={styles.section}>
             <ThemedText style={styles.sectionLabel}>Publish</ThemedText>
             <View style={styles.publishGrid}>
@@ -492,7 +610,7 @@ export default function ItemDetailsScreen() {
                   pressed && { opacity: 0.8 },
                   publishingWoo && { opacity: 0.6 },
                 ]}
-                onPress={handlePublishWooCommerce}
+                onPress={() => handlePublishWooCommerce()}
                 disabled={publishingWoo || publishingEbay}
                 testID="button-publish-woocommerce"
               >
@@ -531,7 +649,7 @@ export default function ItemDetailsScreen() {
                   pressed && { opacity: 0.8 },
                   publishingEbay && { opacity: 0.6 },
                 ]}
-                onPress={handlePublishEbay}
+                onPress={() => handlePublishEbay()}
                 disabled={publishingWoo || publishingEbay}
                 testID="button-publish-ebay"
               >
@@ -927,5 +1045,89 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     flex: 1,
     textAlign: "right",
+  },
+  approvalCard: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.dark.warning,
+  },
+  approvalIconRow: {
+    alignItems: "center",
+    marginBottom: Spacing.sm,
+  },
+  approvalIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  approvalTitle: {
+    ...Typography.h4,
+    color: Colors.dark.text,
+    textAlign: "center",
+  },
+  approvalMessage: {
+    ...Typography.body,
+    color: Colors.dark.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  approvalPriceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.dark.backgroundRoot,
+  },
+  approvalPriceLabel: {
+    ...Typography.small,
+    color: Colors.dark.textSecondary,
+  },
+  approvalPriceValue: {
+    ...Typography.h4,
+    color: Colors.dark.primary,
+    fontWeight: "700",
+  },
+  approvalThresholdValue: {
+    ...Typography.body,
+    color: Colors.dark.warning,
+    fontWeight: "600",
+  },
+  approvalActions: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  approvalCancelButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.dark.backgroundSecondary,
+  },
+  approvalCancelText: {
+    ...Typography.button,
+    color: Colors.dark.text,
+  },
+  approvalConfirmButton: {
+    flex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.dark.primary,
+    gap: Spacing.sm,
+  },
+  approvalConfirmText: {
+    ...Typography.button,
+    color: Colors.dark.buttonText,
   },
 });

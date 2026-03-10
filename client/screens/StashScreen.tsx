@@ -1,15 +1,17 @@
-import React, { useCallback } from "react";
-import { View, StyleSheet, FlatList, Pressable, Image, RefreshControl, ActivityIndicator, Dimensions } from "react-native";
+import React, { useCallback, useState } from "react";
+import { View, StyleSheet, FlatList, Pressable, Image, RefreshControl, ActivityIndicator, Dimensions, TextInput } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Colors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { Feather } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { apiRequest } from "@/lib/query-client";
+import { useAuthContext } from "@/contexts/AuthContext";
 import emptyStashImage from "../../assets/images/empty-states/empty-stash.png";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -94,10 +96,41 @@ export default function StashScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuthContext();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<StashItem[] | null>(null);
+  const [isSearchActive, setIsSearchActive] = useState(false);
 
   const { data: items, isLoading, refetch, isRefetching } = useQuery<StashItem[]>({
     queryKey: ["/api/stash"],
   });
+
+  const searchMutation = useMutation({
+    mutationFn: async (query: string) => {
+      const res = await apiRequest("POST", "/api/stash/search", { query, userId: user?.id });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setSearchResults(data.results || []);
+      setIsSearchActive(true);
+    },
+  });
+
+  const handleSearch = useCallback(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length === 0) {
+      setSearchResults(null);
+      setIsSearchActive(false);
+      return;
+    }
+    searchMutation.mutate(trimmed);
+  }, [searchQuery, searchMutation]);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery("");
+    setSearchResults(null);
+    setIsSearchActive(false);
+  }, []);
 
   const handleItemPress = useCallback((itemId: number) => {
     navigation.navigate("ItemDetails", { itemId });
@@ -106,6 +139,8 @@ export default function StashScreen() {
   const handleScan = useCallback(() => {
     navigation.navigate("Main", { screen: "ScanTab" } as any);
   }, [navigation]);
+
+  const displayItems = isSearchActive ? searchResults : items;
 
   if (isLoading) {
     return (
@@ -130,7 +165,7 @@ export default function StashScreen() {
   return (
     <ThemedView style={styles.container}>
       <FlatList
-        data={items}
+        data={displayItems || []}
         keyExtractor={(item) => item.id.toString()}
         numColumns={2}
         contentContainerStyle={{
@@ -145,17 +180,79 @@ export default function StashScreen() {
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
-            onRefresh={refetch}
+            onRefresh={() => {
+              handleClearSearch();
+              refetch();
+            }}
             tintColor={Colors.dark.primary}
           />
         }
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={() => (
-          <View style={styles.header}>
-            <ThemedText style={styles.headerTitle}>Stash</ThemedText>
-            <ThemedText style={styles.headerCount}>{items.length} items</ThemedText>
+          <View>
+            <View style={styles.header}>
+              <ThemedText style={styles.headerTitle}>Stash</ThemedText>
+              <ThemedText style={styles.headerCount}>
+                {isSearchActive ? `${displayItems?.length || 0} results` : `${items.length} items`}
+              </ThemedText>
+            </View>
+            <View style={styles.searchContainer}>
+              <View style={styles.searchInputWrapper}>
+                <Feather name="search" size={18} color={Colors.dark.textSecondary} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder='Try "Louis Vuitton bags under $300"'
+                  placeholderTextColor={Colors.dark.textSecondary}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  onSubmitEditing={handleSearch}
+                  returnKeyType="search"
+                  testID="input-stash-search"
+                />
+                {searchQuery.length > 0 ? (
+                  <Pressable onPress={handleClearSearch} hitSlop={8} testID="button-clear-search">
+                    <Feather name="x" size={18} color={Colors.dark.textSecondary} />
+                  </Pressable>
+                ) : null}
+              </View>
+              {searchQuery.trim().length > 0 ? (
+                <Pressable
+                  style={({ pressed }) => [styles.searchButton, pressed && { opacity: 0.8 }]}
+                  onPress={handleSearch}
+                  disabled={searchMutation.isPending}
+                  testID="button-search"
+                >
+                  {searchMutation.isPending ? (
+                    <ActivityIndicator size="small" color={Colors.dark.buttonText} />
+                  ) : (
+                    <Feather name="arrow-right" size={18} color={Colors.dark.buttonText} />
+                  )}
+                </Pressable>
+              ) : null}
+            </View>
+            {isSearchActive ? (
+              <Pressable style={styles.clearResultsBanner} onPress={handleClearSearch} testID="button-clear-results">
+                <Feather name="x-circle" size={14} color={Colors.dark.primary} />
+                <ThemedText style={styles.clearResultsText}>Clear search results</ThemedText>
+              </Pressable>
+            ) : null}
+            {searchMutation.isError ? (
+              <View style={styles.errorBanner}>
+                <Feather name="alert-circle" size={14} color={Colors.dark.error} />
+                <ThemedText style={styles.errorText}>Search failed. Please try again.</ThemedText>
+              </View>
+            ) : null}
           </View>
         )}
+        ListEmptyComponent={() =>
+          isSearchActive ? (
+            <View style={styles.noResults}>
+              <Feather name="search" size={40} color={Colors.dark.textSecondary} />
+              <ThemedText style={styles.noResultsTitle}>No items found</ThemedText>
+              <ThemedText style={styles.noResultsSubtitle}>Try a different search query</ThemedText>
+            </View>
+          ) : null
+        }
       />
       <FloatingActionButton onPress={handleScan} />
     </ThemedView>
@@ -180,13 +277,83 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "baseline",
     justifyContent: "space-between",
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   headerTitle: {
     ...Typography.h3,
     color: Colors.dark.text,
   },
   headerCount: {
+    ...Typography.small,
+    color: Colors.dark.textSecondary,
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    height: 44,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  searchIcon: {
+    marginRight: Spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    color: Colors.dark.text,
+    fontSize: 14,
+    height: "100%",
+  },
+  searchButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.dark.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clearResultsBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginBottom: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  clearResultsText: {
+    ...Typography.small,
+    color: Colors.dark.primary,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginBottom: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  errorText: {
+    ...Typography.small,
+    color: Colors.dark.error,
+  },
+  noResults: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing["5xl"],
+    gap: Spacing.sm,
+  },
+  noResultsTitle: {
+    ...Typography.h4,
+    color: Colors.dark.text,
+  },
+  noResultsSubtitle: {
     ...Typography.small,
     color: Colors.dark.textSecondary,
   },
