@@ -14,6 +14,8 @@
 - [server/services/notification.ts](file://server/services/notification.ts)
 - [shared/types.ts](file://shared/types.ts)
 - [client/screens/AIProvidersScreen.tsx](file://client/screens/AIProvidersScreen.tsx)
+- [server/ai-providers.ts](file://server/ai-providers.ts)
+- [client/screens/ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx)
 </cite>
 
 ## Update Summary
@@ -23,6 +25,7 @@
 - Updated stashItems table documentation to include publish_status column
 - Enhanced AI provider configuration section to reflect OpenFang integration
 - Updated architecture overview to show new high-value approval tracking capabilities
+- Added comprehensive documentation for OpenFang AI provider implementation and high-value approval workflows
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -39,7 +42,7 @@
 ## Introduction
 This document provides comprehensive data model documentation for Hidden-Gem's PostgreSQL database schema. It covers all entities, including core tables (users, userSettings, stashItems, articles, notifications), marketplace tables (sellers, products, listings, integrations), and auxiliary tables (conversations, messages, pushTokens, priceTracking). For each table, we document fields, data types, primary and foreign keys, indexes, constraints, and referential integrity. We explain the purpose and relationships among tables, focusing on how user data connects to marketplace operations. Business constraints, validation rules, unique indexes, and cascading delete behaviors are included. Composite keys and UUID usage rationale are explained, along with data lifecycle considerations.
 
-**Updated** Added documentation for new high-value approval tracking and OpenFang AI provider integration features.
+**Updated** Added documentation for new high-value approval tracking and OpenFang AI provider integration features. The schema now supports enterprise-grade AI providers with configurable endpoints and enhanced approval workflows for high-value items.
 
 ## Project Structure
 Hidden-Gem uses Drizzle ORM with a PostgreSQL dialect. The schema is defined in a single TypeScript module and migrated via Drizzle Kit. The server connects to the database using a Node-PG pool and exposes CRUD operations through API routes.
@@ -91,7 +94,7 @@ Relationship highlights:
 - conversations → messages via conversation_id FK with cascade deletes.
 - notifications optionally link to stashItems.
 
-**Updated** Enhanced userSettings and stashItems tables now support advanced AI provider configuration and high-value item approval workflows.
+**Updated** Enhanced userSettings and stashItems tables now support advanced AI provider configuration and high-value item approval workflows with OpenFang integration.
 
 **Section sources**
 - [shared/schema.ts:6-12](file://shared/schema.ts#L6-L12)
@@ -107,7 +110,7 @@ The schema supports two major domains:
 - Core user domain: identity, settings, personal stash, articles, messaging, and notifications.
 - Marketplace domain (FlipAgent): seller profiles, product catalog, marketplace listings, integrations, AI generation logs, and async sync queue.
 
-**Updated** Enhanced with high-value approval tracking and OpenFang AI provider integration capabilities.
+**Updated** Enhanced with high-value approval tracking and OpenFang AI provider integration capabilities, supporting enterprise-grade AI workflows.
 
 ```mermaid
 erDiagram
@@ -643,7 +646,7 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
   - **New** High-value approval tracking was added in migration 0003.
   - **New** OpenFang AI provider settings were added in migration 0004.
   - Row-Level Security (RLS) policies were applied to FlipAgent tables in a third migration.
-- Snapshot metadata:
+  - Snapshot metadata:
   - migrations/meta/0000_snapshot.json captures the initial schema state, including columns, foreign keys, unique constraints, and default values.
 
 **Updated** Added documentation for new migration files that introduced high-value approval tracking and OpenFang AI provider integration.
@@ -698,8 +701,6 @@ MIG4 -.-> SNAP
   - Monitor slow queries and adjust indexes accordingly.
   - Use connection pooling and consider read replicas for reporting-heavy workloads.
 
-[No sources needed since this section provides general guidance]
-
 ## Troubleshooting Guide
 - Common issues and resolutions:
   - Missing DATABASE_URL: Ensure environment variable is set; Drizzle config and server db.ts require it.
@@ -733,8 +734,6 @@ MIG4 -.-> SNAP
 Hidden-Gem's schema cleanly separates user-centric and marketplace domains while enforcing strong referential integrity and business constraints. UUIDs and composite keys are used strategically to ensure uniqueness and scalability. Cascading deletes simplify lifecycle management, and RLS policies protect sensitive marketplace data. **Updated** The schema now includes advanced features for high-value item approval workflows and OpenFang AI provider integration, providing enhanced control over marketplace operations and AI-powered content generation. The documented relationships and constraints provide a solid foundation for application development and maintenance.
 
 **Updated** Enhanced with comprehensive high-value approval tracking and OpenFang AI provider integration capabilities.
-
-[No sources needed since this section summarizes without analyzing specific files]
 
 ## Appendices
 
@@ -810,12 +809,32 @@ Hidden-Gem's schema cleanly separates user-centric and marketplace domains while
 - **Gemini**: Default provider with configurable model selection
 - **Hugging Face**: Custom model configuration
 - **OpenFang**: Enterprise-grade AI with configurable API endpoint and model selection
+- **OpenAI**: Standard OpenAI integration
+- **Anthropic**: Claude AI integration
 - **Custom/Local**: Ollama, LM Studio, or any OpenAI-compatible API
 
 Configuration includes API keys, base URLs, and model preferences stored in userSettings table. High-value items can be configured to require manual approval before publication based on configurable thresholds.
+
+**Updated** Added comprehensive OpenFang AI provider integration with enterprise-grade features including automatic model routing and vision-first processing.
 
 **Section sources**
 - [shared/schema.ts:17-31](file://shared/schema.ts#L17-L31)
 - [migrations/0003_high_value_approval.sql:1-3](file://migrations/0003_high_value_approval.sql#L1-L3)
 - [migrations/0004_openfang_settings.sql:1-4](file://migrations/0004_openfang_settings.sql#L1-L4)
 - [client/screens/AIProvidersScreen.tsx:530-600](file://client/screens/AIProvidersScreen.tsx#L530-L600)
+- [server/ai-providers.ts:334-389](file://server/ai-providers.ts#L334-L389)
+
+### High-Value Approval Workflow
+**New** The system now includes sophisticated high-value item approval workflows:
+
+- **Threshold Configuration**: Users can set individual approval thresholds in userSettings.high_value_threshold (default: 500)
+- **Automatic Flagging**: Items with suggestedListPrice above threshold are automatically flagged with publish_status = 'draft'
+- **Manual Review**: Users must manually approve high-value items before publication
+- **Approval Interface**: Client-side approval gates provide clear visibility of suggested prices vs. user thresholds
+- **Workflow Integration**: Approval status affects marketplace publishing pipeline
+
+**Section sources**
+- [shared/schema.ts:48](file://shared/schema.ts#L48)
+- [shared/schema.ts:28](file://shared/schema.ts#L28)
+- [client/screens/ItemDetailsScreen.tsx:545-589](file://client/screens/ItemDetailsScreen.tsx#L545-L589)
+- [server/ai-providers.ts:334-389](file://server/ai-providers.ts#L334-L389)

@@ -299,6 +299,8 @@ MergeDefaults --> Return([Return AnalysisResult])
 - Uses advanced routing configuration with "prefer" and "fallback" arrays
 - Built-in fallback to GPT-4o, Gemini 2.5 Flash, and Claude Sonnet 4
 
+**Updated** Enhanced with multi-model routing capabilities and automatic vision model selection
+
 **Section sources**
 - [ai-providers.ts:334-389](file://server/ai-providers.ts#L334-L389)
 - [ai-providers.ts:618-674](file://server/ai-providers.ts#L618-L674)
