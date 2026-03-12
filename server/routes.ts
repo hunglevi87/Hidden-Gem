@@ -27,6 +27,7 @@ import {
   disablePriceTracking,
   getPriceTrackingStatus,
 } from "./services/notification";
+import { requireAuth, optionalAuth, requireServiceRole, getEffectiveUserId } from "./middleware/auth";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
@@ -43,9 +44,10 @@ const upload = multer({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Push notification token endpoints
-  app.post("/api/push-token", async (req: Request, res: Response) => {
+  app.post("/api/push-token", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { userId, token, platform } = req.body;
+      const userId = getEffectiveUserId(req);
+      const { token, platform } = req.body;
       if (!userId || !token || !platform) {
         return res.status(400).json({ error: "userId, token, and platform are required" });
       }
@@ -57,9 +59,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/push-token", async (req: Request, res: Response) => {
+  app.delete("/api/push-token", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { userId, token } = req.body;
+      const userId = getEffectiveUserId(req);
+      const { token } = req.body;
       if (!userId || !token) {
         return res.status(400).json({ error: "userId and token are required" });
       }
@@ -71,9 +74,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/notifications", async (req: Request, res: Response) => {
+  app.get("/api/notifications", optionalAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.query.userId as string;
+      const userId = getEffectiveUserId(req);
       if (!userId) {
         return res.status(400).json({ error: "userId is required" });
       }
@@ -85,9 +88,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/notifications/unread-count", async (req: Request, res: Response) => {
+  app.get("/api/notifications/unread-count", optionalAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.query.userId as string;
+      const userId = getEffectiveUserId(req);
       if (!userId) {
         return res.status(400).json({ error: "userId is required" });
       }
@@ -99,9 +102,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/notifications/:id/read", async (req: Request, res: Response) => {
+  app.post("/api/notifications/:id/read", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.query.userId as string;
+      const userId = getEffectiveUserId(req);
       const id = parseInt(req.params.id);
       if (!userId || isNaN(id)) {
         return res.status(400).json({ error: "userId and notification id are required" });
@@ -114,9 +117,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/notifications/read-all", async (req: Request, res: Response) => {
+  app.post("/api/notifications/read-all", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.query.userId as string;
+      const userId = getEffectiveUserId(req);
       if (!userId) {
         return res.status(400).json({ error: "userId is required" });
       }
@@ -129,9 +132,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Price tracking endpoints
-  app.post("/api/stash/:id/price-tracking", async (req: Request, res: Response) => {
+  app.post("/api/stash/:id/price-tracking", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.query.userId as string || "anonymous";
+      const userId = getEffectiveUserId(req) || "anonymous";
       const id = parseInt(req.params.id);
       const { alertThreshold } = req.body;
       
@@ -147,9 +150,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/stash/:id/price-tracking", async (req: Request, res: Response) => {
+  app.delete("/api/stash/:id/price-tracking", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.query.userId as string || "anonymous";
+      const userId = getEffectiveUserId(req) || "anonymous";
       const id = parseInt(req.params.id);
       
       if (!userId || isNaN(id)) {
@@ -164,9 +167,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/stash/:id/price-tracking", async (req: Request, res: Response) => {
+  app.get("/api/stash/:id/price-tracking", optionalAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.query.userId as string || "anonymous";
+      const userId = getEffectiveUserId(req) || "anonymous";
       const id = parseInt(req.params.id);
       
       if (!userId || isNaN(id)) {
@@ -181,7 +184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/articles", async (_req: Request, res: Response) => {
+  app.get("/api/articles", optionalAuth, async (_req: Request, res: Response) => {
     try {
       const allArticles = await db
         .select()
@@ -194,7 +197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/articles/:id", async (req: Request, res: Response) => {
+  app.get("/api/articles/:id", optionalAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const [article] = await db
@@ -213,7 +216,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/stash", async (req: Request, res: Response) => {
+  app.get("/api/stash", optionalAuth, async (req: Request, res: Response) => {
     try {
       const allItems = await db
         .select()
@@ -226,7 +229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/stash/count", async (_req: Request, res: Response) => {
+  app.get("/api/stash/count", optionalAuth, async (_req: Request, res: Response) => {
     try {
       const [result] = await db.select({ count: count() }).from(stashItems);
       res.json({ count: result?.count || 0 });
@@ -236,7 +239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/stash/:id", async (req: Request, res: Response) => {
+  app.get("/api/stash/:id", optionalAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const [item] = await db
@@ -255,7 +258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/stash", async (req: Request, res: Response) => {
+  app.post("/api/stash", requireAuth, async (req: Request, res: Response) => {
     try {
       const itemData = req.body;
       
@@ -285,7 +288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/stash/:id", async (req: Request, res: Response) => {
+  app.delete("/api/stash/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       await db.delete(stashItems).where(eq(stashItems.id, id));
@@ -296,7 +299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/analyze", upload.fields([
+  app.post("/api/analyze", requireAuth, upload.fields([
     { name: "fullImage", maxCount: 1 },
     { name: "labelImage", maxCount: 1 }
   ]), async (req: Request, res: Response) => {
@@ -384,7 +387,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.get("/api/settings/threshold", async (req: Request, res: Response) => {
+  app.get("/api/settings/threshold", optionalAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.query.userId as string;
       if (!userId) {
@@ -398,7 +401,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.put("/api/settings/threshold", async (req: Request, res: Response) => {
+  app.put("/api/settings/threshold", requireAuth, async (req: Request, res: Response) => {
     try {
       const { userId, threshold } = req.body;
       if (!userId || threshold === undefined) {
@@ -419,7 +422,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.post("/api/stash/:id/hold-for-review", async (req: Request, res: Response) => {
+  app.post("/api/stash/:id/hold-for-review", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const [item] = await db.select().from(stashItems).where(eq(stashItems.id, id));
@@ -436,7 +439,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.post("/api/stash/:id/approve-publish", async (req: Request, res: Response) => {
+  app.post("/api/stash/:id/approve-publish", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const [item] = await db.select().from(stashItems).where(eq(stashItems.id, id));
@@ -453,7 +456,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.post("/api/stash/:id/publish/woocommerce", async (req: Request, res: Response) => {
+  app.post("/api/stash/:id/publish/woocommerce", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const { storeUrl, consumerKey, consumerSecret, skipThresholdCheck } = req.body;
@@ -545,7 +548,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
   
-  app.post("/api/stash/:id/publish/ebay", async (req: Request, res: Response) => {
+  app.post("/api/stash/:id/publish/ebay", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const { clientId, clientSecret, refreshToken, environment, merchantLocationKey, skipThresholdCheck } = req.body;
@@ -759,7 +762,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.post("/api/ai-providers/test", async (req: Request, res: Response) => {
+  app.post("/api/ai-providers/test", requireAuth, async (req: Request, res: Response) => {
     try {
       const { provider, apiKey, endpoint, model } = req.body;
       
@@ -782,7 +785,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.post("/api/analyze/retry", upload.fields([
+  app.post("/api/analyze/retry", requireAuth, upload.fields([
     { name: "fullImage", maxCount: 1 },
     { name: "labelImage", maxCount: 1 }
   ]), async (req: Request, res: Response) => {
@@ -829,7 +832,7 @@ Respond ONLY with valid JSON in this exact format:
 
   // --- Products CRUD (FlipAgent products table) ---
 
-  app.get("/api/products", async (req: Request, res: Response) => {
+  app.get("/api/products", optionalAuth, async (req: Request, res: Response) => {
     try {
       const sellerId = req.query.sellerId as string;
       const query = sellerId
@@ -842,7 +845,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.get("/api/products/:id", async (req: Request, res: Response) => {
+  app.get("/api/products/:id", optionalAuth, async (req: Request, res: Response) => {
     try {
       const [product] = await db
         .select()
@@ -856,7 +859,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.post("/api/products", async (req: Request, res: Response) => {
+  app.post("/api/products", requireAuth, async (req: Request, res: Response) => {
     try {
       const data = req.body;
       const [product] = await db
@@ -885,7 +888,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.put("/api/products/:id", async (req: Request, res: Response) => {
+  app.put("/api/products/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const data = req.body;
       const [updated] = await db
@@ -901,7 +904,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.delete("/api/products/:id", async (req: Request, res: Response) => {
+  app.delete("/api/products/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       await db.delete(products).where(eq(products.id, req.params.id));
       res.status(204).send();
@@ -913,7 +916,7 @@ Respond ONLY with valid JSON in this exact format:
 
   // --- Supabase Storage image upload (replaces Multer for persisted images) ---
 
-  app.post("/api/upload/image", upload.single("image"), async (req: Request, res: Response) => {
+  app.post("/api/upload/image", requireAuth, upload.single("image"), async (req: Request, res: Response) => {
     try {
       const file = (req as any).file as Express.Multer.File | undefined;
       if (!file) return res.status(400).json({ error: "No image file provided" });
@@ -934,7 +937,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.delete("/api/upload/image", async (req: Request, res: Response) => {
+  app.delete("/api/upload/image", requireAuth, async (req: Request, res: Response) => {
     try {
       const { path: imagePath } = req.body;
       if (!imagePath) return res.status(400).json({ error: "path is required" });
@@ -950,7 +953,7 @@ Respond ONLY with valid JSON in this exact format:
 
   // --- SEO generation from AI analysis ---
 
-  app.post("/api/seo/generate", async (req: Request, res: Response) => {
+  app.post("/api/seo/generate", requireAuth, async (req: Request, res: Response) => {
     try {
       const { analysis, sellerId, productId, imageUrl } = req.body;
       if (!analysis) return res.status(400).json({ error: "analysis object is required" });
@@ -973,7 +976,7 @@ Respond ONLY with valid JSON in this exact format:
 
   // --- eBay listing update / delete / token refresh ---
 
-  app.put("/api/ebay/listing/:itemId", async (req: Request, res: Response) => {
+  app.put("/api/ebay/listing/:itemId", requireAuth, async (req: Request, res: Response) => {
     try {
       const { clientId, clientSecret, refreshToken, environment, ...input } = req.body;
       if (!clientId || !clientSecret || !refreshToken) {
@@ -988,7 +991,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.delete("/api/ebay/listing/:itemId", async (req: Request, res: Response) => {
+  app.delete("/api/ebay/listing/:itemId", requireAuth, async (req: Request, res: Response) => {
     try {
       const { clientId, clientSecret, refreshToken, environment } = req.body;
       if (!clientId || !clientSecret || !refreshToken) {
@@ -1003,7 +1006,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.post("/api/ebay/refresh-token", async (req: Request, res: Response) => {
+  app.post("/api/ebay/refresh-token", requireAuth, async (req: Request, res: Response) => {
     try {
       const { clientId, clientSecret, refreshToken, environment } = req.body;
       if (!clientId || !clientSecret || !refreshToken) {
@@ -1020,7 +1023,7 @@ Respond ONLY with valid JSON in this exact format:
 
   // --- Sync queue inspection (read-only for now) ---
 
-  app.get("/api/sync-queue", async (req: Request, res: Response) => {
+  app.get("/api/sync-queue", requireAuth, async (req: Request, res: Response) => {
     try {
       const sellerId = req.query.sellerId as string;
       if (!sellerId) return res.status(400).json({ error: "sellerId is required" });
@@ -1036,7 +1039,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  app.post("/api/stash/search", async (req: Request, res: Response) => {
+  app.post("/api/stash/search", requireAuth, async (req: Request, res: Response) => {
     try {
       const { query, userId } = req.body;
       if (!userId || typeof userId !== "string") {
