@@ -321,7 +321,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const requestedProvider = typeof provider === "string" && provider.trim() ? provider.trim() : undefined;
       const primaryConfig: AIProviderConfig = {
-        provider: (requestedProvider || "openfang") as AIProviderConfig["provider"],
+        provider: (requestedProvider || "gemini") as AIProviderConfig["provider"],
         apiKey,
         endpoint,
         model,
@@ -331,7 +331,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const result = await analyzeItem(primaryConfig, images);
         return res.json(result);
       } catch (primaryError) {
-        const canFallbackToGemini = !requestedProvider || requestedProvider === "openfang";
+        const canFallbackToGemini = requestedProvider === "openfang";
         if (!canFallbackToGemini) {
           throw primaryError;
         }
@@ -787,7 +787,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const result = await analyzeItemWithRetry(primaryConfig, images, parsedPrevious, feedback);
         return res.json(result);
       } catch (primaryError) {
-        const canFallbackToGemini = !requestedProvider || requestedProvider === "openfang";
+        const canFallbackToGemini = requestedProvider === "openfang";
         if (!canFallbackToGemini) {
           throw primaryError;
         }

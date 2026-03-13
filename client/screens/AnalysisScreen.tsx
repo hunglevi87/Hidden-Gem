@@ -87,7 +87,7 @@ async function getAnalysisProviderPayload(): Promise<Record<string, string>> {
   const provider: AIProvider =
     active === "gemini" || active === "openai" || active === "anthropic" || active === "openfang" || active === "custom"
       ? active
-      : "openfang";
+      : "gemini";
 
   const payload: Record<string, string> = { provider };
 

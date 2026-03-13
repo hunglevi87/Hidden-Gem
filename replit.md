@@ -107,6 +107,8 @@ Preferred communication style: Simple, everyday language.
 - Onboarding/welcome screen
 
 ## Recent Changes
+- 2026-03-13: Restored Gemini-first identification defaults while keeping OpenFang optional (updated `client/screens/AIProvidersScreen.tsx`, `client/screens/AnalysisScreen.tsx`, and `server/routes.ts` defaults/fallback logic)
+- 2026-03-13: Dispatched cloud worker to continue P0 item 3.1 Sync Queue Worker from prior run context. Run: https://oz.warp.dev/runs/e71ae5fe-cbfc-4774-99b9-9420bc958a3f
 - 2026-03-13: Completed P0 item 3.3 (Shared Auth Contract + API Auth Middleware); added `server/middleware/auth.ts` and updated `server/routes.ts` to enforce auth middleware across API routes. Run: https://oz.warp.dev/runs/f9b7026d-0bb6-4ac6-ab40-f914216957d6
 - 2026-03-08: Added OpenFang as multi-model AI routing provider (replaces HuggingFace as secondary model)
 - 2026-03-08: Added natural-language stash search via AI query parsing
@@ -117,4 +119,4 @@ Preferred communication style: Simple, everyday language.
 - 2026-02-06: Added E2E testing infrastructure with Maestro
 
 ## Next Unblocked Step
-- P0 item 3.1: Sync Queue Worker
+- P0 item 3.1: Sync Queue Worker (In Progress via cloud run: https://oz.warp.dev/runs/e71ae5fe-cbfc-4774-99b9-9420bc958a3f)
