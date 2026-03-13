@@ -7,7 +7,7 @@ import { db } from "./db";
 import { articles, stashItems, userSettings, products, sellers, listingsTable, syncQueue } from "@shared/schema";
 import { eq, desc, count, and, ilike, lte, gte, or, SQL } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
-import { testProviderConnection, AIProviderConfig, analyzeItemWithRetry, AnalysisResult } from "./ai-providers";
+import { testProviderConnection, AIProviderConfig, analyzeItem, analyzeItemWithRetry, AnalysisResult } from "./ai-providers";
 import { generateSEOTitle, generateDescription, generateTags, createAIRecord } from "./ai-seo";
 import { uploadProductImage, deleteProductImage } from "./supabase-storage";
 import {
@@ -27,7 +27,6 @@ import {
   disablePriceTracking,
   getPriceTrackingStatus,
 } from "./services/notification";
-
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
   httpOptions: {
@@ -35,6 +34,7 @@ const ai = new GoogleGenAI({
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
   },
 });
+
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -305,78 +305,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const fullImageFile = files?.fullImage?.[0];
       const labelImageFile = files?.labelImage?.[0];
+      const { provider, apiKey, endpoint, model } = req.body;
 
-      const prompt = `You are an expert appraiser and reseller assistant. Analyze this collectible/vintage item and provide a detailed assessment.
-
-Based on the images provided (one showing the full item and one showing the label/tag), please provide:
-1. A clear, descriptive title for the item
-2. A detailed description suitable for a listing
-3. The category (e.g., Handbag, Watch, Clothing, Electronics, Collectible, etc.)
-4. An estimated resale value range (e.g., "$150-$200")
-5. The condition (Excellent, Very Good, Good, Fair, Poor)
-6. An SEO-optimized title for online listings
-7. An SEO-optimized description
-8. 5-10 relevant SEO keywords
-9. 3-5 relevant tags for categorization
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "title": "Item title",
-  "description": "Detailed description...",
-  "category": "Category name",
-  "estimatedValue": "$XX-$XX",
-  "condition": "Condition rating",
-  "seoTitle": "SEO optimized title",
-  "seoDescription": "SEO optimized description...",
-  "seoKeywords": ["keyword1", "keyword2", "keyword3"],
-  "tags": ["tag1", "tag2", "tag3"]
-}`;
-
-      const parts: any[] = [{ text: prompt }];
-
+      const images: { mimeType: string; data: string }[] = [];
       if (fullImageFile) {
-        parts.push({
-          inlineData: {
-            mimeType: fullImageFile.mimetype,
-            data: fullImageFile.buffer.toString("base64"),
-          },
-        });
+        images.push({ mimeType: fullImageFile.mimetype, data: fullImageFile.buffer.toString("base64") });
       }
-
       if (labelImageFile) {
-        parts.push({
-          inlineData: {
-            mimeType: labelImageFile.mimetype,
-            data: labelImageFile.buffer.toString("base64"),
-          },
-        });
+        images.push({ mimeType: labelImageFile.mimetype, data: labelImageFile.buffer.toString("base64") });
       }
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts }],
-        config: {
-          responseMimeType: "application/json",
-        },
-      });
+      if (images.length === 0) {
+        return res.status(400).json({ error: "At least one image is required" });
+      }
 
-      const text = response.text || "";
-      
+      const requestedProvider = typeof provider === "string" && provider.trim() ? provider.trim() : undefined;
+      const primaryConfig: AIProviderConfig = {
+        provider: (requestedProvider || "openfang") as AIProviderConfig["provider"],
+        apiKey,
+        endpoint,
+        model,
+      };
+
       try {
-        const result = JSON.parse(text);
-        res.json(result);
-      } catch (parseError) {
-        res.json({
-          title: "Vintage Item",
-          description: "A vintage collectible item in good condition.",
-          category: "Collectible",
-          estimatedValue: "$50-$100",
-          condition: "Good",
-          seoTitle: "Vintage Collectible Item for Sale",
-          seoDescription: "Authentic vintage collectible in excellent condition. Perfect for collectors.",
-          seoKeywords: ["vintage", "collectible", "antique"],
-          tags: ["vintage", "collectible"],
-        });
+        const result = await analyzeItem(primaryConfig, images);
+        return res.json(result);
+      } catch (primaryError) {
+        const canFallbackToGemini = !requestedProvider || requestedProvider === "openfang";
+        if (!canFallbackToGemini) {
+          throw primaryError;
+        }
+
+        const fallbackConfig: AIProviderConfig = {
+          provider: "gemini",
+          model: "gemini-2.5-flash",
+        };
+
+        const fallbackResult = await analyzeItem(fallbackConfig, images);
+        return res.json(fallbackResult);
       }
     } catch (error) {
       console.error("Error analyzing item:", error);
@@ -791,7 +757,7 @@ Respond ONLY with valid JSON in this exact format:
       const fullImageFile = files?.fullImage?.[0];
       const labelImageFile = files?.labelImage?.[0];
       
-      const { previousResult, feedback, provider, apiKey, model } = req.body;
+      const { previousResult, feedback, provider, apiKey, endpoint, model } = req.body;
       
       if (!previousResult || !feedback) {
         return res.status(400).json({ error: "previousResult and feedback are required" });
@@ -805,9 +771,11 @@ Respond ONLY with valid JSON in this exact format:
         images.push({ mimeType: labelImageFile.mimetype, data: labelImageFile.buffer.toString("base64") });
       }
 
-      const config: AIProviderConfig = {
-        provider: provider || "gemini",
+      const requestedProvider = typeof provider === "string" && provider.trim() ? provider.trim() : undefined;
+      const primaryConfig: AIProviderConfig = {
+        provider: (requestedProvider || "openfang") as AIProviderConfig["provider"],
         apiKey,
+        endpoint,
         model,
       };
 
@@ -815,8 +783,23 @@ Respond ONLY with valid JSON in this exact format:
         ? JSON.parse(previousResult) 
         : previousResult;
 
-      const result = await analyzeItemWithRetry(config, images, parsedPrevious, feedback);
-      res.json(result);
+      try {
+        const result = await analyzeItemWithRetry(primaryConfig, images, parsedPrevious, feedback);
+        return res.json(result);
+      } catch (primaryError) {
+        const canFallbackToGemini = !requestedProvider || requestedProvider === "openfang";
+        if (!canFallbackToGemini) {
+          throw primaryError;
+        }
+
+        const fallbackConfig: AIProviderConfig = {
+          provider: "gemini",
+          model: "gemini-2.5-flash",
+        };
+
+        const fallbackResult = await analyzeItemWithRetry(fallbackConfig, images, parsedPrevious, feedback);
+        return res.json(fallbackResult);
+      }
     } catch (error) {
       console.error("Error in retry analysis:", error);
       res.status(500).json({ error: "Failed to re-analyze item" });

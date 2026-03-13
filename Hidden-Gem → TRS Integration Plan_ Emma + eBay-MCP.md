@@ -1,5 +1,5 @@
 # Hidden\-Gem → TRS Integration Plan
-Emma is the AI system; Botsee is the stash\-critic hand name\. Hidden\-Gem is inventory source of truth on shared Supabase; TRS is storefront/admin consumer and orchestration surface\.
+Emma is the AI system; OpenFang is the multi-model execution hand and Gemini is the backup path\. Hidden\-Gem is inventory source of truth on shared Supabase; TRS is storefront/admin consumer and orchestration surface\.
 # 1 — Architecture Map
 ## 1\.1 Inventory \(source of truth\)
 Two parallel inventory models coexist on the same Postgres/Supabase instance:
@@ -9,7 +9,8 @@ Key observation: **There is no foreign key or sync path between `stash_items` an
 ## 1\.2 OpenFang Hand Execution
 `server/ai-providers.ts` — the `analyzeWithOpenFang()` function sends image\+prompt to a configurable OpenFang endpoint \(`OPENFANG_BASE_URL` / user `openfangBaseUrl`\)\. Uses OpenAI\-compatible `/v1/chat/completions` with routing hints \(`prefer: ["vision"]`, `fallback: ["gpt-4o", "gemini-2.5-flash", "claude-sonnet-4-20250514"]`\)\. Returns full `AnalysisResult` with brand, authenticity, market analysis, SEO, aspects, eBay categoryId\.
 OpenFang credentials stored in `user_settings` table: `openfang_api_key`, `openfang_base_url`, `preferred_openfang_model`\.
-This is the pathway where **Emma** \(AI system\) and **Botsee** \(stash\-critic hand\) currently execute — through the `POST /api/analyze` and `POST /api/analyze/retry` routes\.
+This is the pathway where **Emma** \(AI system\) executes — through the `POST /api/analyze` and `POST /api/analyze/retry` routes\.
+The same flow should support a second-step valuation handoff: once Emma identifies an item, user can trigger **\"Emma check eBay for identified product\"** to run an eBay MCP comp lookup and refresh suggested value\.
 ## 1\.3 Jobs / Sync Queue
 `sync_queue` table: `sellerId`, `productId`, `marketplace`, `action`, `payload`, `status` \(pending/…\), `errorMessage`, `retryCount`, `maxRetries`, `scheduledAt`, `completedAt`\.
 `GET /api/sync-queue?sellerId=` — read\-only inspection\. **No worker/processor exists yet\.** The queue is write\-schema only; nothing dequeues or executes jobs\. This is a critical gap for TRS orchestration\.
@@ -17,6 +18,15 @@ Separately, `server/index.ts` runs a `setInterval` every 6 hours calling `proces
 ## 1\.4 Content / Discover Flows
 `articles` table — editorial content \(title, content, excerpt, category, imageUrl, readingTime, featured\)\. Served by `GET /api/articles` and rendered in `DiscoverScreen.tsx`\.
 Purely read\-only from the app side; no admin/CMS endpoint for creation beyond direct DB inserts\. **TRS could own article creation** for the Discover feed\.
+## 1\.5 Identification → eBay MCP Valuation Flow
+Two user entry points must be supported:
+* **Fresh identification path**: Scan → Emma identifies product → user runs \"Emma check eBay for identified product\" → system calls eBay MCP sold/comparable search → updates suggested value and confidence in the response payload\.
+* **Already stashed item path**: User opens existing stash/product item → runs \"check eBay now\" action → system calls eBay MCP using saved title/brand/aspects/category → returns current suggested value without requiring a re-scan\.
+
+Execution notes:
+* First pass can be implemented without schema changes by storing valuation snapshots in `ai_generations.output_listing` and/or `stash_items.aiAnalysis`\.
+* Queue-driven mode should enqueue `sync_queue.action = "ebay_value_check"` when lookups are async or rate-limited\.
+* Response should include `suggestedListPrice`, `estimatedValueLow`, `estimatedValueHigh`, `compCount`, `lastValuationAt` to make value freshness explicit\.
 # 2 — Supabase Contract Map
 ## 2\.1 Tables TRS Must Read \(inventory source of truth\)
 * **`products`** — id \(UUID\), seller\_id, sku, title, description, brand, style\_name, category, condition, price, cost, estimated\_profit, images \(jsonb: \{primary, gallery\[\], ai\_analysis\}\), attributes \(jsonb\), tags\[\], listings \(jsonb\), sync\_status \(jsonb\), sync\_last\_at, created\_at, updated\_at\.
@@ -25,7 +35,7 @@ Purely read\-only from the app side; no admin/CMS endpoint for creation beyond d
 * **`sellers`** — id \(UUID\), user\_id \(→users\.id\), shop\_name, shop\_description, avatar\_url, stripe\_customer\_id, subscription\_tier, subscription\_expires\_at\.
 ## 2\.2 Tables TRS Must Read\+Write \(orchestration\)
 * **`sync_queue`** — TRS enqueues jobs; Hidden\-Gem \(or a shared worker\) dequeues\. Fields: seller\_id, product\_id, marketplace, action, payload \(jsonb\), status, error\_message, retry\_count, max\_retries, scheduled\_at, completed\_at\.
-* **`ai_generations`** — TRS writes audit records when Emma/Botsee runs analysis\. Fields: seller\_id, product\_id, input\_image\_url, input\_text, model\_used, output\_listing \(jsonb\), tokens\_used, cost, quality\_score, user\_feedback\.
+* **`ai_generations`** — TRS writes audit records when Emma runs analysis and valuation checks\. Fields: seller\_id, product\_id, input\_image\_url, input\_text, model\_used, output\_listing \(jsonb\), tokens\_used, cost, quality\_score, user\_feedback\.
 * **`integrations`** — TRS manages marketplace OAuth\. Fields: seller\_id, service, access\_token, refresh\_token, token\_expires\_at, credentials \(jsonb\), is\_active, last\_synced\_at, sync\_count\. Unique: `(seller_id, service)`\.
 ## 2\.3 Tables TRS May Read \(context\)
 * **`stash_items`** — legacy inventory\. TRS may read for migration/display but should not write\.
@@ -43,16 +53,20 @@ Supabase Storage bucket `product-images`\. Namespace: `{sellerId}/{timestamp}-{r
 **3\.1 Sync Queue Worker** — No processor exists for `sync_queue`\. Build a worker \(Node cron or Supabase Edge Function\) that: dequeues pending jobs → executes marketplace API calls \(eBay Inventory API, WooCommerce REST\) → updates status/error/completedAt → updates `listings` table\. This unblocks all automated publishing\.
 **3\.2 stash\_items → products Migration Path** — Define a one\-way promotion function: given a `stash_items` row, create/upsert a `products` row with seller\_id, auto\-generated SKU, mapped fields \(aiAnalysis → attributes, estimatedValue → price\)\. This lets existing HG mobile users' inventory become visible to TRS\.
 **3\.3 Shared Auth Contract** — Document how TRS authenticates to the shared Supabase\. Options: \(a\) Supabase Auth JWT pass\-through, \(b\) service\_role key for server\-to\-server\. Decide and implement middleware\.
-## P1 — Emma/Botsee Integration \(Week 2\-3\)
-**3\.4 Emma Analysis API for TRS** — Expose a clean API \(or let TRS call HG's `POST /api/analyze` / `POST /api/analyze/retry` directly\)\. The current endpoint accepts multipart images \+ provider config and returns `AnalysisResult`\. TRS needs: \(a\) to call this with sellerId context, \(b\) to receive structured analysis, \(c\) to persist to `ai_generations`\.
-**3\.5 Botsee Stash\-Critic Hand** — Define a Telegram\-callable interface: user sends item photo\(s\) via Telegram → bot calls Emma analysis → bot returns critique \(authenticity, valuation, market analysis\) formatted for chat\. This is a thin adapter over the existing `analyzeItem()` \+ `analyzeItemWithRetry()` functions\.
+## P1 — Emma Integration \(Week 2\-3\)
+**3\.4 Emma Analysis API for TRS** — Expose a clean API \(or let TRS call HG's `POST /api/analyze` / `POST /api/analyze/retry` directly\)\. The current endpoint accepts multipart images \+ provider config and returns `AnalysisResult`\. TRS needs: \(a\) to call this with sellerId context, \(b\) to receive structured analysis, \(c\) to persist to `ai_generations`, \(d\) to support a follow-up eBay MCP valuation trigger after identification\.
+**3\.5 OpenFang Stash\-Critic Hand** — Define a Telegram\-callable interface: user sends item photo\(s\) via Telegram → bot calls Emma analysis → bot returns critique \(authenticity, valuation, market analysis\) formatted for chat\. This is a thin adapter over the existing `analyzeItem()` \+ `analyzeItemWithRetry()` functions\.
 **3\.6 OpenFang Config Surface in TRS** — TRS admin should be able to configure per\-seller or global OpenFang credentials \(base\_url, api\_key, preferred\_model\)\. Currently stored in `user_settings`; may need a TRS\-specific config table or use `integrations` with service="openfang"\.
 ## P2 — eBay\-MCP Workflows \(Week 3\-4\)
 **3\.7 eBay\-MCP Listing Orchestration** — Wire the sync\_queue worker \(P0\) to the existing `ebay-service.ts` functions: `getAccessToken()`, inventory PUT, offer POST, publish POST, `updateEbayListing()`, `deleteEbayListing()`\. The worker reads `sync_queue.payload` → calls eBay API → writes `listings.marketplace_id`, `status`, `raw_api_response`\.
 **3\.8 eBay Token Lifecycle** — `refreshEbayAccessToken()` exists but isn't called automatically\. The worker must check `integrations.token_expires_at` before each call and refresh if needed, persisting new tokens back to `integrations`\.
 **3\.9 TRS eBay Dashboard** — TRS reads `listings` where marketplace="ebay" and joins to `products` for display\. Show status, sync\_error, price, listing URL\. Allow re\-sync \(enqueue to sync\_queue\)\.
+**3\.9a On\-Demand eBay MCP Value Check** — Add command/API path for:
+\(a\) identified-not-yet-stashed result \(\"Emma check eBay for identified product\"\) and
+\(b\) already stashed item \(\"check eBay now\" from item details\)\.
+Both paths call eBay MCP comps/sold lookup, then update suggested value fields and persist valuation timestamp/history\.
 ## P3 — Telegram \+ Content \(Week 4\-5\)
-**3\.10 Telegram Bot Bridge** — Build a Telegram bot handler that: receives photos → uploads to Supabase Storage → calls Emma analysis → creates `stash_items` or `products` row → sends back formatted critique \(Botsee persona\)\. Optionally enqueue to `sync_queue` for auto\-listing\.
+**3\.10 Telegram Bot Bridge** — Build a Telegram bot handler that: receives photos → uploads to Supabase Storage → calls Emma analysis → optionally calls eBay MCP value check on command → creates `stash_items` or `products` row → sends back formatted critique \(Emma/OpenFang persona\)\. Optionally enqueue to `sync_queue` for auto\-listing\.
 **3\.11 Discover Content Pipeline** — Add `POST /api/articles` endpoint \(admin\-only\) so TRS can create/manage Discover articles\. Hidden\-Gem mobile app already renders them\.
 **3\.12 Notification Bridge** — TRS triggers notifications via the existing `sendPushNotification()` / `sendPriceAlert()` functions\. Expose as API or let TRS write directly to `notifications` table \+ call Expo Push API\.
 # 4 — Risk List & Sequencing
@@ -62,14 +76,15 @@ Supabase Storage bucket `product-images`\. Namespace: `{sellerId}/{timestamp}-{r
 * **RLS vs service\_role**: If TRS uses service\_role key, it bypasses all RLS\. Must implement application\-level authz to prevent cross\-seller data access\.
 * **eBay token expiry**: `refreshEbayAccessToken()` is not called proactively\. A stale token will cause silent failures in the worker\.
 * **OpenFang availability**: No circuit breaker or fallback logic if OpenFang is down\. The retry system \(`analyzeItemWithRetry`\) re\-sends to the same provider\. Need fallback to Gemini/OpenAI\.
+* **eBay MCP latency/rate limits**: Comp lookup can add response latency or fail under rate limits\. Must support async queue fallback and cached last-known valuation\.
 * **Price tracking is naive**: `processPriceChecks()` compares cached AI analysis values, not live market data\. No external price feed\.
 * **No API authentication on Express routes**: All `/api/*` endpoints are unauthenticated\. Anyone with the URL can read/write inventory\. Must add auth middleware before TRS integration\.
 * **Supabase Realtime not configured**: No triggers or subscriptions\. TRS will need to poll or set up Realtime channels\.
 ## 4\.2 Sequencing Recommendation
 1. **Week 1**: Sync queue worker \(3\.1\) \+ API auth middleware \+ shared auth contract \(3\.3\)
 2. **Week 2**: stash→products migration \(3\.2\) \+ Emma analysis API cleanup \(3\.4\)
-3. **Week 3**: Botsee Telegram hand \(3\.5, 3\.10\) \+ OpenFang config in TRS \(3\.6\)
-4. **Week 4**: eBay\-MCP worker integration \(3\.7, 3\.8\) \+ TRS eBay dashboard \(3\.9\)
+3. **Week 3**: OpenFang Telegram hand \(3\.5, 3\.10\) \+ OpenFang config in TRS \(3\.6\)
+4. **Week 4**: eBay\-MCP worker integration \(3\.7, 3\.8\) \+ TRS eBay dashboard \(3\.9\) \+ on-demand valuation command \(3\.9a\)
 5. **Week 5**: Content pipeline \(3\.11\) \+ notification bridge \(3\.12\) \+ Supabase Realtime setup
 ## 4\.3 Dependency Graph
 ```warp-runnable-command
@@ -77,7 +92,18 @@ Supabase Storage bucket `product-images`\. Namespace: `{sellerId}/{timestamp}-{r
                     │
 3.2 (Migration) ────┤
                     │
-3.4 (Emma API) ─→ 3.5 (Botsee) ─→ 3.10 (Telegram)
+3.4 (Emma API) ─→ 3.9a (eBay Value Check) ─→ 3.9 (Dashboard)
+                    │
+                    └──────────────→ 3.5 (OpenFang) ─→ 3.10 (Telegram)
                     │
 3.6 (OF Config) ────┘
 ```
+## 5 — Cloud Run Tonight Readiness
+Final checks before tonight’s cloud run:
+1. Confirm OpenFang is default provider and Gemini fallback is enabled for analyze/retry routes\.
+2. Validate eBay MCP credentials in `integrations` for target seller scope \(token refresh path tested\)\.
+3. Run two acceptance scenarios end-to-end:
+   * **Scenario A**: New scan → identification → command \"Emma check eBay for identified product\" → updated suggested value returned\.
+   * **Scenario B**: Existing stashed item → command \"check eBay now\" → updated suggested value + `lastValuationAt` persisted\.
+4. Ensure queue worker can process `ebay_value_check` actions if sync mode is enabled\.
+5. Capture run artifacts: request/response samples, latency, comp count, and fallback events for post-run review\.

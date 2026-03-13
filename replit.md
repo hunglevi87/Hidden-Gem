@@ -97,6 +97,7 @@ Preferred communication style: Simple, everyday language.
 - High-value publish approval gate: Configurable threshold (default $500), items exceeding threshold require explicit approval before publishing
 - Discover tab: Curated articles with featured card layout
 - Backend API: Express.js with PostgreSQL/Drizzle, marketplace proxy endpoints
+- P0 item 3.3 Shared Auth Contract + API Auth Middleware: Added `server/middleware/auth.ts` and applied auth middleware across API routes in `server/routes.ts`
 - FlipAgent backend: Seller profiles, product inventory, marketplace listings, AI audit trail, sync queue
 
 ### Not Yet Implemented
@@ -106,6 +107,7 @@ Preferred communication style: Simple, everyday language.
 - Onboarding/welcome screen
 
 ## Recent Changes
+- 2026-03-13: Completed P0 item 3.3 (Shared Auth Contract + API Auth Middleware); added `server/middleware/auth.ts` and updated `server/routes.ts` to enforce auth middleware across API routes. Run: https://oz.warp.dev/runs/f9b7026d-0bb6-4ac6-ab40-f914216957d6
 - 2026-03-08: Added OpenFang as multi-model AI routing provider (replaces HuggingFace as secondary model)
 - 2026-03-08: Added natural-language stash search via AI query parsing
 - 2026-03-08: Added human-in-the-loop approval gate for high-value item publishing
@@ -113,3 +115,6 @@ Preferred communication style: Simple, everyday language.
 - 2026-02-06: Added Terms of Service and Privacy Policy screens
 - 2026-02-06: Added environment setup documentation (ENVIRONMENT.md)
 - 2026-02-06: Added E2E testing infrastructure with Maestro
+
+## Next Unblocked Step
+- P0 item 3.1: Sync Queue Worker

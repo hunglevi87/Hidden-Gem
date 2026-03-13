@@ -2,7 +2,7 @@
 
 <cite>
 **Referenced Files in This Document**
-- [Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md](file://Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md)
+- [Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md](file://Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md)
 - [package.json](file://package.json)
 - [ENVIRONMENT.md](file://ENVIRONMENT.md)
 - [design_guidelines.md](file://design_guidelines.md)
@@ -32,7 +32,7 @@
 9. [Conclusion](#conclusion)
 
 ## Introduction
-This document presents the TRS Integration Plan for the HiddenGem project. TRS (The Relic Shop) serves as the storefront/admin consumer and orchestration surface over the shared Supabase infrastructure. The plan focuses on integrating Emma (AI system) and Botsee (stash-critic hand) with TRS, establishing robust marketplace orchestration via a sync queue worker, migrating legacy inventory to the canonical FlipAgent model, and implementing secure authentication and real-time updates.
+This document presents the TRS Integration Plan for the HiddenGem project. TRS (The Relic Shop) serves as the storefront/admin consumer and orchestration surface over the shared Supabase infrastructure. The plan focuses on integrating Emma (AI system) and OpenFang (stash-critic hand) with TRS, establishing robust marketplace orchestration via a sync queue worker, migrating legacy inventory to the canonical FlipAgent model, and implementing secure authentication and real-time updates.
 
 The project leverages a dual-inventory model where legacy `stash_items` coexists with the richer `products`/`listings` schema. TRS must treat `products` as the canonical inventory source and establish clear migration paths and governance to prevent divergence.
 
@@ -93,15 +93,15 @@ Schema --> Migrations
 - **Authentication and RLS**: Supabase-based authentication and RLS policies govern access to seller data and orchestration resources.
 
 **Section sources**
-- [Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md:4-8](file://Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md#L4-L8)
-- [Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md:13-16](file://Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md#L13-L16)
+- [Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md:4-8](file://Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md#L4-L8)
+- [Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md:13-16](file://Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md#L13-L16)
 - [server/ai-providers.ts:334-389](file://server/ai-providers.ts#L334-L389)
 - [server/ebay-service.ts:319-364](file://server/ebay-service.ts#L319-L364)
 - [migrations/0002_rls_policies.sql:1-66](file://migrations/0002_rls_policies.sql#L1-L66)
 
 ## Architecture Overview
 The TRS architecture centers on shared Supabase infrastructure with distinct roles:
-- **Emma/Botsee Hand**: Executes AI analysis and provides critique via Telegram or direct API calls.
+- **Emma/OpenFang Hand**: Executes AI analysis and provides critique via Telegram or direct API calls.
 - **TRS Orchestration**: Manages marketplace OAuth, sync queue processing, and listing lifecycle.
 - **Client Application**: Provides scanning, analysis, and inventory management UI for end-users.
 
@@ -184,7 +184,7 @@ MarkComplete --> Poll
 - [shared/schema.ts:194-208](file://shared/schema.ts#L194-L208)
 
 **Section sources**
-- [Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md:43-43](file://Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md#L43-L43)
+- [Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md:43-43](file://Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md#L43-L43)
 - [server/routes.ts:548-760](file://server/routes.ts#L548-L760)
 - [server/ebay-service.ts:319-364](file://server/ebay-service.ts#L319-L364)
 - [shared/schema.ts:194-208](file://shared/schema.ts#L194-L208)
@@ -214,18 +214,18 @@ API-->>TRS : Structured analysis
 - [shared/schema.ts:179-192](file://shared/schema.ts#L179-L192)
 
 **Section sources**
-- [Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md:47-47](file://Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md#L47-L47)
+- [Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md:47-47](file://Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md#L47-L47)
 - [server/routes.ts:299-385](file://server/routes.ts#L299-L385)
 - [server/ai-providers.ts:437-455](file://server/ai-providers.ts#L437-L455)
 - [shared/schema.ts:179-192](file://shared/schema.ts#L179-L192)
 
-### Botsee Telegram Hand
+### OpenFang Telegram Hand
 A Telegram bot handler should:
 - Receive item photos
 - Upload to Supabase Storage
 - Trigger Emma analysis
 - Create `products` or `stash_items` row
-- Return formatted critique in Botsee persona
+- Return formatted critique in OpenFang persona
 
 ```mermaid
 sequenceDiagram
@@ -249,7 +249,7 @@ Bot-->>User : Formatted critique
 - [server/ai-providers.ts:437-455](file://server/ai-providers.ts#L437-L455)
 
 **Section sources**
-- [Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md:49-49](file://Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md#L49-L49)
+- [Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md:49-49](file://Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md#L49-L49)
 - [server/routes.ts:299-385](file://server/routes.ts#L299-L385)
 - [server/ai-providers.ts:437-455](file://server/ai-providers.ts#L437-L455)
 
@@ -280,7 +280,7 @@ Worker->>Listings : Update marketplace_id, status, raw_api_response
 - [shared/schema.ts:158-177](file://shared/schema.ts#L158-L177)
 
 **Section sources**
-- [Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md:51-53](file://Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md#L51-L53)
+- [Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md:51-53](file://Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md#L51-L53)
 - [server/ebay-service.ts:42-473](file://server/ebay-service.ts#L42-L473)
 - [shared/schema.ts:158-177](file://shared/schema.ts#L158-L177)
 
@@ -306,7 +306,7 @@ ApplyAppAuthZ --> Access
 - [migrations/0002_rls_policies.sql:1-66](file://migrations/0002_rls_policies.sql#L1-L66)
 
 **Section sources**
-- [Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md:45-45](file://Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md#L45-L45)
+- [Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md:45-45](file://Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md#L45-L45)
 - [migrations/0002_rls_policies.sql:1-66](file://migrations/0002_rls_policies.sql#L1-L66)
 
 ### Database Contracts and Migrations
@@ -481,10 +481,10 @@ Common issues and resolutions:
 - **Supabase Realtime**: Configure Realtime subscriptions or triggers for live updates on `products`, `listings`, and `sync_queue`.
 
 **Section sources**
-- [Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md:59-67](file://Hidden-Gem → TRS Integration Plan_ Emma_Botsee + eBay-MCP.md#L59-L67)
+- [Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md:59-67](file://Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md#L59-L67)
 - [server/routes.ts:44-800](file://server/routes.ts#L44-L800)
 - [server/ebay-service.ts:319-364](file://server/ebay-service.ts#L319-L364)
 - [shared/schema.ts:194-208](file://shared/schema.ts#L194-L208)
 
 ## Conclusion
-The TRS Integration Plan establishes a clear path to unify Emma/Botsee capabilities with TRS orchestration. By implementing a sync queue worker, migrating legacy inventory to the canonical `products` model, securing authentication with RLS-aware access controls, and integrating eBay MCP workflows, TRS can achieve automated, reliable, and scalable marketplace publishing. The phased sequencing prioritizes foundational components first, ensuring a robust and maintainable system.
+The TRS Integration Plan establishes a clear path to unify Emma/OpenFang capabilities with TRS orchestration. By implementing a sync queue worker, migrating legacy inventory to the canonical `products` model, securing authentication with RLS-aware access controls, and integrating eBay MCP workflows, TRS can achieve automated, reliable, and scalable marketplace publishing. The phased sequencing prioritizes foundational components first, ensuring a robust and maintainable system.

@@ -108,7 +108,7 @@ export default function AIProvidersScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
 
-  const [activeProvider, setActiveProvider] = useState<AIProvider>("gemini");
+  const [activeProvider, setActiveProvider] = useState<AIProvider>("openfang");
   const [geminiKey, setGeminiKey] = useState("");
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [openaiKey, setOpenaiKey] = useState("");
