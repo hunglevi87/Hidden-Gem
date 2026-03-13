@@ -3,6 +3,7 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { processPriceChecks } from "./services/notification";
+import { startSyncWorker, stopSyncWorker } from "./services/sync-worker";
 import { db } from "./db";
 import * as fs from "fs";
 import * as path from "path";
@@ -244,6 +245,9 @@ function setupErrorHandler(app: express.Application) {
     () => {
       log(`express server serving on port ${port}`);
 
+      // Start sync queue worker (polls every 15 seconds)
+      startSyncWorker(15_000);
+
       // Schedule price check every 6 hours
       const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
       setInterval(async () => {
@@ -258,4 +262,16 @@ function setupErrorHandler(app: express.Application) {
       log("Price check scheduled every 6 hours");
     },
   );
+
+  // Graceful shutdown
+  const shutdown = () => {
+    log("Shutting down…");
+    stopSyncWorker();
+    server.close(() => {
+      log("Server closed");
+      process.exit(0);
+    });
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 })();
