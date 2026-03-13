@@ -1001,7 +1001,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // --- Sync queue inspection (read-only for now) ---
+  // --- Sync queue endpoints ---
 
   app.get("/api/sync-queue", async (req: Request, res: Response) => {
     try {
@@ -1016,6 +1016,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching sync queue:", error);
       res.status(500).json({ error: "Failed to fetch sync queue" });
+    }
+  });
+
+  app.get("/api/sync-queue/:id", async (req: Request, res: Response) => {
+    try {
+      const [job] = await db
+        .select()
+        .from(syncQueue)
+        .where(eq(syncQueue.id, req.params.id));
+      if (!job) return res.status(404).json({ error: "Sync job not found" });
+      res.json(job);
+    } catch (error) {
+      console.error("Error fetching sync job:", error);
+      res.status(500).json({ error: "Failed to fetch sync job" });
+    }
+  });
+
+  app.post("/api/sync-queue", async (req: Request, res: Response) => {
+    try {
+      const { sellerId, productId, marketplace, action, payload, scheduledAt, maxRetries } = req.body;
+      if (!sellerId || !productId || !marketplace || !action) {
+        return res.status(400).json({
+          error: "sellerId, productId, marketplace, and action are required",
+        });
+      }
+
+      const validActions = [
+        "ebay_create_listing", "ebay_update_listing", "ebay_delete_listing", "ebay_value_check",
+        "woo_create_listing", "woo_update_listing", "woo_delete_listing",
+      ];
+      if (!validActions.includes(action)) {
+        return res.status(400).json({
+          error: `Invalid action. Must be one of: ${validActions.join(", ")}`,
+        });
+      }
+
+      const [job] = await db
+        .insert(syncQueue)
+        .values({
+          sellerId,
+          productId,
+          marketplace,
+          action,
+          payload: payload || {},
+          status: "pending",
+          retryCount: 0,
+          maxRetries: maxRetries ?? 3,
+          scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
+        })
+        .returning();
+
+      res.status(201).json(job);
+    } catch (error) {
+      console.error("Error enqueuing sync job:", error);
+      res.status(500).json({ error: "Failed to enqueue sync job" });
+    }
+  });
+
+  app.post("/api/sync-queue/:id/retry", async (req: Request, res: Response) => {
+    try {
+      const [job] = await db
+        .select()
+        .from(syncQueue)
+        .where(eq(syncQueue.id, req.params.id));
+      if (!job) return res.status(404).json({ error: "Sync job not found" });
+
+      if (job.status !== "failed" && job.status !== "retry") {
+        return res.status(400).json({
+          error: `Cannot retry job with status "${job.status}". Only failed or retry jobs can be retried.`,
+        });
+      }
+
+      const [updated] = await db
+        .update(syncQueue)
+        .set({
+          status: "pending",
+          retryCount: 0,
+          errorMessage: null,
+          completedAt: null,
+          scheduledAt: new Date(),
+        })
+        .where(eq(syncQueue.id, req.params.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error retrying sync job:", error);
+      res.status(500).json({ error: "Failed to retry sync job" });
+    }
+  });
+
+  app.post("/api/sync-queue/:id/cancel", async (req: Request, res: Response) => {
+    try {
+      const [job] = await db
+        .select()
+        .from(syncQueue)
+        .where(eq(syncQueue.id, req.params.id));
+      if (!job) return res.status(404).json({ error: "Sync job not found" });
+
+      if (job.status !== "pending" && job.status !== "retry") {
+        return res.status(400).json({
+          error: `Cannot cancel job with status "${job.status}". Only pending or retry jobs can be cancelled.`,
+        });
+      }
+
+      const [updated] = await db
+        .update(syncQueue)
+        .set({
+          status: "cancelled",
+          completedAt: new Date(),
+          errorMessage: "Cancelled by user",
+        })
+        .where(eq(syncQueue.id, req.params.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error cancelling sync job:", error);
+      res.status(500).json({ error: "Failed to cancel sync job" });
     }
   });
 
