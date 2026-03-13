@@ -16,6 +16,7 @@
 - [client/screens/AIProvidersScreen.tsx](file://client/screens/AIProvidersScreen.tsx)
 - [server/ai-providers.ts](file://server/ai-providers.ts)
 - [client/screens/ItemDetailsScreen.tsx](file://client/screens/ItemDetailsScreen.tsx)
+- [server/routes.ts](file://server/routes.ts)
 </cite>
 
 ## Update Summary
@@ -126,10 +127,13 @@ text gemini_api_key
 text huggingface_api_key
 text preferred_gemini_model
 text preferred_huggingface_model
-text woocommerce_url
-text woocommerce_key
-text woocommerce_secret
-text ebay_token
+text openai_api_key
+text openai_model
+text anthropic_api_key
+text anthropic_model
+text custom_ai_endpoint
+text custom_ai_api_key
+text custom_ai_model_name
 text openfang_api_key
 text openfang_base_url
 text preferred_openfang_model
@@ -691,7 +695,7 @@ MIG4 -.-> SNAP
 
 ## Performance Considerations
 - Indexes:
-  - products: seller_id, (seller_id, sku) unique.
+  - products: seller_id, (sellerId, sku) unique.
   - listings: seller_id, marketplace; composite (seller_id, marketplace).
   - integrations: seller_id.
   - sync_queue: status, scheduled_at.
@@ -808,7 +812,7 @@ Hidden-Gem's schema cleanly separates user-centric and marketplace domains while
 
 - **Gemini**: Default provider with configurable model selection
 - **Hugging Face**: Custom model configuration
-- **OpenFang**: Enterprise-grade AI with configurable API endpoint and model selection
+- **OpenFang**: Enterprise-grade AI with automatic model routing and vision-first processing
 - **OpenAI**: Standard OpenAI integration
 - **Anthropic**: Claude AI integration
 - **Custom/Local**: Ollama, LM Studio, or any OpenAI-compatible API
@@ -838,3 +842,19 @@ Configuration includes API keys, base URLs, and model preferences stored in user
 - [shared/schema.ts:28](file://shared/schema.ts#L28)
 - [client/screens/ItemDetailsScreen.tsx:545-589](file://client/screens/ItemDetailsScreen.tsx#L545-L589)
 - [server/ai-providers.ts:334-389](file://server/ai-providers.ts#L334-L389)
+
+### OpenFang AI Provider Integration
+**New** Hidden-Gem now includes comprehensive OpenFang AI provider support:
+
+- **Enterprise Integration**: OpenFang provides multi-model AI routing with automatic vision model selection
+- **Automatic Model Routing**: The system can automatically route requests to optimal models based on content type
+- **Vision-First Processing**: Automatic preference for vision-capable models when analyzing images
+- **Fallback Support**: Graceful fallback to Gemini when OpenFang is unavailable
+- **Configuration Options**: Users can specify custom API keys, base URLs, and preferred models
+- **API Endpoints**: Supports both standard OpenFang endpoints and custom OpenAI-compatible APIs
+
+**Section sources**
+- [server/ai-providers.ts:334-389](file://server/ai-providers.ts#L334-L389)
+- [client/screens/AIProvidersScreen.tsx:523-604](file://client/screens/AIProvidersScreen.tsx#L523-L604)
+- [server/routes.ts:323-346](file://server/routes.ts#L323-L346)
+- [server/routes.ts:775-802](file://server/routes.ts#L775-L802)

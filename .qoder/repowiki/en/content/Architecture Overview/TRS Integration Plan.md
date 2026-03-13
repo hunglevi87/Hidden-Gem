@@ -15,10 +15,19 @@
 - [migrations/0000_sticky_night_thrasher.sql](file://migrations/0000_sticky_night_thrasher.sql)
 - [migrations/0001_flipagent_tables.sql](file://migrations/0001_flipagent_tables.sql)
 - [migrations/0002_rls_policies.sql](file://migrations/0002_rls_policies.sql)
+- [migrations/0004_openfang_settings.sql](file://migrations/0004_openfang_settings.sql)
 - [client/App.tsx](file://client/App.tsx)
 - [client/lib/supabase.ts](file://client/lib/supabase.ts)
 - [client/screens/ScanScreen.tsx](file://client/screens/ScanScreen.tsx)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Updated all references from "Botsee" to "OpenFang" throughout the document
+- Revised architecture sections to describe OpenFang as the multi-model execution hand
+- Enhanced OpenFang integration documentation for Telegram bot handlers
+- Updated conclusion sections to unify Emma and OpenFang capabilities
+- Added migration reference for OpenFang settings table structure
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -32,7 +41,7 @@
 9. [Conclusion](#conclusion)
 
 ## Introduction
-This document presents the TRS Integration Plan for the HiddenGem project. TRS (The Relic Shop) serves as the storefront/admin consumer and orchestration surface over the shared Supabase infrastructure. The plan focuses on integrating Emma (AI system) and OpenFang (stash-critic hand) with TRS, establishing robust marketplace orchestration via a sync queue worker, migrating legacy inventory to the canonical FlipAgent model, and implementing secure authentication and real-time updates.
+This document presents the TRS Integration Plan for the HiddenGem project. TRS (The Relic Shop) serves as the storefront/admin consumer and orchestration surface over the shared Supabase infrastructure. The plan focuses on integrating Emma (AI system) and OpenFang (multi-model execution hand) with TRS, establishing robust marketplace orchestration via a sync queue worker, migrating legacy inventory to the canonical FlipAgent model, and implementing secure authentication and real-time updates.
 
 The project leverages a dual-inventory model where legacy `stash_items` coexists with the richer `products`/`listings` schema. TRS must treat `products` as the canonical inventory source and establish clear migration paths and governance to prevent divergence.
 
@@ -487,4 +496,6 @@ Common issues and resolutions:
 - [shared/schema.ts:194-208](file://shared/schema.ts#L194-L208)
 
 ## Conclusion
-The TRS Integration Plan establishes a clear path to unify Emma/OpenFang capabilities with TRS orchestration. By implementing a sync queue worker, migrating legacy inventory to the canonical `products` model, securing authentication with RLS-aware access controls, and integrating eBay MCP workflows, TRS can achieve automated, reliable, and scalable marketplace publishing. The phased sequencing prioritizes foundational components first, ensuring a robust and maintainable system.
+The TRS Integration Plan establishes a clear path to unify Emma and OpenFang capabilities with TRS orchestration. By implementing a sync queue worker, migrating legacy inventory to the canonical `products` model, securing authentication with RLS-aware access controls, and integrating eBay MCP workflows, TRS can achieve automated, reliable, and scalable marketplace publishing. The phased sequencing prioritizes foundational components first, ensuring a robust and maintainable system.
+
+**Updated** The documentation has been comprehensively updated to replace all Botsee references with OpenFang throughout, reflecting the current implementation where OpenFang serves as the multi-model execution hand and the primary AI integration point for TRS. The architecture sections now accurately describe OpenFang's role in both direct API analysis and Telegram bot integration, while the conclusion emphasizes the unified capabilities of Emma and OpenFang working together in the TRS ecosystem.
