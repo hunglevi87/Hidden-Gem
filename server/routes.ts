@@ -7,7 +7,15 @@ import { db } from "./db";
 import { articles, stashItems, userSettings, products, sellers, listingsTable, syncQueue } from "@shared/schema";
 import { eq, desc, count, and, ilike, lte, gte, or, SQL } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
-import { testProviderConnection, AIProviderConfig, analyzeItemWithRetry, AnalysisResult } from "./ai-providers";
+import { 
+  testProviderConnection, 
+  AIProviderConfig, 
+  analyzeItemWithRetry, 
+  AnalysisResult,
+  analyzeWithFallback,
+  correctAnalysis,
+  AIProviderType
+} from "./ai-providers";
 import { generateSEOTitle, generateDescription, generateTags, createAIRecord } from "./ai-seo";
 import { uploadProductImage, deleteProductImage } from "./supabase-storage";
 import {
@@ -302,85 +310,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ]), async (req: Request, res: Response) => {
     try {
       const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      const userId = req.body.userId || "anonymous";
       
       const fullImageFile = files?.fullImage?.[0];
       const labelImageFile = files?.labelImage?.[0];
 
-      const prompt = `You are an expert appraiser and reseller assistant. Analyze this collectible/vintage item and provide a detailed assessment.
-
-Based on the images provided (one showing the full item and one showing the label/tag), please provide:
-1. A clear, descriptive title for the item
-2. A detailed description suitable for a listing
-3. The category (e.g., Handbag, Watch, Clothing, Electronics, Collectible, etc.)
-4. An estimated resale value range (e.g., "$150-$200")
-5. The condition (Excellent, Very Good, Good, Fair, Poor)
-6. An SEO-optimized title for online listings
-7. An SEO-optimized description
-8. 5-10 relevant SEO keywords
-9. 3-5 relevant tags for categorization
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "title": "Item title",
-  "description": "Detailed description...",
-  "category": "Category name",
-  "estimatedValue": "$XX-$XX",
-  "condition": "Condition rating",
-  "seoTitle": "SEO optimized title",
-  "seoDescription": "SEO optimized description...",
-  "seoKeywords": ["keyword1", "keyword2", "keyword3"],
-  "tags": ["tag1", "tag2", "tag3"]
-}`;
-
-      const parts: any[] = [{ text: prompt }];
-
-      if (fullImageFile) {
-        parts.push({
-          inlineData: {
-            mimeType: fullImageFile.mimetype,
-            data: fullImageFile.buffer.toString("base64"),
-          },
-        });
+      if (!fullImageFile) {
+        return res.status(400).json({ error: "Full image is required" });
       }
 
-      if (labelImageFile) {
-        parts.push({
-          inlineData: {
-            mimeType: labelImageFile.mimetype,
-            data: labelImageFile.buffer.toString("base64"),
-          },
-        });
-      }
+      // 1. Get user configuration
+      const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+      
+      const provider = (req.body.provider as AIProviderType) || (settings?.openfangApiKey ? "openfang" : "gemini");
+      const config: AIProviderConfig = {
+        provider,
+        apiKey: (req.body.apiKey as string | undefined) || (provider === "openfang" ? settings?.openfangApiKey || undefined : settings?.geminiApiKey || undefined),
+        endpoint: (req.body.endpoint as string | undefined) || (provider === "openfang" ? settings?.openfangBaseUrl || undefined : undefined),
+        model: (req.body.model as string | undefined) || (provider === "openfang" ? settings?.preferredOpenfangModel || undefined : settings?.preferredGeminiModel || undefined),
+        secondaryProvider: settings?.huggingfaceApiKey ? "custom" : undefined,
+        secondaryApiKey: settings?.huggingfaceApiKey || undefined,
+        secondaryEndpoint: settings?.huggingfaceApiKey ? process.env.HUGGINGFACE_CUSTOM_ENDPOINT : undefined,
+      };
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts }],
-        config: {
-          responseMimeType: "application/json",
-        },
+      // 2. Prepare images
+      const images = [];
+      images.push({
+        mimeType: fullImageFile.mimetype,
+        data: fullImageFile.buffer.toString("base64"),
       });
 
-      const text = response.text || "";
-      
-      try {
-        const result = JSON.parse(text);
-        res.json(result);
-      } catch (parseError) {
-        res.json({
-          title: "Vintage Item",
-          description: "A vintage collectible item in good condition.",
-          category: "Collectible",
-          estimatedValue: "$50-$100",
-          condition: "Good",
-          seoTitle: "Vintage Collectible Item for Sale",
-          seoDescription: "Authentic vintage collectible in excellent condition. Perfect for collectors.",
-          seoKeywords: ["vintage", "collectible", "antique"],
-          tags: ["vintage", "collectible"],
+      if (labelImageFile) {
+        images.push({
+          mimeType: labelImageFile.mimetype,
+          data: labelImageFile.buffer.toString("base64"),
         });
       }
-    } catch (error) {
+
+      // 3. Analyze with fallback
+      console.log(`Starting analysis for user ${userId} with primary provider ${config.provider}`);
+      let result = await analyzeWithFallback(images, config);
+
+      // 4. Run correction pass if secondary provider is configured
+      if (config.secondaryProvider || process.env.OPENFANG_API_KEY) {
+        console.log("Running correction pass...");
+        result = await correctAnalysis(result, config);
+      }
+      
+      res.json(result);
+    } catch (error: any) {
       console.error("Error analyzing item:", error);
-      res.status(500).json({ error: "Failed to analyze item" });
+      res.status(500).json({ error: error.message || "Failed to analyze item" });
     }
   });
 
@@ -1033,6 +1013,59 @@ Respond ONLY with valid JSON in this exact format:
     } catch (error) {
       console.error("Error fetching sync queue:", error);
       res.status(500).json({ error: "Failed to fetch sync queue" });
+    }
+  });
+
+  app.post("/api/seo/generate", async (req: Request, res: Response) => {
+    try {
+      const { itemId, userId } = req.body;
+      if (!itemId) {
+        return res.status(400).json({ error: "Item ID is required" });
+      }
+
+      // 1. Get the item and its current analysis
+      const [item] = await db.select().from(stashItems).where(eq(stashItems.id, parseInt(itemId)));
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+
+      if (!item.aiAnalysis) {
+        return res.status(400).json({ error: "Item has no AI analysis to optimize" });
+      }
+
+      // 2. Get user configuration for AI
+      const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId || item.userId));
+      
+      const provider = (settings?.openfangApiKey ? "openfang" : "gemini");
+      const config: AIProviderConfig = {
+        provider: provider as AIProviderType,
+        apiKey: provider === "openfang" ? settings?.openfangApiKey || undefined : settings?.geminiApiKey || undefined,
+        endpoint: provider === "openfang" ? settings?.openfangBaseUrl || undefined : undefined,
+        model: provider === "openfang" ? settings?.preferredOpenfangModel || undefined : settings?.preferredGeminiModel || undefined,
+        secondaryProvider: settings?.openfangApiKey && settings?.geminiApiKey ? "gemini" : undefined,
+      };
+
+      // 3. Generate SEO Listing
+      const { generateSEOListing } = await import("./ai-providers");
+      const optimizedResult = await generateSEOListing(item.aiAnalysis as AnalysisResult, config);
+
+      // 4. Update the item in the database
+      const [updatedItem] = await db.update(stashItems)
+        .set({
+          title: optimizedResult.title,
+          seoTitle: optimizedResult.seoTitle || optimizedResult.title,
+          seoDescription: optimizedResult.seoDescription || optimizedResult.description,
+          seoKeywords: optimizedResult.seoKeywords || [],
+          aiAnalysis: optimizedResult,
+          updatedAt: new Date()
+        })
+        .where(eq(stashItems.id, parseInt(itemId)))
+        .returning();
+
+      res.json(updatedItem);
+    } catch (error: any) {
+      console.error("Error generating SEO listing:", error);
+      res.status(500).json({ error: error.message || "Failed to generate SEO listing" });
     }
   });
 

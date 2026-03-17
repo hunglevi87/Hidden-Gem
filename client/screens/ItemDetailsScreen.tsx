@@ -64,6 +64,7 @@ interface StashItem {
   woocommerceUrl: string | null;
   ebayUrl: string | null;
   aiAnalysis: AIAnalysis | null;
+  userId: string;
   createdAt: string;
 }
 
@@ -95,6 +96,7 @@ export default function ItemDetailsScreen() {
   const [ebayConnected, setEbayConnected] = useState(false);
   const [publishingWoo, setPublishingWoo] = useState(false);
   const [publishingEbay, setPublishingEbay] = useState(false);
+  const [generatingSEO, setGeneratingSEO] = useState(false);
   const [approvalGate, setApprovalGate] = useState<{
     visible: boolean;
     platform: "woocommerce" | "ebay" | null;
@@ -294,6 +296,35 @@ export default function ItemDetailsScreen() {
     setApprovalGate({ visible: false, platform: null, suggestedPrice: 0, threshold: 500, message: "" });
   };
 
+  const handleGenerateSEOListing = async () => {
+    if (!item) return;
+
+    setGeneratingSEO(true);
+    try {
+      const response = await apiRequest("POST", "/api/seo/generate", {
+        itemId: item.id,
+        userId: item.userId || "demo-user",
+      });
+      
+      const updatedItem = await response.json();
+      
+      if (updatedItem.id) {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        Alert.alert("Success", "SEO listing generated and updated successfully!");
+        queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
+      } else {
+        Alert.alert("Error", "Failed to generate SEO listing");
+      }
+    } catch (error: any) {
+      console.error("SEO Generation error:", error);
+      Alert.alert("Error", error.message || "Failed to generate SEO listing");
+    } finally {
+      setGeneratingSEO(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <ThemedView style={styles.container}>
@@ -464,7 +495,28 @@ export default function ItemDetailsScreen() {
           {/* Market Value Analysis Section */}
           {item.aiAnalysis?.marketAnalysis && (
             <View style={styles.section}>
-              <ThemedText style={styles.sectionLabel}>Market Value Analysis</ThemedText>
+              <View style={styles.sectionHeaderRow}>
+                <ThemedText style={styles.sectionLabel}>Market Value Analysis</ThemedText>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.generateButton,
+                    pressed && { opacity: 0.7 },
+                    generatingSEO && { opacity: 0.5 },
+                  ]}
+                  onPress={handleGenerateSEOListing}
+                  disabled={generatingSEO}
+                  testID="button-generate-seo"
+                >
+                  {generatingSEO ? (
+                    <ActivityIndicator size="small" color={Colors.dark.primary} />
+                  ) : (
+                    <>
+                      <Feather name="zap" size={14} color={Colors.dark.primary} style={{ marginRight: 4 }} />
+                      <ThemedText style={styles.generateButtonText}>Generate Listing</ThemedText>
+                    </>
+                  )}
+                </Pressable>
+              </View>
               <View style={styles.marketCard}>
                 <ThemedText style={styles.marketText}>
                   {item.aiAnalysis.marketAnalysis}
@@ -955,6 +1007,28 @@ const styles = StyleSheet.create({
     color: Colors.dark.text,
     flex: 1,
     lineHeight: 22,
+  },
+
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.sm,
+  },
+  generateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+  },
+  generateButtonText: {
+    color: Colors.dark.primary,
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   // Market Analysis Section Styles

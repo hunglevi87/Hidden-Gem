@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import MainTabNavigator from "@/navigation/MainTabNavigator";
 import AuthScreen from "@/screens/AuthScreen";
+import OnboardingScreen from "@/screens/OnboardingScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import ItemDetailsScreen from "@/screens/ItemDetailsScreen";
 import AnalysisScreen from "@/screens/AnalysisScreen";
@@ -14,8 +15,10 @@ import AIProvidersScreen from "@/screens/AIProvidersScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { Colors } from "@/constants/theme";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type RootStackParamList = {
+  Onboarding: undefined;
   Auth: undefined;
   Main: undefined;
   Settings: undefined;
@@ -33,12 +36,20 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootStackNavigator() {
   const screenOptions = useScreenOptions();
-  const { isAuthenticated, loading, isConfigured } = useAuthContext();
+  const { isAuthenticated, loading: authLoading, isConfigured } = useAuthContext();
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
 
-  if (loading) {
+  useEffect(() => {
+    AsyncStorage.getItem("onboarding_complete").then((value) => {
+      setOnboardingComplete(value === "true");
+    });
+  }, []);
+
+  if (authLoading || onboardingComplete === null) {
     return null;
   }
 
+  const showOnboarding = !onboardingComplete;
   const showAuthScreen = !isAuthenticated && isConfigured;
 
   return (
@@ -47,7 +58,15 @@ export default function RootStackNavigator() {
         ...screenOptions,
         contentStyle: { backgroundColor: Colors.dark.backgroundRoot },
       }}
+      initialRouteName={showOnboarding ? "Onboarding" : (showAuthScreen ? "Auth" : "Main")}
     >
+      {showOnboarding && (
+        <Stack.Screen
+          name="Onboarding"
+          component={OnboardingScreen}
+          options={{ headerShown: false }}
+        />
+      )}
       {showAuthScreen ? (
         <Stack.Screen
           name="Auth"

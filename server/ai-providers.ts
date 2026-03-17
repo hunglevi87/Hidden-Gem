@@ -7,6 +7,10 @@ export interface AIProviderConfig {
   apiKey?: string;
   endpoint?: string;
   model?: string;
+  secondaryProvider?: AIProviderType;
+  secondaryApiKey?: string;
+  secondaryEndpoint?: string;
+  secondaryModel?: string;
 }
 
 export interface AnalysisResult {
@@ -225,8 +229,13 @@ async function analyzeWithGemini(
   images: ImageInput[],
   config: AIProviderConfig
 ): Promise<AnalysisResult> {
+  const apiKey = config.apiKey || process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini API key is required");
+  }
+
   const ai = new GoogleGenAI({
-    apiKey: config.apiKey || process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
+    apiKey,
     httpOptions: {
       apiVersion: config.apiKey ? "v1beta" : "",
       baseUrl: config.apiKey ? undefined : process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
@@ -245,6 +254,181 @@ async function analyzeWithGemini(
   });
 
   return parseAnalysisResult(response.text || "");
+}
+
+async function analyzeWithHuggingFace(
+  images: ImageInput[],
+  config: AIProviderConfig
+): Promise<AnalysisResult> {
+  const endpoint = config.endpoint || process.env.HUGGINGFACE_CUSTOM_ENDPOINT;
+  const apiKey = config.apiKey || process.env.HUGGINGFACE_API_KEY;
+
+  if (!endpoint) {
+    throw new Error("HuggingFace custom endpoint is required");
+  }
+
+  const content: any[] = [{ type: "text", text: ANALYSIS_PROMPT }];
+  for (const img of images) {
+    content.push({
+      type: "image_url",
+      image_url: { url: `data:${img.mimeType};base64,${img.data}` },
+    });
+  }
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiKey) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
+  }
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model: config.model || "tgi",
+      messages: [{ role: "user", content }],
+      max_tokens: 2048,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || `HuggingFace API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content || data.generated_text || "";
+  return parseAnalysisResult(text);
+}
+
+export async function analyzeWithFallback(
+  images: ImageInput[],
+  userConfig: AIProviderConfig
+): Promise<AnalysisResult> {
+  const fallbacks: AIProviderConfig[] = [
+    userConfig, // Primary
+    { 
+      provider: "openfang", 
+      apiKey: process.env.OPENFANG_API_KEY, 
+      endpoint: process.env.OPENFANG_BASE_URL 
+    },
+    { 
+      provider: "custom", // Used for HuggingFace via custom endpoint
+      endpoint: process.env.HUGGINGFACE_CUSTOM_ENDPOINT,
+      apiKey: process.env.HUGGINGFACE_API_KEY
+    },
+    { 
+      provider: "gemini", 
+      apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+      endpoint: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL
+    }
+  ];
+
+  let lastError: Error | null = null;
+
+  for (const config of fallbacks) {
+    try {
+      if (config.provider === "custom" && !config.endpoint) continue;
+      if (config.provider === "openfang" && (!config.apiKey || !config.endpoint)) continue;
+      if (config.provider === "gemini" && !config.apiKey) continue;
+
+      console.log(`Attempting analysis with provider: ${config.provider}`);
+      const result = await analyzeItem(config, images);
+      return result;
+    } catch (error: any) {
+      console.warn(`Provider ${config.provider} failed: ${error.message}`);
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("All AI providers failed");
+}
+
+const CORRECTION_PROMPT = `You are a marketplace listing specialist. Review the following appraisal result and improve it. 
+Catch any errors, enhance SEO fields (title, description, keywords), and ensure the formatting is perfect for marketplaces like eBay and WooCommerce.
+
+## INITIAL APPRAISAL
+{initialResult}
+
+## YOUR TASK
+- Review and refine the title and descriptions for maximum conversion
+- Improve the SEO keywords and tags
+- Double check if the category and suggested price seem reasonable
+- Correct any obvious formatting issues
+
+Respond ONLY with valid JSON following the same schema as the initial appraisal.`;
+
+export async function correctAnalysis(
+  initialResult: AnalysisResult,
+  config: AIProviderConfig
+): Promise<AnalysisResult> {
+  const secondaryProvider = config.secondaryProvider || (process.env.OPENFANG_API_KEY ? "openfang" : null);
+  
+  if (!secondaryProvider) {
+    console.log("No secondary provider configured for correction pass, skipping.");
+    return initialResult;
+  }
+
+  const secondaryConfig: AIProviderConfig = {
+    provider: secondaryProvider as AIProviderType,
+    apiKey: config.secondaryApiKey || (secondaryProvider === "openfang" ? process.env.OPENFANG_API_KEY : process.env.HUGGINGFACE_API_KEY),
+    endpoint: config.secondaryEndpoint || (secondaryProvider === "openfang" ? process.env.OPENFANG_BASE_URL : process.env.HUGGINGFACE_CUSTOM_ENDPOINT),
+    model: config.secondaryModel
+  };
+
+  const prompt = CORRECTION_PROMPT.replace("{initialResult}", JSON.stringify(initialResult, null, 2));
+
+  try {
+    console.log(`Running correction pass with provider: ${secondaryConfig.provider}`);
+    
+    // We use a simplified text-only call for correction since images were already processed
+    let text = "";
+    if (secondaryConfig.provider === "openfang") {
+      const baseUrl = (secondaryConfig.endpoint || "").replace(/\/+$/, "");
+      const url = baseUrl.includes("/v1/chat/completions") ? baseUrl : `${baseUrl}/v1/chat/completions`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${secondaryConfig.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: secondaryConfig.model || "auto",
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        text = data.choices?.[0]?.message?.content || "";
+      }
+    } else {
+      // Fallback to custom endpoint (HuggingFace compatible)
+      if (secondaryConfig.endpoint) {
+        const response = await fetch(secondaryConfig.endpoint, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${secondaryConfig.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: prompt }],
+          }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          text = data.choices?.[0]?.message?.content || data.generated_text || "";
+        }
+      }
+    }
+
+    if (text) {
+      return parseAnalysisResult(text);
+    }
+  } catch (error: any) {
+    console.warn(`Correction pass failed: ${error.message}. Returning initial result.`);
+  }
+
+  return initialResult;
 }
 
 async function analyzeWithOpenAI(
@@ -432,6 +616,114 @@ async function analyzeWithCustom(
   const data = await response.json();
   const text = data.choices?.[0]?.message?.content || "";
   return parseAnalysisResult(text);
+}
+
+const SEO_GENERATION_PROMPT = `You are a marketplace listing specialist. Based on the provided item appraisal, generate a high-converting, search-optimized listing for eBay and WooCommerce.
+
+## APPRAISAL DATA
+{initialResult}
+
+## YOUR TASK
+Generate a polished SEO-ready listing including:
+1. title: eBay-compliant title (max 80 chars), optimized with keywords (Brand, Model, Material, Size, Condition).
+2. fullDescription: A rich, professional HTML description. Include a clear headline, condition details in bullet points, key features, and dimensions.
+3. seoKeywords: 10+ relevant SEO keyword tags for search ranking.
+4. aspects: Detailed item specifics (material, era, size, color, style).
+5. ebayCategoryId: Suggest the most accurate eBay category ID.
+6. wooCategory: Suggest the most appropriate WooCommerce category name.
+
+Respond ONLY with valid JSON following the appraisal schema. Ensure the listing is persuasive and optimized for marketplace search algorithms.`;
+
+export async function generateSEOListing(
+  item: AnalysisResult,
+  config: AIProviderConfig
+): Promise<AnalysisResult> {
+  const prompt = SEO_GENERATION_PROMPT.replace("{initialResult}", JSON.stringify(item, null, 2));
+  
+  // Use primary provider for SEO generation
+  const seoConfig = { ...config };
+  
+  try {
+    console.log(`Generating SEO listing with provider: ${seoConfig.provider}`);
+    
+    // Using analyzeItem but with a text-only prompt if possible, or just re-sending the same images if we had them.
+    // However, the task says "call Gemini (or active provider) with a rich SEO-specific prompt".
+    // Since we already have the analysis, we can do a text-to-text generation.
+    
+    let text = "";
+    if (seoConfig.provider === "gemini") {
+      const apiKey = seoConfig.apiKey || process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+      const ai = new GoogleGenAI({
+        apiKey: apiKey!,
+        httpOptions: {
+          apiVersion: seoConfig.apiKey ? "v1beta" : "",
+          baseUrl: seoConfig.apiKey ? undefined : process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+        },
+      });
+      const response = await ai.models.generateContent({
+        model: seoConfig.model || "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        config: { responseMimeType: "application/json" },
+      });
+      text = response.text || "";
+    } else if (seoConfig.provider === "openfang") {
+      const baseUrl = (seoConfig.endpoint || process.env.OPENFANG_BASE_URL || "").replace(/\/+$/, "");
+      const url = baseUrl.includes("/v1/chat/completions") ? baseUrl : `${baseUrl}/v1/chat/completions`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${seoConfig.apiKey || process.env.OPENFANG_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: seoConfig.model || "auto",
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        text = data.choices?.[0]?.message?.content || "";
+      }
+    } else {
+      // Generic fallback for other providers (OpenAI, Anthropic, Custom)
+      // For brevity, we'll try a generic fetch if it's OpenAI-compatible
+      const baseUrl = seoConfig.endpoint || (seoConfig.provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "");
+      if (baseUrl) {
+        const response = await fetch(baseUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${seoConfig.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: seoConfig.model || "default",
+            messages: [{ role: "user", content: prompt }],
+          }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          text = data.choices?.[0]?.message?.content || "";
+        }
+      }
+    }
+
+    if (text) {
+      let result = parseAnalysisResult(text);
+      
+      // If OpenFang is configured as secondary, run a secondary pass to refine further
+      if (config.secondaryProvider === "openfang" || (!config.secondaryProvider && process.env.OPENFANG_API_KEY)) {
+        console.log("Running OpenFang refinement pass for SEO...");
+        result = await correctAnalysis(result, config);
+      }
+      
+      return result;
+    }
+  } catch (error: any) {
+    console.warn(`SEO generation failed: ${error.message}. Returning initial item.`);
+  }
+
+  return item;
 }
 
 export async function analyzeItem(

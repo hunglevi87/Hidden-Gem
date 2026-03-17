@@ -15,15 +15,15 @@ Preferred communication style: Simple, everyday language.
 ### Frontend Architecture
 - **Framework**: React Native with Expo SDK 54
 - **Navigation**: React Navigation v7 with bottom tabs and native stack navigators
-- **State Management**: TanStack React Query for server state, React Context for auth state
-- **Styling**: Custom theme system with dark mode as default, using a gold/dark color palette
+- **State Management**: TanStack React Query for server state, React Context for auth + theme state
+- **Styling**: Custom theme system with dark/light mode switching, gold/dark palette
 - **UI Components**: Custom themed components (ThemedText, ThemedView, Button, Card) with Reanimated animations
 - **Typography**: Cormorant Garamond for headings, Jost for body text
 
 ### Backend Architecture
 - **Server**: Express.js with TypeScript
 - **Database**: PostgreSQL with Drizzle ORM
-- **AI Integration**: Multi-provider support via OpenFang routing, Google Gemini, OpenAI, Anthropic, and custom endpoints
+- **AI Integration**: Multi-provider with fallback chain (Gemini → OpenFang → HuggingFace endpoint → Gemini). Post-analysis correction pass using secondary model.
 - **File Uploads**: Multer with memory storage for image processing
 
 ### Authentication
@@ -40,10 +40,11 @@ Preferred communication style: Simple, everyday language.
 - **FlipAgent tables**: sellers, products, listings, aiGenerations, syncQueue, integrations
 
 ### Key Features by Screen
+- **Onboarding**: 3-step first-run carousel (shown once), skipped on return visits
 - **Discover Tab**: Curated articles fetched from API, featured card layout
 - **Scan Tab**: Camera-based two-step capture (full item, then label), sends to AI analysis
 - **Stash Tab**: Grid view of inventory items with publish status badges, natural-language search
-- **Settings**: Marketplace integrations (WooCommerce, eBay), AI provider configuration, account management
+- **Settings**: Marketplace integrations (WooCommerce, eBay), AI provider config, appearance (dark/light toggle), account management
 
 ### Path Aliases
 - `@/` maps to `./client/`
@@ -56,12 +57,14 @@ Preferred communication style: Simple, everyday language.
 - **Configuration**: Requires `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` environment variables
 - **Behavior**: App works in unauthenticated mode if credentials not provided
 
-### AI Providers
-- **Google Gemini** (via Replit AI Integrations): Default provider, uses `AI_INTEGRATIONS_GEMINI_API_KEY` and `AI_INTEGRATIONS_GEMINI_BASE_URL`
-- **OpenFang**: Multi-model AI routing layer with intelligent model selection. Uses `OPENFANG_BASE_URL` and `OPENFANG_API_KEY` env vars. Routes to best model per item category with fallback chain (vision-capable models preferred). OpenAI-compatible `/v1/chat/completions` endpoint.
+### AI Providers & Fallback Chain
+- **Fallback order**: Primary (user-selected) → OpenFang → HuggingFace-compatible endpoint → Gemini
+- **Post-analysis correction**: Secondary model pass refines appraisal quality and SEO fields
+- **Google Gemini** (via Replit AI Integrations): Default primary provider. Uses `AI_INTEGRATIONS_GEMINI_API_KEY` and `AI_INTEGRATIONS_GEMINI_BASE_URL`
+- **OpenFang**: Multi-model AI routing layer. Uses `OPENFANG_BASE_URL` and `OPENFANG_API_KEY`. OpenAI-compatible `/v1/chat/completions` endpoint with routing metadata for vision-capable models.
 - **OpenAI**: Direct GPT-4o integration, requires user-provided API key
 - **Anthropic**: Direct Claude integration, requires user-provided API key
-- **Custom**: Any OpenAI-compatible endpoint (Ollama, LM Studio, etc.)
+- **Custom/HuggingFace**: Any OpenAI-compatible endpoint (Ollama, LM Studio, HuggingFace TGI, etc.)
 
 ### PostgreSQL
 - **Purpose**: Persistent data storage for users, items, articles, and settings
@@ -81,6 +84,8 @@ Preferred communication style: Simple, everyday language.
 - **Image Picker**: Alternative to camera for selecting existing photos
 - **Haptics**: Tactile feedback on iOS/Android
 - **SecureStore**: Encrypted storage for API keys and secrets
+- **Notifications**: Push notification token registration + price alert delivery via Expo Push API
+- **PagerView**: Used for onboarding carousel
 
 ## Feature Completion Status
 
@@ -91,25 +96,27 @@ Preferred communication style: Simple, everyday language.
 - eBay integration: Save credentials (SecureStore), test connection, publish items from ItemDetailsScreen
 - Terms of Service and Privacy Policy screens (accessible from Settings)
 - Item scanning: Two-photo capture workflow (full item + label close-up) with camera and gallery support
-- AI analysis: Multi-provider support (Gemini, OpenFang, OpenAI, Anthropic, Custom) for item identification and appraisal
-- Stash (inventory) management: Grid view with item details, publish status badges
-- Natural-language stash search: AI-powered search parsing (e.g., "Louis Vuitton bags under $300")
-- High-value publish approval gate: Configurable threshold (default $500), items exceeding threshold require explicit approval before publishing
+- AI analysis: Multi-provider with graceful fallback chain + post-analysis correction pass
+- SEO listing generation: "Generate Listing" button in ItemDetails triggers AI-powered eBay/WooCommerce listing optimization
+- Stash (inventory) management: Grid view with item details, publish status badges, natural-language search
+- High-value publish approval gate: Configurable threshold (default $500)
+- Onboarding: 3-step first-run carousel with swipe navigation (shown once, persisted)
+- Theme switching: Dark/light mode toggle in Settings, persisted across launches
+- Push notifications: Token registration, price tracking alerts, notification history
 - Discover tab: Curated articles with featured card layout
 - Backend API: Express.js with PostgreSQL/Drizzle, marketplace proxy endpoints
 - FlipAgent backend: Seller profiles, product inventory, marketplace listings, AI audit trail, sync queue
 
 ### Not Yet Implemented
-- Full SEO-optimized listing generation (backend stubs exist)
-- Theme switching (light mode)
-- Push notifications
-- Onboarding/welcome screen
+- Advanced publish status tracking across marketplaces (eBay/WooCommerce sync state)
 
 ## Recent Changes
-- 2026-03-08: Added OpenFang as multi-model AI routing provider (replaces HuggingFace as secondary model)
+- 2026-03-17: Multi-model fallback chain (Gemini → OpenFang → HuggingFace → Gemini) with post-analysis correction pass
+- 2026-03-17: Full AI-powered SEO listing generation via "Generate Listing" button in Item Details
+- 2026-03-17: First-run onboarding carousel (3 steps, AsyncStorage flag, PagerView)
+- 2026-03-17: Theme switching (dark/light mode toggle in Settings, ThemeContext, persisted)
+- 2026-03-08: Added OpenFang as multi-model AI routing provider
 - 2026-03-08: Added natural-language stash search via AI query parsing
 - 2026-03-08: Added human-in-the-loop approval gate for high-value item publishing
 - 2026-03-08: Added OpenFang configuration UI in AI Providers settings
 - 2026-02-06: Added Terms of Service and Privacy Policy screens
-- 2026-02-06: Added environment setup documentation (ENVIRONMENT.md)
-- 2026-02-06: Added E2E testing infrastructure with Maestro
