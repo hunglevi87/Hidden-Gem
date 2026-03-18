@@ -241,8 +241,8 @@ export default function AnalysisScreen() {
           <View style={styles.loadingAnimation}>
             <Feather name="star" size={48} color={Colors.dark.primary} />
           </View>
-          <ThemedText style={styles.loadingTitle}>Analyzing Item...</ThemedText>
-          <ThemedText style={styles.loadingSubtitle}>Our AI is identifying and appraising your find</ThemedText>
+          <ThemedText style={styles.loadingTitle}>Emma is Looking...</ThemedText>
+          <ThemedText style={styles.loadingSubtitle}>Emma is identifying and appraising your find</ThemedText>
           <ActivityIndicator size="large" color={Colors.dark.primary} style={{ marginTop: Spacing["2xl"] }} />
         </View>
       </ThemedView>
@@ -300,8 +300,8 @@ export default function AnalysisScreen() {
           </View>
 
           <View style={styles.card}>
-            <ThemedText style={styles.cardTitle}>Tell AI What to Fix</ThemedText>
-            <ThemedText style={styles.cardSubtitle}>Describe what the AI missed or got wrong</ThemedText>
+            <ThemedText style={styles.cardTitle}>Tell Emma What to Fix</ThemedText>
+            <ThemedText style={styles.cardSubtitle}>Describe what Emma missed or got wrong</ThemedText>
             
             <TextInput
               style={styles.feedbackInput}
@@ -323,7 +323,7 @@ export default function AnalysisScreen() {
                 disabled={!retryFeedback.trim()}
               >
                 <Feather name="refresh-cw" size={18} color={Colors.dark.buttonText} />
-                <ThemedText style={styles.primaryButtonText}>Re-Analyze</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>Re-Appraise with Emma</ThemedText>
               </Pressable>
             </View>
           </View>

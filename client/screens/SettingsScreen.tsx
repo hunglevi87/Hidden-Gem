@@ -167,10 +167,10 @@ export default function SettingsScreen() {
           </SettingsRow>
         </SettingsSection>
 
-        <SettingsSection title="AI Configuration">
+        <SettingsSection title="Emma (AI Configuration)">
           <SettingsRow
             icon="cpu"
-            label="AI Providers"
+            label="Emma's Brain"
             onPress={() => navigation.navigate("AIProviders")}
           />
         </SettingsSection>

@@ -116,7 +116,7 @@ export default function ScanScreen() {
             </View>
             <ThemedText style={styles.permissionTitle}>Camera Access Required</ThemedText>
             <ThemedText style={styles.permissionText}>
-              To scan items for appraisal and listing, HiddenGem needs access to your camera.
+              Emma needs your camera to scan and appraise items for your stash.
             </ThemedText>
             <Pressable
               style={({ pressed }) => [styles.permissionButton, pressed && { opacity: 0.8 }]}

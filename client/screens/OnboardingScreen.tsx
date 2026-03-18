@@ -24,8 +24,8 @@ const ONBOARDING_DATA = [
     image: onboardingScan,
   },
   {
-    title: "AI Appraisal",
-    description: "Our multi-model AI chain identifies, values, and categorizes your finds in seconds.",
+    title: "Meet Emma",
+    description: "Emma is your personal AI specialist. She identifies, values, and categorizes your finds in seconds using multiple AI models.",
     icon: "cpu" as const,
   },
   {

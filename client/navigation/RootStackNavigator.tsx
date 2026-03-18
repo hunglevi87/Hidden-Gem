@@ -141,7 +141,7 @@ export default function RootStackNavigator() {
             name="AIProviders"
             component={AIProvidersScreen}
             options={{
-              headerTitle: "AI Providers",
+              headerTitle: "Emma's Brain",
             }}
           />
         </>

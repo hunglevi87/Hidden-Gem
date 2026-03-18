@@ -512,7 +512,7 @@ export default function ItemDetailsScreen() {
                   ) : (
                     <>
                       <Feather name="zap" size={14} color={Colors.dark.primary} style={{ marginRight: 4 }} />
-                      <ThemedText style={styles.generateButtonText}>Generate Listing</ThemedText>
+                      <ThemedText style={styles.generateButtonText}>Ask Emma to Generate</ThemedText>
                     </>
                   )}
                 </Pressable>

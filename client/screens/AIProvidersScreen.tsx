@@ -335,9 +335,9 @@ export default function AIProvidersScreen() {
           <View style={styles.iconCircle}>
             <Feather name="cpu" size={32} color={Colors.dark.primary} />
           </View>
-          <ThemedText style={styles.headerTitle}>AI Providers</ThemedText>
+          <ThemedText style={styles.headerTitle}>Emma's Brain</ThemedText>
           <ThemedText style={styles.headerSubtitle}>
-            Configure and choose which AI model to use for item analysis
+            Configure which AI models power Emma's appraisals and listing generation
           </ThemedText>
         </View>
 

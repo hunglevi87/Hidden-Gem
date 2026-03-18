@@ -57,7 +57,10 @@ Preferred communication style: Simple, everyday language.
 - **Configuration**: Requires `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` environment variables
 - **Behavior**: App works in unauthenticated mode if credentials not provided
 
-### AI Providers & Fallback Chain
+### Emma — The AI System
+Emma is the name of HiddenGem's AI system, presented to customers across the app and any storefront integrations. Emma handles appraisals, SEO listing generation, and natural-language stash search. All user-facing references to the AI use her name.
+
+### Emma's Fallback Chain (Backend)
 - **Fallback order**: Primary (user-selected) → OpenFang → HuggingFace-compatible endpoint → Gemini
 - **Post-analysis correction**: Secondary model pass refines appraisal quality and SEO fields
 - **Google Gemini** (via Replit AI Integrations): Default primary provider. Uses `AI_INTEGRATIONS_GEMINI_API_KEY` and `AI_INTEGRATIONS_GEMINI_BASE_URL`
