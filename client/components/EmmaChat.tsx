@@ -26,14 +26,18 @@ interface Message {
 }
 
 const SUGGESTED_PROMPTS = [
-  "What should I focus on selling first?",
-  "Help me price a handmade candle",
-  "Write me a Poshmark description",
-  "How can I bundle my items?",
-  "What's trending in resale right now?",
+  "Price check this item",
+  "Help me write a Poshmark caption",
+  "What's trending right now?",
+  "Analyze my stash",
 ];
 
 const PANEL_RATIO = 0.72;
+
+interface StashContextStats {
+  itemCount: number;
+  totalEstimatedValue: number;
+}
 
 export default function EmmaChat() {
   const { isAuthenticated, session } = useAuthContext();
@@ -49,29 +53,59 @@ export default function EmmaChat() {
   const slideAnim = useRef(new Animated.Value(panelHeight)).current;
   const scrollRef = useRef<ScrollView>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const hasOpened = useRef(false);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
   }, []);
 
+  const sellerName = session?.user?.user_metadata?.full_name
+    ?? session?.user?.email?.split("@")[0]
+    ?? "there";
+
+  const buildGreeting = (stats: StashContextStats | null): string => {
+    if (stats && stats.itemCount > 0) {
+      return `Hi ${sellerName}! I can see your stash has ${stats.itemCount} item${stats.itemCount !== 1 ? "s" : ""} with an estimated total value of $${stats.totalEstimatedValue.toFixed(0)}. What can I help you with today?`;
+    }
+    return `Hi ${sellerName}! I'm Emma, your shop advisor. Ask me anything about pricing, listings, bundles, or strategy for your stash.`;
+  };
+
+  const fetchStashContext = useCallback(async () => {
+    if (!session?.access_token) return null;
+    try {
+      const baseUrl = getApiUrl();
+      const response = await fetch(`${baseUrl}api/chat/context`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!response.ok) return null;
+      const data = (await response.json()) as StashContextStats;
+      return data;
+    } catch {
+      return null;
+    }
+  }, [session?.access_token]);
+
   const openPanel = () => {
     setIsOpen(true);
-    if (messages.length === 0) {
-      setMessages([
-        {
-          id: "greeting",
-          role: "assistant",
-          content:
-            "Hi! I'm Emma, your shop advisor. Ask me anything about pricing, listings, bundles, or strategy for your stash.",
-        },
-      ]);
-    }
     Animated.spring(slideAnim, {
       toValue: 0,
       useNativeDriver: true,
       damping: 22,
       stiffness: 160,
     }).start(() => scrollToBottom());
+
+    if (!hasOpened.current) {
+      hasOpened.current = true;
+      setMessages([{ id: "greeting", role: "assistant", content: "", streaming: true }]);
+      fetchStashContext().then((stats) => {
+        setMessages([{
+          id: "greeting",
+          role: "assistant",
+          content: buildGreeting(stats),
+          streaming: false,
+        }]);
+      });
+    }
   };
 
   const closePanel = () => {

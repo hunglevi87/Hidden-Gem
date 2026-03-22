@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { db } from "./db";
 import { articles, stashItems, userSettings, products, sellers, listingsTable, syncQueue, giftSets } from "@shared/schema";
-import { eq, desc, count, and, ilike, lte, gte, or, SQL } from "drizzle-orm";
+import { eq, desc, count, and, ilike, lte, gte, or, SQL, sql } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { 
   testProviderConnection, 
@@ -1459,6 +1459,59 @@ Respond ONLY with valid JSON. Example:
     }
   });
 
+  // Helper: build full stash context for the authenticated user
+  async function buildUserStashContext(userId: string): Promise<{ itemCount: number; totalEstimatedValue: number; topItems: StashItemSummary[] }> {
+    const [stats] = await db
+      .select({
+        itemCount: count(),
+        totalValue: sql<string>`COALESCE(SUM((${stashItems.aiAnalysis}->>'suggestedListPrice')::numeric), 0)`,
+      })
+      .from(stashItems)
+      .where(eq(stashItems.userId, userId));
+
+    const topRows = await db
+      .select()
+      .from(stashItems)
+      .where(eq(stashItems.userId, userId))
+      .orderBy(desc(stashItems.createdAt))
+      .limit(8);
+
+    const topItems: StashItemSummary[] = topRows.map((item) => {
+      const analysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
+      return {
+        id: item.id,
+        title: item.title,
+        category: item.category,
+        estimatedValue: item.estimatedValue,
+        estimatedValueHigh: analysis?.estimatedValueHigh,
+        suggestedListPrice: analysis?.suggestedListPrice,
+        fullImageUrl: item.fullImageUrl,
+        itemType: item.itemType,
+        brand: analysis?.brand,
+        condition: item.condition ?? undefined,
+      };
+    });
+
+    return {
+      itemCount: stats?.itemCount ?? 0,
+      totalEstimatedValue: parseFloat(stats?.totalValue ?? "0"),
+      topItems,
+    };
+  }
+
+  // GET /api/chat/context — fetch stash context at panel open time
+  app.get("/api/chat/context", requireAuth, async (req: Request, res: Response) => {
+    const userId = res.locals.userId as string;
+    try {
+      const ctx = await buildUserStashContext(userId);
+      return res.json({ itemCount: ctx.itemCount, totalEstimatedValue: ctx.totalEstimatedValue });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch stash context";
+      console.error("Error fetching chat context:", error);
+      return res.status(500).json({ error: message });
+    }
+  });
+
   // POST /api/chat — Emma floating chat assistant (SSE streaming)
   app.post("/api/chat", requireAuth, async (req: Request, res: Response) => {
     const userId = res.locals.userId as string;
@@ -1474,43 +1527,7 @@ Respond ONLY with valid JSON. Example:
     res.flushHeaders();
 
     try {
-      const userItems = await db
-        .select()
-        .from(stashItems)
-        .where(eq(stashItems.userId, userId))
-        .orderBy(desc(stashItems.createdAt))
-        .limit(20);
-
-      const totalEstimatedValue = userItems.reduce((sum, item) => {
-        const analysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
-        const price = analysis?.suggestedListPrice || (() => {
-          const m = item.estimatedValue?.match(/\$?(\d+)/);
-          return m ? parseInt(m[1], 10) : 0;
-        })();
-        return sum + price;
-      }, 0);
-
-      const topItems: StashItemSummary[] = userItems.slice(0, 8).map((item) => {
-        const analysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
-        return {
-          id: item.id,
-          title: item.title,
-          category: item.category,
-          estimatedValue: item.estimatedValue,
-          estimatedValueHigh: analysis?.estimatedValueHigh,
-          suggestedListPrice: analysis?.suggestedListPrice,
-          fullImageUrl: item.fullImageUrl,
-          itemType: item.itemType,
-          brand: analysis?.brand,
-          condition: item.condition ?? undefined,
-        };
-      });
-
-      const stashContext = {
-        itemCount: userItems.length,
-        totalEstimatedValue,
-        topItems,
-      };
+      const stashContext = await buildUserStashContext(userId);
 
       await emmaChatStream(messages, stashContext, (chunk) => {
         res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
