@@ -9,7 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { Colors, Spacing } from "@/constants/theme";
 import DiscoverScreen from "@/screens/DiscoverScreen";
-import ScanScreen from "@/screens/ScanScreen";
+import ItemTypeSelectorScreen from "@/screens/ItemTypeSelectorScreen";
 import StashScreen from "@/screens/StashScreen";
 import { ThemedText } from "@/components/ThemedText";
 import { useAuthContext } from "@/contexts/AuthContext";
@@ -114,7 +114,7 @@ export default function MainTabNavigator() {
       />
       <Tab.Screen
         name="ScanTab"
-        component={ScanScreen}
+        component={ItemTypeSelectorScreen}
         options={{
           title: "Scan",
           headerShown: false,

@@ -12,10 +12,13 @@ import EbaySettingsScreen from "@/screens/EbaySettingsScreen";
 import TermsOfServiceScreen from "@/screens/TermsOfServiceScreen";
 import PrivacyPolicyScreen from "@/screens/PrivacyPolicyScreen";
 import AIProvidersScreen from "@/screens/AIProvidersScreen";
+import ScanScreen from "@/screens/ScanScreen";
+import HandmadeDetailsScreen from "@/screens/HandmadeDetailsScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { Colors } from "@/constants/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { HandmadeDetails } from "@shared/types";
 
 export type RootStackParamList = {
   Onboarding: undefined;
@@ -28,7 +31,9 @@ export type RootStackParamList = {
   TermsOfService: undefined;
   PrivacyPolicy: undefined;
   ItemDetails: { itemId: number };
-  Analysis: { fullImageUri: string; labelImageUri: string };
+  Scan: { itemType: "designer" | "handmade"; handmadeDetails?: HandmadeDetails };
+  HandmadeDetails: undefined;
+  Analysis: { fullImageUri: string; labelImageUri?: string; itemType?: "designer" | "handmade"; handmadeDetails?: HandmadeDetails };
   Article: { articleId: number };
 };
 
@@ -142,6 +147,22 @@ export default function RootStackNavigator() {
             component={AIProvidersScreen}
             options={{
               headerTitle: "Emma's Brain",
+            }}
+          />
+          <Stack.Screen
+            name="Scan"
+            component={ScanScreen}
+            options={{
+              presentation: "modal",
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="HandmadeDetails"
+            component={HandmadeDetailsScreen}
+            options={{
+              presentation: "modal",
+              headerTitle: "Handmade Item Details",
             }}
           />
         </>

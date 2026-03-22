@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable, Platform, Alert, Image } from "react-nativ
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
@@ -12,16 +12,32 @@ import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { Feather } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
-type ScanStep = "full" | "label";
+type ScanRouteProp = RouteProp<RootStackParamList, "Scan">;
+
+type DesignerStep = "full" | "label";
 
 export default function ScanScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<ScanRouteProp>();
+  const { itemType, handmadeDetails } = route.params;
+
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
-  const [step, setStep] = useState<ScanStep>("full");
+  const [step, setStep] = useState<DesignerStep>("full");
   const [fullImageUri, setFullImageUri] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
+
+  const isHandmade = itemType === "handmade";
+
+  const navigateToAnalysis = useCallback((photoUri: string, labelUri?: string) => {
+    navigation.navigate("Analysis", {
+      fullImageUri: photoUri,
+      labelImageUri: labelUri,
+      itemType,
+      handmadeDetails,
+    });
+  }, [navigation, itemType, handmadeDetails]);
 
   const takePicture = useCallback(async () => {
     if (!cameraRef.current) return;
@@ -41,17 +57,16 @@ export default function ScanScreen() {
         return;
       }
 
-      if (step === "full") {
+      if (isHandmade) {
+        navigateToAnalysis(photo.uri);
+      } else if (step === "full") {
         setFullImageUri(photo.uri);
         setStep("label");
         if (Platform.OS !== "web") {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
       } else {
-        navigation.navigate("Analysis", {
-          fullImageUri: fullImageUri!,
-          labelImageUri: photo.uri,
-        });
+        navigateToAnalysis(fullImageUri!, photo.uri);
         setStep("full");
         setFullImageUri(null);
       }
@@ -59,7 +74,7 @@ export default function ScanScreen() {
       console.error("Failed to take picture:", error);
       Alert.alert("Error", "Failed to capture photo. Please try again.");
     }
-  }, [step, fullImageUri, navigation]);
+  }, [step, fullImageUri, navigation, isHandmade, navigateToAnalysis]);
 
   const pickImage = useCallback(async () => {
     try {
@@ -69,14 +84,13 @@ export default function ScanScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        if (step === "full") {
+        if (isHandmade) {
+          navigateToAnalysis(result.assets[0].uri);
+        } else if (step === "full") {
           setFullImageUri(result.assets[0].uri);
           setStep("label");
         } else {
-          navigation.navigate("Analysis", {
-            fullImageUri: fullImageUri!,
-            labelImageUri: result.assets[0].uri,
-          });
+          navigateToAnalysis(fullImageUri!, result.assets[0].uri);
           setStep("full");
           setFullImageUri(null);
         }
@@ -84,7 +98,7 @@ export default function ScanScreen() {
     } catch (error) {
       console.error("Failed to pick image:", error);
     }
-  }, [step, fullImageUri, navigation]);
+  }, [step, fullImageUri, navigation, isHandmade, navigateToAnalysis]);
 
   const handleClose = useCallback(() => {
     setStep("full");
@@ -131,6 +145,18 @@ export default function ScanScreen() {
     );
   }
 
+  const instructionTitle = isHandmade
+    ? "Snap Your Product"
+    : step === "full"
+    ? "Snap Full Item"
+    : "Snap Label Close-Up";
+
+  const instructionText = isHandmade
+    ? "Capture your handmade product clearly in the frame"
+    : step === "full"
+    ? "Capture the entire item in the frame"
+    : "Get a clear shot of the label or tag";
+
   return (
     <View style={styles.container}>
       <CameraView
@@ -150,10 +176,17 @@ export default function ScanScreen() {
             <Feather name="x" size={24} color={Colors.dark.text} />
           </Pressable>
           
-          <View style={styles.stepIndicator}>
-            <View style={[styles.stepDot, step === "full" && styles.stepDotActive]} />
-            <View style={[styles.stepDot, step === "label" && styles.stepDotActive]} />
-          </View>
+          {isHandmade ? (
+            <View style={styles.handmadeBadge}>
+              <Feather name="feather" size={14} color="#a78bfa" />
+              <ThemedText style={styles.handmadeBadgeText}>Handmade</ThemedText>
+            </View>
+          ) : (
+            <View style={styles.stepIndicator}>
+              <View style={[styles.stepDot, step === "full" && styles.stepDotActive]} />
+              <View style={[styles.stepDot, step === "label" && styles.stepDotActive]} />
+            </View>
+          )}
           
           <Pressable
             style={({ pressed }) => [styles.helpButton, pressed && { opacity: 0.7 }]}
@@ -164,7 +197,7 @@ export default function ScanScreen() {
         </View>
 
         <View style={styles.centerArea}>
-          {fullImageUri && step === "label" ? (
+          {fullImageUri && step === "label" && !isHandmade ? (
             <View style={styles.previewThumbnail}>
               <Image source={{ uri: fullImageUri }} style={styles.thumbnailImage} />
               <View style={styles.thumbnailCheck}>
@@ -176,14 +209,8 @@ export default function ScanScreen() {
 
         <View style={styles.bottomArea}>
           <View style={styles.instructionCard}>
-            <ThemedText style={styles.instructionTitle}>
-              {step === "full" ? "Snap Full Item" : "Snap Label Close-Up"}
-            </ThemedText>
-            <ThemedText style={styles.instructionText}>
-              {step === "full"
-                ? "Capture the entire item in the frame"
-                : "Get a clear shot of the label or tag"}
-            </ThemedText>
+            <ThemedText style={styles.instructionTitle}>{instructionTitle}</ThemedText>
+            <ThemedText style={styles.instructionText}>{instructionText}</ThemedText>
           </View>
 
           <View style={styles.controlsRow}>
@@ -302,6 +329,20 @@ const styles = StyleSheet.create({
   },
   stepDotActive: {
     backgroundColor: Colors.dark.primary,
+  },
+  handmadeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(167, 139, 250, 0.2)",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: 20,
+  },
+  handmadeBadgeText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#a78bfa",
   },
   helpButton: {
     width: 40,

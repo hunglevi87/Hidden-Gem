@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import type { HandmadeDetails } from "@shared/types";
 
 export type AIProviderType = "gemini" | "openai" | "anthropic" | "custom" | "openfang";
 
@@ -42,6 +43,9 @@ export interface AnalysisResult {
   aspects: Record<string, string[]>;
   ebayCategoryId: string;
   wooCategory: string;
+
+  // Item type
+  itemType?: "designer" | "handmade";
 }
 
 interface ImageInput {
@@ -49,75 +53,142 @@ interface ImageInput {
   data: string;
 }
 
-const ANALYSIS_PROMPT = `You are an expert appraiser, authenticator, and reseller assistant with deep knowledge of vintage items, luxury goods, and collectibles. Analyze the provided images (full item + label/tag) and deliver a comprehensive professional appraisal report.
+const ANALYSIS_PROMPT = `You are Emma, an expert appraiser and reseller assistant specializing in designer goods, luxury fashion, and premium brands. Analyze the provided images (full item + label/tag) and deliver a comprehensive professional appraisal report.
 
 ## AUTHENTICATION ASSESSMENT
-Carefully examine for authenticity indicators:
-- Brand markings, logos, serial numbers, date codes
-- Hardware quality, stitching, materials, craftsmanship
-- Common counterfeit red flags for this item type
-- Overall consistency with authentic pieces
+Carefully examine for authenticity indicators of designer and luxury goods:
+- Brand markings, logos, serial numbers, date codes, authenticity cards
+- Hardware quality (zippers, clasps, studs), stitching consistency, material quality
+- Font, logo placement, and print quality on tags and labels
+- Common counterfeit red flags specific to this brand and item type
+- Overall craftsmanship consistency with genuine pieces from this brand
 
 Provide:
 - authenticity: One of ["Authentic", "Likely Authentic", "Uncertain", "Likely Counterfeit", "Counterfeit"]
 - authenticityConfidence: Number 0-100 representing your confidence
-- authenticityDetails: Detailed explanation of what indicators you observed
-- authenticationTips: Array of 3-5 specific tips for authenticating this item type
+- authenticityDetails: Detailed explanation of authentication indicators observed
+- authenticationTips: Array of 3-5 specific tips for authenticating this brand/item type
 
 ## MARKET VALUATION ANALYSIS
-Research comparable sales and market trends:
-- estimatedValueLow: Numeric low end of value range (just the number, no $)
-- estimatedValueHigh: Numeric high end of value range (just the number, no $)
-- suggestedListPrice: Numeric recommended listing price (just the number, no $)
+Research the current luxury resale market:
+- estimatedValueLow: Numeric low end of resale value range (just the number, no $)
+- estimatedValueHigh: Numeric high end of resale value range (just the number, no $)
+- suggestedListPrice: Numeric recommended listing price for quick sale (just the number, no $)
 - confidence: One of ["high", "medium", "low"] for overall appraisal confidence
-- marketAnalysis: Detailed paragraph on comparable sales, demand trends, seasonality, and pricing rationale
+- marketAnalysis: Detailed paragraph on current resale demand, comparable sold listings, brand desirability, and pricing rationale on platforms like eBay, The RealReal, Poshmark, and Depop
 
 ## ITEM IDENTIFICATION & LISTING DATA
 - brand: Identified brand name (or "Unknown" if unbranded)
-- title: Clear, descriptive item title (max 80 chars for eBay)
+- title: Clear, keyword-rich item title (max 80 chars for eBay) — include brand, style, material, and condition
 - subtitle: Short catchy subtitle (max 55 chars for eBay)
-- category: General category (e.g., Handbag, Watch, Clothing, Electronics, Collectible)
+- category: General category (e.g., Handbag, Shoes, Clothing, Jewelry, Watch, Sunglasses, Belt, Wallet)
 - condition: One of ["New", "Like New", "Very Good", "Good", "Acceptable", "For Parts"]
-- shortDescription: Concise 1-2 sentence description for WooCommerce
-- fullDescription: Rich, detailed HTML description for eBay/WooCommerce listings
-- description: Legacy medium-length description
-- estimatedValue: Legacy string format (e.g., "$150-$200")
+- shortDescription: Concise 1-2 sentence storefront description highlighting brand and key appeal
+- fullDescription: Rich, detailed HTML description for listings — include brand story, materials, dimensions, condition notes, and what makes this piece special
+- description: Medium-length plain text description
+- estimatedValue: Formatted string (e.g., "$150-$200")
 
 ## SEO & CATEGORIZATION
-- seoTitle: SEO-optimized title for online listings
-- seoDescription: SEO-optimized meta description
-- seoKeywords: Array of 5-10 relevant SEO keywords
-- tags: Array of 3-5 relevant tags for categorization
+- seoTitle: SEO-optimized title including brand, style name, and category
+- seoDescription: SEO-optimized meta description for storefront
+- seoKeywords: Array of 8-12 relevant SEO keywords (brand, style, material, category, luxury resale keywords)
+- tags: Array of 3-6 relevant tags for categorization
 
 ## ITEM SPECIFICS / ASPECTS
-Provide key-value pairs as an object. Examples:
+Provide key-value pairs as an object relevant to this luxury/designer item. Examples:
 - Brand: ["Louis Vuitton"]
-- Material: ["Leather", "Canvas"]
+- Style Name: ["Neverfull MM"]
+- Material: ["Coated Canvas", "Leather Trim"]
 - Color: ["Brown", "Monogram"]
-- Size: ["Medium"]
-- Style: ["Shoulder Bag"]
-- Era: ["1980s"]
+- Size: ["Medium", "32cm"]
+- Hardware: ["Gold-tone"]
+- Country of Origin: ["France"]
+- Includes: ["Dust Bag", "Authenticity Card"]
 - ebayCategoryId: Suggested eBay category ID (use "1" for generic if unsure)
-- wooCategory: Suggested WooCommerce category name
+- wooCategory: Suggested category name for the storefront
 
 Respond ONLY with valid JSON. All fields must be present. Use empty strings/arrays/zeros for unknown values, never omit fields.`;
 
+export type { HandmadeDetails };
+
+export function buildHandmadePrompt(details: HandmadeDetails): string {
+  return `You are Emma, an artisan product pricing expert and copywriter specializing in handmade goods, natural beauty products, and small-batch artisan items. A seller has provided the following details about a handmade product along with a product photo. Your job is to price it correctly based on artisan market standards and write compelling, ingredient-forward listing copy.
+
+## PRODUCT DETAILS PROVIDED BY SELLER
+- Product Name: ${details.productName}
+- Ingredients / Materials: ${details.ingredients}
+- Scent / Texture Notes: ${details.scentOrTexture}
+- Size / Volume: ${details.sizeVolume}
+- Cost of Goods (COG): $${details.costOfGoods}
+
+## ARTISAN PRICING GUIDELINES
+Price handmade goods using the artisan market formula: retail price = COG × (3 to 5×) depending on:
+- Product category (candles: 3-4×, body butter/lotion: 3-5×, soap: 3-4×, bath salts: 3-4×)
+- Premium ingredients (shea butter, essential oils, botanical extracts) justify higher multipliers
+- Small-batch, handmade positioning supports premium pricing vs mass-market
+- Review comparable Etsy, farmers market, and specialty boutique pricing
+
+Provide:
+- estimatedValueLow: Numeric low end of suggested retail price range (no $)
+- estimatedValueHigh: Numeric high end of suggested retail price range (no $)
+- suggestedListPrice: Numeric recommended retail price (no $)
+- confidence: One of ["high", "medium", "low"]
+- marketAnalysis: Paragraph explaining the pricing rationale, comparable Etsy/artisan pricing, and what drives demand for this type of product
+
+## LISTING DATA
+- brand: The shop brand or "Handmade" if no brand provided
+- title: Product listing title (max 80 chars) — lead with key ingredients or scent, then product type
+- subtitle: Short enticing subtitle (max 55 chars) — highlight a key benefit or scent note
+- category: Product category (e.g., Candle, Body Butter, Body Wash, Lotion, Soap, Hand Soap, Bath Salt, Lip Balm)
+- condition: Always "New" for handmade products
+- shortDescription: 1-2 sentence storefront description leading with what makes this product special
+- fullDescription: Rich HTML description — lead with sensory details (scent, texture, feel), then ingredients highlights, then usage instructions, then size/volume
+- description: Medium-length plain text description
+- estimatedValue: Formatted string (e.g., "$18-$24")
+
+## AUTHENTICATION (not applicable for handmade)
+- authenticity: Always "Authentic" for handmade products
+- authenticityConfidence: Always 100
+- authenticityDetails: "Handmade product — authenticity not applicable."
+- authenticationTips: []
+
+## SEO & CATEGORIZATION
+- seoTitle: SEO-optimized title with key ingredients, product type, and handmade/artisan keywords
+- seoDescription: SEO meta description for storefront
+- seoKeywords: Array of 8-12 keywords (ingredients, scent, product type, handmade, natural, artisan, small-batch)
+- tags: Array of 3-6 tags
+
+## ITEM SPECIFICS / ASPECTS
+Provide handmade-relevant key-value pairs:
+- Key Ingredients: [list top 3-5 ingredients]
+- Scent: [scent name or "Unscented"]
+- Net Weight / Volume: ["value from seller details"]
+- Skin Type: ["All Skin Types" or specific if indicated by ingredients]
+- Finish / Texture: ["from seller details"]
+- Handmade: ["Yes"]
+- Vegan: ["Yes" / "No" / "Unknown" based on ingredients]
+- ebayCategoryId: Suggested eBay category ID
+- wooCategory: Suggested category name for the storefront
+
+Respond ONLY with valid JSON. All fields must be present. Use empty strings/arrays/zeros for unknown values, never omit fields.`;
+}
+
 const FALLBACK_RESULT: AnalysisResult = {
   // Legacy fields
-  title: "Vintage Item",
-  description: "A vintage collectible item in good condition.",
-  category: "Collectible",
+  title: "Designer Item",
+  description: "A pre-owned designer item in good condition.",
+  category: "Fashion",
   estimatedValue: "$50-$100",
   condition: "Good",
-  seoTitle: "Vintage Collectible Item for Sale",
-  seoDescription: "Authentic vintage collectible in excellent condition. Perfect for collectors.",
-  seoKeywords: ["vintage", "collectible", "antique"],
-  tags: ["vintage", "collectible"],
+  seoTitle: "Pre-Owned Designer Item for Sale",
+  seoDescription: "Authentic pre-owned designer item in good condition. Great addition to any wardrobe.",
+  seoKeywords: ["designer", "luxury", "pre-owned", "resale"],
+  tags: ["designer", "luxury", "pre-owned"],
   // New enhanced fields
   brand: "Unknown",
-  subtitle: "Vintage collectible item",
-  shortDescription: "A vintage collectible item in good condition.",
-  fullDescription: "<p>This is a vintage collectible item in good overall condition. Please review photos carefully as they form part of the description.</p>",
+  subtitle: "Pre-owned designer item",
+  shortDescription: "A pre-owned designer item in good condition.",
+  fullDescription: "<p>This is a pre-owned designer item in good overall condition. Please review photos carefully as they form part of the description.</p>",
   estimatedValueLow: 50,
   estimatedValueHigh: 100,
   suggestedListPrice: 75,
@@ -125,11 +196,11 @@ const FALLBACK_RESULT: AnalysisResult = {
   authenticity: "Uncertain",
   authenticityConfidence: 50,
   authenticityDetails: "Unable to perform detailed authentication analysis. Please consult a professional authenticator for high-value items.",
-  authenticationTips: ["Check for brand markings and serial numbers", "Examine hardware quality and materials", "Compare with official product images", "Consult professional authenticator for valuable items"],
-  marketAnalysis: "Market analysis unavailable. Research comparable sold listings on eBay and other marketplaces to determine fair market value.",
-  aspects: { Category: ["Collectible"], Condition: ["Good"] },
+  authenticationTips: ["Check for brand markings and serial numbers", "Examine hardware quality and materials", "Compare with official product images", "Consult a professional authenticator for valuable items"],
+  marketAnalysis: "Market analysis unavailable. Research comparable sold listings on eBay, Poshmark, and The RealReal to determine fair market value.",
+  aspects: { Category: ["Fashion"], Condition: ["Good"] },
   ebayCategoryId: "1",
-  wooCategory: "Collectibles",
+  wooCategory: "Fashion",
 };
 
 function parseAnalysisResult(text: string): AnalysisResult {
@@ -227,7 +298,8 @@ function validateCustomEndpoint(endpoint: string): void {
 
 async function analyzeWithGemini(
   images: ImageInput[],
-  config: AIProviderConfig
+  config: AIProviderConfig,
+  prompt: string = ANALYSIS_PROMPT
 ): Promise<AnalysisResult> {
   const apiKey = config.apiKey || process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
   if (!apiKey) {
@@ -242,7 +314,7 @@ async function analyzeWithGemini(
     },
   });
 
-  const parts: any[] = [{ text: ANALYSIS_PROMPT }];
+  const parts: any[] = [{ text: prompt }];
   for (const img of images) {
     parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
   }
@@ -258,7 +330,8 @@ async function analyzeWithGemini(
 
 async function analyzeWithHuggingFace(
   images: ImageInput[],
-  config: AIProviderConfig
+  config: AIProviderConfig,
+  prompt: string = ANALYSIS_PROMPT
 ): Promise<AnalysisResult> {
   const endpoint = config.endpoint || process.env.HUGGINGFACE_CUSTOM_ENDPOINT;
   const apiKey = config.apiKey || process.env.HUGGINGFACE_API_KEY;
@@ -267,7 +340,7 @@ async function analyzeWithHuggingFace(
     throw new Error("HuggingFace custom endpoint is required");
   }
 
-  const content: any[] = [{ type: "text", text: ANALYSIS_PROMPT }];
+  const content: any[] = [{ type: "text", text: prompt }];
   for (const img of images) {
     content.push({
       type: "image_url",
@@ -302,7 +375,8 @@ async function analyzeWithHuggingFace(
 
 export async function analyzeWithFallback(
   images: ImageInput[],
-  userConfig: AIProviderConfig
+  userConfig: AIProviderConfig,
+  prompt: string = ANALYSIS_PROMPT
 ): Promise<AnalysisResult> {
   const fallbacks: AIProviderConfig[] = [
     userConfig, // Primary
@@ -332,7 +406,7 @@ export async function analyzeWithFallback(
       if (config.provider === "gemini" && !config.apiKey) continue;
 
       console.log(`Attempting analysis with provider: ${config.provider}`);
-      const result = await analyzeItem(config, images);
+      const result = await analyzeItem(config, images, prompt);
       return result;
     } catch (error: any) {
       console.warn(`Provider ${config.provider} failed: ${error.message}`);
@@ -433,13 +507,14 @@ export async function correctAnalysis(
 
 async function analyzeWithOpenAI(
   images: ImageInput[],
-  config: AIProviderConfig
+  config: AIProviderConfig,
+  prompt: string = ANALYSIS_PROMPT
 ): Promise<AnalysisResult> {
   if (!config.apiKey) {
     throw new Error("OpenAI API key is required");
   }
 
-  const content: any[] = [{ type: "text", text: ANALYSIS_PROMPT }];
+  const content: any[] = [{ type: "text", text: prompt }];
   for (const img of images) {
     content.push({
       type: "image_url",
@@ -472,7 +547,8 @@ async function analyzeWithOpenAI(
 
 async function analyzeWithAnthropic(
   images: ImageInput[],
-  config: AIProviderConfig
+  config: AIProviderConfig,
+  prompt: string = ANALYSIS_PROMPT
 ): Promise<AnalysisResult> {
   if (!config.apiKey) {
     throw new Error("Anthropic API key is required");
@@ -489,7 +565,7 @@ async function analyzeWithAnthropic(
       },
     });
   }
-  content.push({ type: "text", text: ANALYSIS_PROMPT });
+  content.push({ type: "text", text: prompt });
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -517,7 +593,8 @@ async function analyzeWithAnthropic(
 
 async function analyzeWithOpenFang(
   images: ImageInput[],
-  config: AIProviderConfig
+  config: AIProviderConfig,
+  prompt: string = ANALYSIS_PROMPT
 ): Promise<AnalysisResult> {
   const baseUrl = (config.endpoint || process.env.OPENFANG_BASE_URL || "").replace(/\/+$/, "");
   const apiKey = config.apiKey || process.env.OPENFANG_API_KEY || "";
@@ -529,7 +606,7 @@ async function analyzeWithOpenFang(
     throw new Error("OpenFang API key is required. Set OPENFANG_API_KEY or configure in settings.");
   }
 
-  const content: any[] = [{ type: "text", text: ANALYSIS_PROMPT }];
+  const content: any[] = [{ type: "text", text: prompt }];
   for (const img of images) {
     content.push({
       type: "image_url",
@@ -574,14 +651,15 @@ async function analyzeWithOpenFang(
 
 async function analyzeWithCustom(
   images: ImageInput[],
-  config: AIProviderConfig
+  config: AIProviderConfig,
+  prompt: string = ANALYSIS_PROMPT
 ): Promise<AnalysisResult> {
   if (!config.endpoint) {
     throw new Error("Custom AI endpoint URL is required");
   }
   validateCustomEndpoint(config.endpoint);
 
-  const content: any[] = [{ type: "text", text: ANALYSIS_PROMPT }];
+  const content: any[] = [{ type: "text", text: prompt }];
   for (const img of images) {
     content.push({
       type: "image_url",
@@ -728,19 +806,20 @@ export async function generateSEOListing(
 
 export async function analyzeItem(
   config: AIProviderConfig,
-  images: ImageInput[]
+  images: ImageInput[],
+  prompt: string = ANALYSIS_PROMPT
 ): Promise<AnalysisResult> {
   switch (config.provider) {
     case "gemini":
-      return analyzeWithGemini(images, config);
+      return analyzeWithGemini(images, config, prompt);
     case "openai":
-      return analyzeWithOpenAI(images, config);
+      return analyzeWithOpenAI(images, config, prompt);
     case "anthropic":
-      return analyzeWithAnthropic(images, config);
+      return analyzeWithAnthropic(images, config, prompt);
     case "custom":
-      return analyzeWithCustom(images, config);
+      return analyzeWithCustom(images, config, prompt);
     case "openfang":
-      return analyzeWithOpenFang(images, config);
+      return analyzeWithOpenFang(images, config, prompt);
     default:
       throw new Error(`Unsupported AI provider: ${config.provider}`);
   }

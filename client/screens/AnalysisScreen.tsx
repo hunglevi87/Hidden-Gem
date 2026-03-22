@@ -26,6 +26,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
+import type { HandmadeDetails } from "@shared/types";
 
 type AnalysisRouteProp = RouteProp<RootStackParamList, "Analysis">;
 
@@ -153,7 +154,7 @@ export default function AnalysisScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<AnalysisRouteProp>();
   const queryClient = useQueryClient();
-  const { fullImageUri, labelImageUri } = route.params;
+  const { fullImageUri, labelImageUri, itemType, handmadeDetails } = route.params;
 
   const [state, setState] = useState<AppraisalState>("appraising");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
@@ -188,7 +189,11 @@ export default function AnalysisScreen() {
     try {
       const formData = new FormData();
       formData.append("fullImage", { uri: fullImageUri, type: "image/jpeg", name: "full.jpg" } as any);
-      formData.append("labelImage", { uri: labelImageUri, type: "image/jpeg", name: "label.jpg" } as any);
+      if (labelImageUri) {
+        formData.append("labelImage", { uri: labelImageUri, type: "image/jpeg", name: "label.jpg" } as any);
+      }
+      if (itemType) formData.append("itemType", itemType);
+      if (handmadeDetails) formData.append("handmadeDetails", JSON.stringify(handmadeDetails));
       const providerPayload = await getAnalysisProviderPayload();
       for (const [key, value] of Object.entries(providerPayload)) {
         formData.append(key, value);
@@ -268,6 +273,8 @@ export default function AnalysisScreen() {
       fullImageUrl: fullImageUri,
       labelImageUrl: labelImageUri,
       aiAnalysis: dataToSave,
+      itemType: itemType || "designer",
+      handmadeDetails: handmadeDetails || null,
     });
   };
 
@@ -370,14 +377,16 @@ export default function AnalysisScreen() {
       <ThemedView style={styles.container}>
         <KeyboardAwareScrollViewCompat contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
           <View style={styles.imagesRow}>
-            <View style={styles.imageContainer}>
+            <View style={[styles.imageContainer, !labelImageUri && { flex: undefined, width: 140 }]}>
               <Image source={{ uri: fullImageUri }} style={styles.previewImage} resizeMode="cover" />
-              <ThemedText style={styles.imageLabel}>Full Item</ThemedText>
+              <ThemedText style={styles.imageLabel}>{itemType === "handmade" ? "Product" : "Full Item"}</ThemedText>
             </View>
-            <View style={styles.imageContainer}>
-              <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
-              <ThemedText style={styles.imageLabel}>Label</ThemedText>
-            </View>
+            {labelImageUri ? (
+              <View style={styles.imageContainer}>
+                <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
+                <ThemedText style={styles.imageLabel}>Label</ThemedText>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.card}>
@@ -591,14 +600,16 @@ export default function AnalysisScreen() {
       <ThemedView style={styles.container}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
           <View style={styles.imagesRow}>
-            <View style={styles.imageContainer}>
+            <View style={[styles.imageContainer, !labelImageUri && { flex: undefined, width: 140 }]}>
               <Image source={{ uri: fullImageUri }} style={styles.previewImage} resizeMode="cover" />
-              <ThemedText style={styles.imageLabel}>Full Item</ThemedText>
+              <ThemedText style={styles.imageLabel}>{itemType === "handmade" ? "Product" : "Full Item"}</ThemedText>
             </View>
-            <View style={styles.imageContainer}>
-              <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
-              <ThemedText style={styles.imageLabel}>Label</ThemedText>
-            </View>
+            {labelImageUri ? (
+              <View style={styles.imageContainer}>
+                <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
+                <ThemedText style={styles.imageLabel}>Label</ThemedText>
+              </View>
+            ) : null}
           </View>
 
           {/* Header */}
@@ -607,6 +618,12 @@ export default function AnalysisScreen() {
               <View style={styles.brandBadge}>
                 <ThemedText style={styles.brandText}>{result.brand || "Unknown Brand"}</ThemedText>
               </View>
+              {itemType === "handmade" && (
+                <View style={styles.handmadeBadge}>
+                  <Feather name="feather" size={12} color="#a78bfa" />
+                  <ThemedText style={styles.handmadeBadgeText}>Handmade</ThemedText>
+                </View>
+              )}
               <View style={[styles.confidenceBadge, { backgroundColor: CONFIDENCE_COLORS[result.confidence] + "20" }]}>
                 <View style={[styles.confidenceDot, { backgroundColor: CONFIDENCE_COLORS[result.confidence] }]} />
                 <ThemedText style={[styles.confidenceText, { color: CONFIDENCE_COLORS[result.confidence] }]}>
@@ -754,6 +771,8 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.md },
   brandBadge: { backgroundColor: Colors.dark.primary + "20", paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
   brandText: { ...Typography.small, color: Colors.dark.primary, fontWeight: "600" },
+  handmadeBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#a78bfa20", paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
+  handmadeBadgeText: { fontSize: 11, fontWeight: "600", color: "#a78bfa" },
   confidenceBadge: { flexDirection: "row", alignItems: "center", gap: Spacing.xs, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
   confidenceDot: { width: 8, height: 8, borderRadius: 4 },
   confidenceText: { ...Typography.caption, fontWeight: "500" },

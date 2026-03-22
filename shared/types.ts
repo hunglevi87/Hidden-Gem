@@ -4,6 +4,14 @@
  * for product, listing, AI generation, seller, and integration shapes.
  */
 
+export interface HandmadeDetails {
+  productName: string;
+  ingredients: string;
+  scentOrTexture: string;
+  sizeVolume: string;
+  costOfGoods: number;
+}
+
 export interface ProductType {
   id: string;
   seller_id: string;

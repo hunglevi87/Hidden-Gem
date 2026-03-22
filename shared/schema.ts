@@ -50,6 +50,8 @@ export const stashItems = pgTable("stash_items", {
   publishedToEbay: boolean("published_to_ebay").default(false),
   woocommerceProductId: text("woocommerce_product_id"),
   ebayListingId: text("ebay_listing_id"),
+  itemType: text("item_type").default("designer"),
+  handmadeDetails: jsonb("handmade_details"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

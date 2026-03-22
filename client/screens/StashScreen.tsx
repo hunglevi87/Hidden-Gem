@@ -26,6 +26,7 @@ interface StashItem {
   category: string | null;
   publishedToWoocommerce: boolean;
   publishedToEbay: boolean;
+  itemType: string | null;
 }
 
 function StashItemCard({ item, onPress }: { item: StashItem; onPress: () => void }) {
@@ -48,6 +49,11 @@ function StashItemCard({ item, onPress }: { item: StashItem; onPress: () => void
             <Feather name="package" size={32} color={theme.textSecondary} />
           </View>
         )}
+        {item.itemType === "handmade" ? (
+          <View style={[styles.handmadeBadge, { backgroundColor: "#a78bfa20" }]}>
+            <Feather name="feather" size={10} color="#a78bfa" />
+          </View>
+        ) : null}
         {item.publishedToWoocommerce || item.publishedToEbay ? (
           <View style={[styles.publishedBadge, { backgroundColor: theme.surface }]}>
             <Feather name="check-circle" size={12} color={theme.success} />
@@ -378,6 +384,13 @@ const styles = StyleSheet.create({
     height: "100%",
     alignItems: "center",
     justifyContent: "center",
+  },
+  handmadeBadge: {
+    position: "absolute",
+    top: Spacing.sm,
+    left: Spacing.sm,
+    borderRadius: 10,
+    padding: 4,
   },
   publishedBadge: {
     position: "absolute",
