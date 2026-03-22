@@ -1213,6 +1213,15 @@ export async function testProviderConnection(
 // Craft & Strategy Studio — Gift Set Generation + Shop Strategy Analysis
 // ---------------------------------------------------------------------------
 
+export interface AIAnalysisSnapshot {
+  estimatedValueHigh?: number;
+  estimatedValueLow?: number;
+  suggestedListPrice?: number;
+  brand?: string;
+  confidence?: string;
+  marketAnalysis?: string;
+}
+
 export interface StashItemSummary {
   id: number;
   title: string;
@@ -1345,7 +1354,8 @@ Important context:
 
 export async function analyzeShopStrategy(
   stashItems: StashItemSummary[],
-  question: string
+  question: string,
+  onChunk?: (chunk: string) => void
 ): Promise<string> {
   const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
   if (!apiKey) {
@@ -1367,12 +1377,30 @@ export async function analyzeShopStrategy(
     .replace("{inventory}", inventoryText)
     .replace("{question}", question);
 
-  const ai = new GoogleGenAI({
+  const gemini = new GoogleGenAI({
     apiKey,
     httpOptions: { apiVersion: "v1beta" },
   });
 
-  const response = await ai.models.generateContent({
+  // When a streaming callback is provided, use generateContentStream
+  if (onChunk) {
+    const stream = await gemini.models.generateContentStream({
+      model: "gemini-2.5-flash",
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+    });
+    let fullText = "";
+    for await (const chunk of stream) {
+      const text = chunk.text;
+      if (text) {
+        fullText += text;
+        onChunk(text);
+      }
+    }
+    return fullText || "Emma was unable to analyze your shop at this time. Please try again.";
+  }
+
+  // Non-streaming fallback
+  const response = await gemini.models.generateContent({
     model: "gemini-2.5-flash",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
   });

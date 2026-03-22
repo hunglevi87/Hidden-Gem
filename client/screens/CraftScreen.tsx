@@ -367,7 +367,7 @@ function GiftSetsTab() {
             SAVED TO STOREFRONT
           </ThemedText>
           {savedSets.map((set) => (
-            <GiftSetCard key={set.id} set={{ ...set, itemsSnapshot: (set.itemsSnapshot as any) || [], saved: true }} />
+            <GiftSetCard key={set.id} set={{ ...set, itemsSnapshot: Array.isArray(set.itemsSnapshot) ? (set.itemsSnapshot as ItemSnapshot[]) : [], saved: true }} />
           ))}
         </View>
       ) : generatedSets.length === 0 ? (
@@ -393,6 +393,7 @@ function StrategyTab() {
   const [question, setQuestion] = useState("");
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   const headerHeight = useHeaderHeight();
@@ -402,15 +403,61 @@ function StrategyTab() {
     if (!q.trim()) return;
     setIsLoading(true);
     setAnalysis(null);
+    setIsStreaming(false);
     try {
-      const res = await apiRequest("POST", "/api/craft/strategy", { userId, question: q.trim() });
-      const data = await res.json();
-      setAnalysis(data.analysis || "No analysis returned.");
+      const baseUrl = getApiUrl();
+      const response = await fetch(`${baseUrl}api/craft/strategy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, question: q.trim() }),
+      });
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error((errJson as { error?: string }).error || "Failed to get strategy");
+      }
+      if (response.body) {
+        setIsStreaming(true);
+        setIsLoading(false);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let fullText = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const payload = line.slice(6).trim();
+            if (payload === "[DONE]") break;
+            try {
+              const parsed = JSON.parse(payload) as { chunk?: string; error?: string };
+              if (parsed.error) throw new Error(parsed.error);
+              if (parsed.chunk) {
+                fullText += parsed.chunk;
+                setAnalysis(fullText);
+                scrollRef.current?.scrollToEnd({ animated: false });
+              }
+            } catch {
+              // skip malformed SSE frames
+            }
+          }
+        }
+        setIsStreaming(false);
+      } else {
+        // Fallback for environments without ReadableStream support
+        const data = await response.json() as { analysis?: string };
+        setAnalysis(data.analysis || "No analysis returned.");
+      }
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (err: any) {
-      Alert.alert("Emma couldn't respond", err.message || "Please try again.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Please try again.";
+      Alert.alert("Emma couldn't respond", message);
     } finally {
       setIsLoading(false);
+      setIsStreaming(false);
     }
   }, [userId]);
 
@@ -498,28 +545,35 @@ function StrategyTab() {
           </View>
         )}
 
-        {analysis && !isLoading && (
+        {analysis != null && !isLoading && (
           <View style={[styles.analysisCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.emmaHeader}>
               <View style={[styles.emmaAvatar, { backgroundColor: theme.primary + "20" }]}>
-                <Feather name="star" size={14} color={theme.primary} />
+                {isStreaming
+                  ? <ActivityIndicator size="small" color={theme.primary} />
+                  : <Feather name="star" size={14} color={theme.primary} />
+                }
               </View>
-              <ThemedText style={[styles.emmaLabel, { color: theme.primary }]}>Emma's Analysis</ThemedText>
+              <ThemedText style={[styles.emmaLabel, { color: theme.primary }]}>
+                {isStreaming ? "Emma is typing..." : "Emma's Analysis"}
+              </ThemedText>
             </View>
             <MarkdownText text={analysis} color={theme.text} secondaryColor={theme.textSecondary} />
-            <Pressable
-              style={({ pressed }) => [
-                styles.newQuestionButton,
-                { borderColor: theme.border, opacity: pressed ? 0.7 : 1 },
-              ]}
-              onPress={() => {
-                setAnalysis(null);
-                setQuestion("");
-              }}
-            >
-              <Feather name="refresh-cw" size={14} color={theme.textSecondary} />
-              <ThemedText style={[styles.newQuestionText, { color: theme.textSecondary }]}>New Question</ThemedText>
-            </Pressable>
+            {!isStreaming && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.newQuestionButton,
+                  { borderColor: theme.border, opacity: pressed ? 0.7 : 1 },
+                ]}
+                onPress={() => {
+                  setAnalysis(null);
+                  setQuestion("");
+                }}
+              >
+                <Feather name="refresh-cw" size={14} color={theme.textSecondary} />
+                <ThemedText style={[styles.newQuestionText, { color: theme.textSecondary }]}>New Question</ThemedText>
+              </Pressable>
+            )}
           </View>
         )}
 

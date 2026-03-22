@@ -19,6 +19,7 @@ import {
   HandmadeDetails,
   generateGiftSets,
   analyzeShopStrategy,
+  AIAnalysisSnapshot,
 } from "./ai-providers";
 import { generateSEOTitle, generateDescription, generateTags, createAIRecord } from "./ai-seo";
 import { uploadProductImage, deleteProductImage } from "./supabase-storage";
@@ -471,7 +472,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!skipThresholdCheck) {
-        const aiAnalysis = item.aiAnalysis as any;
+        const aiAnalysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
         const suggestedPrice = aiAnalysis?.suggestedListPrice;
         if (suggestedPrice) {
           const userId = (req.body.userId as string) || item.userId;
@@ -569,7 +570,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!skipThresholdCheck) {
-        const aiAnalysis = item.aiAnalysis as any;
+        const aiAnalysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
         const suggestedPrice = aiAnalysis?.suggestedListPrice;
         if (suggestedPrice) {
           const userId = (req.body.userId as string) || item.userId;
@@ -1218,6 +1219,25 @@ Respond ONLY with valid JSON. Example:
   // Craft & Strategy Studio Routes
   // ---------------------------------------------------------------------------
 
+  // Helper: build stash summaries from DB items without unsafe any casts
+  function buildStashSummaries(items: (typeof stashItems.$inferSelect)[]) {
+    return items.map((item) => {
+      const analysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
+      return {
+        id: item.id,
+        title: item.title,
+        category: item.category,
+        estimatedValue: item.estimatedValue,
+        estimatedValueHigh: typeof analysis.estimatedValueHigh === "number" ? analysis.estimatedValueHigh : undefined,
+        suggestedListPrice: typeof analysis.suggestedListPrice === "number" ? analysis.suggestedListPrice : undefined,
+        fullImageUrl: item.fullImageUrl,
+        itemType: item.itemType,
+        brand: typeof analysis.brand === "string" ? analysis.brand : undefined,
+        condition: item.condition ?? undefined,
+      };
+    });
+  }
+
   // GET /api/craft/gift-sets — list saved gift sets for a user
   app.get("/api/craft/gift-sets", async (req: Request, res: Response) => {
     try {
@@ -1245,7 +1265,6 @@ Respond ONLY with valid JSON. Example:
         return res.status(400).json({ error: "userId is required" });
       }
 
-      // Fetch the user's stash items
       const items = await db
         .select()
         .from(stashItems)
@@ -1256,51 +1275,47 @@ Respond ONLY with valid JSON. Example:
         return res.status(400).json({ error: "No items in your stash to bundle" });
       }
 
-      const summaries = items.map((item) => {
-        const analysis = item.aiAnalysis as any;
-        return {
-          id: item.id,
-          title: item.title,
-          category: item.category,
-          estimatedValue: item.estimatedValue,
-          estimatedValueHigh: typeof analysis?.estimatedValueHigh === "number" ? analysis.estimatedValueHigh : undefined,
-          suggestedListPrice: typeof analysis?.suggestedListPrice === "number" ? analysis.suggestedListPrice : undefined,
-          fullImageUrl: item.fullImageUrl,
-          itemType: item.itemType,
-          brand: typeof analysis?.brand === "string" ? analysis.brand : undefined,
-          condition: item.condition ?? undefined,
-        };
-      });
-
+      const summaries = buildStashSummaries(items);
       const generatedSets = await generateGiftSets(summaries);
 
-      // Attach item snapshots so the client can display thumbnails without extra queries
+      // Attach item snapshots for client display (no extra round-trips needed)
       const itemMap = new Map(items.map((i) => [i.id, i]));
       const setsWithSnapshots = generatedSets.map((set) => ({
         ...set,
         itemsSnapshot: set.itemIds
           .map((id) => itemMap.get(id))
-          .filter(Boolean)
-          .map((item) => ({
-            id: item!.id,
-            title: item!.title,
-            fullImageUrl: item!.fullImageUrl,
-            estimatedValue: item!.estimatedValue,
-            category: item!.category,
+          .filter((i): i is NonNullable<typeof i> => i !== undefined)
+          .map((i) => ({
+            id: i.id,
+            title: i.title,
+            fullImageUrl: i.fullImageUrl,
+            estimatedValue: i.estimatedValue,
+            category: i.category,
           })),
       }));
 
       res.json(setsWithSnapshots);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to generate gift sets";
       console.error("Error generating gift sets:", error);
-      res.status(500).json({ error: error.message || "Failed to generate gift sets" });
+      res.status(500).json({ error: message });
     }
   });
 
-  // POST /api/craft/gift-sets/save — persist a generated gift set
+  // POST /api/craft/gift-sets/save — persist a generated gift set (owned by userId)
   app.post("/api/craft/gift-sets/save", async (req: Request, res: Response) => {
     try {
-      const { userId, tier, title, description, marketingHook, itemIds, itemsSnapshot, totalValue, sellingPrice } = req.body;
+      const { userId, tier, title, description, marketingHook, itemIds, itemsSnapshot, totalValue, sellingPrice } = req.body as {
+        userId: string;
+        tier: string;
+        title: string;
+        description?: string;
+        marketingHook?: string;
+        itemIds?: number[];
+        itemsSnapshot?: unknown;
+        totalValue?: number;
+        sellingPrice?: number;
+      };
       if (!userId || !tier || !title) {
         return res.status(400).json({ error: "userId, tier, and title are required" });
       }
@@ -1311,30 +1326,39 @@ Respond ONLY with valid JSON. Example:
           userId,
           tier,
           title,
-          description: description || null,
-          marketingHook: marketingHook || null,
-          itemIds: itemIds || [],
-          itemsSnapshot: itemsSnapshot || null,
-          totalValue: totalValue ? String(totalValue) : null,
-          sellingPrice: sellingPrice ? String(sellingPrice) : null,
+          description: description ?? null,
+          marketingHook: marketingHook ?? null,
+          itemIds: Array.isArray(itemIds) ? itemIds : [],
+          itemsSnapshot: itemsSnapshot ?? null,
+          totalValue: totalValue != null ? String(totalValue) : null,
+          sellingPrice: sellingPrice != null ? String(sellingPrice) : null,
         })
         .returning();
 
       res.status(201).json(saved);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to save gift set";
       console.error("Error saving gift set:", error);
-      res.status(500).json({ error: error.message || "Failed to save gift set" });
+      res.status(500).json({ error: message });
     }
   });
 
-  // DELETE /api/craft/gift-sets/:id — remove a saved gift set
+  // DELETE /api/craft/gift-sets/:id — remove a saved gift set (ownership enforced)
   app.delete("/api/craft/gift-sets/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ error: "Valid id is required" });
+      const id = parseInt(req.params.id, 10);
+      const userId = req.query.userId as string;
+      if (isNaN(id) || !userId) {
+        return res.status(400).json({ error: "Valid id and userId are required" });
       }
-      await db.delete(giftSets).where(eq(giftSets.id, id));
+      // Scope deletion to owner — prevents cross-user deletion (IDOR)
+      const result = await db
+        .delete(giftSets)
+        .where(and(eq(giftSets.id, id), eq(giftSets.userId, userId)))
+        .returning({ id: giftSets.id });
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Gift set not found or not owned by you" });
+      }
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting gift set:", error);
@@ -1342,42 +1366,38 @@ Respond ONLY with valid JSON. Example:
     }
   });
 
-  // POST /api/craft/strategy — ask Emma a strategy question
+  // POST /api/craft/strategy — ask Emma a strategy question (SSE streaming response)
   app.post("/api/craft/strategy", async (req: Request, res: Response) => {
-    try {
-      const { userId, question } = req.body;
-      if (!userId || !question?.trim()) {
-        return res.status(400).json({ error: "userId and question are required" });
-      }
+    const { userId, question } = req.body as { userId: string; question: string };
+    if (!userId || !question?.trim()) {
+      return res.status(400).json({ error: "userId and question are required" });
+    }
 
-      // Fetch the user's stash items for context
+    // Set SSE headers before streaming begins
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    try {
       const items = await db
         .select()
         .from(stashItems)
         .where(eq(stashItems.userId, userId))
         .orderBy(desc(stashItems.createdAt));
 
-      const summaries = items.map((item) => {
-        const analysis = item.aiAnalysis as any;
-        return {
-          id: item.id,
-          title: item.title,
-          category: item.category,
-          estimatedValue: item.estimatedValue,
-          estimatedValueHigh: typeof analysis?.estimatedValueHigh === "number" ? analysis.estimatedValueHigh : undefined,
-          suggestedListPrice: typeof analysis?.suggestedListPrice === "number" ? analysis.suggestedListPrice : undefined,
-          fullImageUrl: item.fullImageUrl,
-          itemType: item.itemType,
-          brand: typeof analysis?.brand === "string" ? analysis.brand : undefined,
-          condition: item.condition ?? undefined,
-        };
+      const summaries = buildStashSummaries(items);
+      await analyzeShopStrategy(summaries, question.trim(), (chunk) => {
+        res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
       });
 
-      const analysis = await analyzeShopStrategy(summaries, question.trim());
-      res.json({ analysis });
-    } catch (error: any) {
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to analyze shop strategy";
       console.error("Error in shop strategy:", error);
-      res.status(500).json({ error: error.message || "Failed to analyze shop strategy" });
+      res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+      res.end();
     }
   });
 
