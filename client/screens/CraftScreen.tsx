@@ -15,7 +15,7 @@ import {
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
@@ -379,7 +379,8 @@ function GiftSetsTab() {
   }, [saveMutation]);
 
   const headerHeight = useHeaderHeight();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = React.useContext(BottomTabBarHeightContext) ?? 0;
+  const hasGenerated = generatedSets.length > 0;
 
   return (
     <ScrollView
@@ -415,9 +416,9 @@ function GiftSetsTab() {
           </>
         ) : (
           <>
-            <Feather name="gift" size={18} color={theme.buttonText} />
+            <Feather name={hasGenerated ? "refresh-cw" : "gift"} size={18} color={theme.buttonText} />
             <ThemedText style={[styles.generateButtonText, { color: theme.buttonText }]}>
-              Generate Gift Sets
+              {hasGenerated ? "Regenerate Gift Sets" : "Generate Gift Sets"}
             </ThemedText>
           </>
         )}
@@ -477,7 +478,7 @@ function StrategyTab() {
   const scrollRef = useRef<ScrollView>(null);
 
   const headerHeight = useHeaderHeight();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = React.useContext(BottomTabBarHeightContext) ?? 0;
 
   const authHeaders = session?.access_token
     ? { Authorization: `Bearer ${session.access_token}` }
