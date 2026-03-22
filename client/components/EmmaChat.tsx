@@ -66,7 +66,7 @@ export default function EmmaChat() {
 
   const buildGreeting = (stats: StashContextStats | null): string => {
     if (stats && stats.itemCount > 0) {
-      return `Hi ${sellerName}! I can see your stash has ${stats.itemCount} item${stats.itemCount !== 1 ? "s" : ""} with an estimated total value of $${stats.totalEstimatedValue.toFixed(0)}. What can I help you with today?`;
+      return `Hi ${sellerName}! I'm Emma, your shop advisor. I can see your stash has ${stats.itemCount} item${stats.itemCount !== 1 ? "s" : ""} worth ~$${stats.totalEstimatedValue.toFixed(0)} — what can I help you with today?`;
     }
     return `Hi ${sellerName}! I'm Emma, your shop advisor. Ask me anything about pricing, listings, bundles, or strategy for your stash.`;
   };
@@ -163,6 +163,10 @@ export default function EmmaChat() {
         body: JSON.stringify({ messages: history }),
       });
 
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        throw new Error(errText || `Server error ${response.status}`);
+      }
       if (!response.body) throw new Error("No response body");
 
       const reader = response.body.getReader();
