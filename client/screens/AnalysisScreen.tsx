@@ -22,12 +22,28 @@ import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 
 type AnalysisRouteProp = RouteProp<RootStackParamList, "Analysis">;
 
 type AppraisalState = "appraising" | "reviewing" | "editing" | "retrying" | "stashed";
+type AIProvider = "gemini" | "openai" | "anthropic" | "openfang" | "custom";
+
+const ACTIVE_PROVIDER_KEY = "ai_active_provider";
+const GEMINI_API_KEY = "gemini_api_key";
+const OPENAI_API_KEY = "openai_api_key";
+const OPENAI_MODEL_KEY = "openai_model";
+const ANTHROPIC_API_KEY = "anthropic_api_key";
+const ANTHROPIC_MODEL_KEY = "anthropic_model";
+const OPENFANG_API_KEY = "openfang_api_key";
+const OPENFANG_BASE_URL_KEY = "openfang_base_url";
+const OPENFANG_MODEL_KEY = "openfang_model";
+const CUSTOM_ENDPOINT_KEY = "custom_ai_endpoint";
+const CUSTOM_API_KEY = "custom_ai_api_key";
+const CUSTOM_MODEL_KEY = "custom_ai_model_name";
 
 interface AnalysisResult {
   // Legacy fields
@@ -57,6 +73,63 @@ interface AnalysisResult {
   aspects: Record<string, string[]>;
   ebayCategoryId: string;
   wooCategory: string;
+}
+
+async function secureGet(key: string): Promise<string | null> {
+  if (Platform.OS !== "web") {
+    return SecureStore.getItemAsync(key);
+  }
+  return AsyncStorage.getItem(key);
+}
+
+async function getAnalysisProviderPayload(): Promise<Record<string, string>> {
+  const active = await AsyncStorage.getItem(ACTIVE_PROVIDER_KEY);
+  const provider: AIProvider =
+    active === "gemini" || active === "openai" || active === "anthropic" || active === "openfang" || active === "custom"
+      ? active
+      : "gemini";
+
+  const payload: Record<string, string> = { provider };
+
+  if (provider === "gemini") {
+    const key = await secureGet(GEMINI_API_KEY);
+    if (key) payload.apiKey = key;
+    return payload;
+  }
+
+  if (provider === "openai") {
+    const key = await secureGet(OPENAI_API_KEY);
+    const model = await AsyncStorage.getItem(OPENAI_MODEL_KEY);
+    if (key) payload.apiKey = key;
+    if (model) payload.model = model;
+    return payload;
+  }
+
+  if (provider === "anthropic") {
+    const key = await secureGet(ANTHROPIC_API_KEY);
+    const model = await AsyncStorage.getItem(ANTHROPIC_MODEL_KEY);
+    if (key) payload.apiKey = key;
+    if (model) payload.model = model;
+    return payload;
+  }
+
+  if (provider === "openfang") {
+    const key = await secureGet(OPENFANG_API_KEY);
+    const endpoint = await AsyncStorage.getItem(OPENFANG_BASE_URL_KEY);
+    const model = await AsyncStorage.getItem(OPENFANG_MODEL_KEY);
+    if (key) payload.apiKey = key;
+    if (endpoint) payload.endpoint = endpoint;
+    if (model) payload.model = model;
+    return payload;
+  }
+
+  const endpoint = await AsyncStorage.getItem(CUSTOM_ENDPOINT_KEY);
+  const key = await secureGet(CUSTOM_API_KEY);
+  const model = await AsyncStorage.getItem(CUSTOM_MODEL_KEY);
+  if (endpoint) payload.endpoint = endpoint;
+  if (key) payload.apiKey = key;
+  if (model) payload.model = model;
+  return payload;
 }
 
 const CONDITION_OPTIONS = ["New", "Like New", "Very Good", "Good", "Acceptable", "For Parts"];
@@ -116,6 +189,10 @@ export default function AnalysisScreen() {
       const formData = new FormData();
       formData.append("fullImage", { uri: fullImageUri, type: "image/jpeg", name: "full.jpg" } as any);
       formData.append("labelImage", { uri: labelImageUri, type: "image/jpeg", name: "label.jpg" } as any);
+      const providerPayload = await getAnalysisProviderPayload();
+      for (const [key, value] of Object.entries(providerPayload)) {
+        formData.append(key, value);
+      }
 
       const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/analyze`, {
@@ -153,6 +230,10 @@ export default function AnalysisScreen() {
       formData.append("labelImage", { uri: labelImageUri, type: "image/jpeg", name: "label.jpg" } as any);
       formData.append("previousResult", JSON.stringify(analysisResult));
       formData.append("feedback", retryFeedback);
+      const providerPayload = await getAnalysisProviderPayload();
+      for (const [key, value] of Object.entries(providerPayload)) {
+        formData.append(key, value);
+      }
 
       const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/analyze/retry`, {

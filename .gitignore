@@ -37,6 +37,10 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# Windows special files
+nul
+*.nul
+
 app-example
 
 # generated native folders

@@ -14,7 +14,9 @@ import {
   AnalysisResult,
   analyzeWithFallback,
   correctAnalysis,
-  AIProviderType
+  AIProviderType,
+  buildHandmadePrompt,
+  HandmadeDetails
 } from "./ai-providers";
 import { generateSEOTitle, generateDescription, generateTags, createAIRecord } from "./ai-seo";
 import { uploadProductImage, deleteProductImage } from "./supabase-storage";
@@ -35,7 +37,6 @@ import {
   disablePriceTracking,
   getPriceTrackingStatus,
 } from "./services/notification";
-
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
   httpOptions: {
@@ -43,6 +44,7 @@ const ai = new GoogleGenAI({
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
   },
 });
+
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -334,7 +336,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       // 2. Prepare images
-      const images = [];
+      const images: { mimeType: string; data: string }[] = [];
       images.push({
         mimeType: fullImageFile.mimetype,
         data: fullImageFile.buffer.toString("base64"),
@@ -347,11 +349,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // 3. Analyze with fallback
-      console.log(`Starting analysis for user ${userId} with primary provider ${config.provider}`);
-      let result = await analyzeWithFallback(images, config);
+      // 3. Build prompt (handmade vs designer)
+      const itemType = req.body.itemType as string | undefined;
+      let prompt: string | undefined;
+      if (itemType === "handmade" && req.body.handmadeDetails) {
+        try {
+          const details: HandmadeDetails = typeof req.body.handmadeDetails === "string"
+            ? JSON.parse(req.body.handmadeDetails)
+            : req.body.handmadeDetails;
+          prompt = buildHandmadePrompt(details);
+          console.log("Using handmade prompt for analysis");
+        } catch (e) {
+          console.warn("Failed to parse handmadeDetails, using default prompt");
+        }
+      }
 
-      // 4. Run correction pass if secondary provider is configured
+      // 4. Analyze with fallback
+      console.log(`Starting analysis for user ${userId} with primary provider ${config.provider}`);
+      let result = await analyzeWithFallback(images, config, prompt);
+
+      // 5. Run correction pass if secondary provider is configured
       if (config.secondaryProvider || process.env.OPENFANG_API_KEY) {
         console.log("Running correction pass...");
         result = await correctAnalysis(result, config);
@@ -771,7 +788,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fullImageFile = files?.fullImage?.[0];
       const labelImageFile = files?.labelImage?.[0];
       
-      const { previousResult, feedback, provider, apiKey, model } = req.body;
+      const { previousResult, feedback, provider, apiKey, endpoint, model } = req.body;
       
       if (!previousResult || !feedback) {
         return res.status(400).json({ error: "previousResult and feedback are required" });
@@ -785,9 +802,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         images.push({ mimeType: labelImageFile.mimetype, data: labelImageFile.buffer.toString("base64") });
       }
 
-      const config: AIProviderConfig = {
-        provider: provider || "gemini",
+      const requestedProvider = typeof provider === "string" && provider.trim() ? provider.trim() : undefined;
+      const primaryConfig: AIProviderConfig = {
+        provider: (requestedProvider || "openfang") as AIProviderConfig["provider"],
         apiKey,
+        endpoint,
         model,
       };
 
@@ -795,8 +814,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? JSON.parse(previousResult) 
         : previousResult;
 
-      const result = await analyzeItemWithRetry(config, images, parsedPrevious, feedback);
-      res.json(result);
+      try {
+        const result = await analyzeItemWithRetry(primaryConfig, images, parsedPrevious, feedback);
+        return res.json(result);
+      } catch (primaryError) {
+        const canFallbackToGemini = requestedProvider === "openfang";
+        if (!canFallbackToGemini) {
+          throw primaryError;
+        }
+
+        const fallbackConfig: AIProviderConfig = {
+          provider: "gemini",
+          model: "gemini-2.5-flash",
+        };
+
+        const fallbackResult = await analyzeItemWithRetry(fallbackConfig, images, parsedPrevious, feedback);
+        return res.json(fallbackResult);
+      }
     } catch (error) {
       console.error("Error in retry analysis:", error);
       res.status(500).json({ error: "Failed to re-analyze item" });

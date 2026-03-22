@@ -2,9 +2,13 @@
 
 ## Overview
 
-HiddenGem is a professional inventory management mobile application built for resellers. The app enables users to scan collectible items (bags, clothes, etc.), leverage AI for instant appraisals, and generate SEO-optimized listings for WooCommerce and eBay. The aesthetic is luxurious and refined, designed to feel like a curator's tool with a premium art gallery sensibility.
+HiddenGem is a professional inventory management mobile application for a designer/luxury resale and handmade artisan goods shop. The app enables users to scan items, leverage Emma AI for instant appraisals and pricing, and generate SEO-optimized listings saved to Supabase. The storefront reads directly from Supabase — no publish action needed.
 
-The app follows a two-photo scanning ritual (full item + label close-up) to create a deliberate, professional workflow for expert appraisals.
+**Item Types:**
+- **Designer/Luxury Items**: Two-photo scan ritual (full item + label close-up) — Emma authenticates and appraises
+- **Handmade Goods**: Single photo + details form (product name, ingredients, scent/texture, size/volume, COG) — Emma prices using artisan market formula (COG × 3-5×)
+
+**CRITICAL**: Never use "vintage," "antique," or "collectible" language. This is a designer resale + handmade artisan goods shop only.
 
 ## User Preferences
 
@@ -42,7 +46,10 @@ Preferred communication style: Simple, everyday language.
 ### Key Features by Screen
 - **Onboarding**: 3-step first-run carousel (shown once), skipped on return visits
 - **Discover Tab**: Curated articles fetched from API, featured card layout
-- **Scan Tab**: Camera-based two-step capture (full item, then label), sends to AI analysis
+- **Scan Tab**: Item type selector (Designer vs Handmade). Designer: two-step camera (full item + label). Handmade: details form (name, ingredients, scent, size, COG) then single product photo. Both routes through Analysis screen.
+- **ItemTypeSelectorScreen**: Entry point for the Scan tab — choose Designer/Luxury or Handmade Goods
+- **HandmadeDetailsScreen**: Form for handmade product details before camera capture
+- **ScanScreen**: Camera screen, now a root stack modal — handles both 1-photo (handmade) and 2-photo (designer) flows via itemType param
 - **Stash Tab**: Grid view of inventory items with publish status badges, natural-language search
 - **Settings**: Marketplace integrations (WooCommerce, eBay), AI provider config, appearance (dark/light toggle), account management
 
@@ -108,6 +115,7 @@ Emma is the name of HiddenGem's AI system, presented to customers across the app
 - Push notifications: Token registration, price tracking alerts, notification history
 - Discover tab: Curated articles with featured card layout
 - Backend API: Express.js with PostgreSQL/Drizzle, marketplace proxy endpoints
+- P0 item 3.3 Shared Auth Contract + API Auth Middleware: Added `server/middleware/auth.ts` and applied auth middleware across API routes in `server/routes.ts`
 - FlipAgent backend: Seller profiles, product inventory, marketplace listings, AI audit trail, sync queue
 
 ### Not Yet Implemented
@@ -118,6 +126,8 @@ Emma is the name of HiddenGem's AI system, presented to customers across the app
 - 2026-03-17: Full AI-powered SEO listing generation via "Generate Listing" button in Item Details
 - 2026-03-17: First-run onboarding carousel (3 steps, AsyncStorage flag, PagerView)
 - 2026-03-17: Theme switching (dark/light mode toggle in Settings, ThemeContext, persisted)
+- 2026-03-13: Restored Gemini-first identification defaults while keeping OpenFang optional
+- 2026-03-13: Completed P0 item 3.3 (Shared Auth Contract + API Auth Middleware); added `server/middleware/auth.ts` and updated `server/routes.ts` to enforce auth middleware across API routes
 - 2026-03-08: Added OpenFang as multi-model AI routing provider
 - 2026-03-08: Added natural-language stash search via AI query parsing
 - 2026-03-08: Added human-in-the-loop approval gate for high-value item publishing
