@@ -15,6 +15,7 @@ import { AuthProvider, useAuthContext } from "@/contexts/AuthContext";
 import { ThemeProvider, useThemeContext } from "@/contexts/ThemeContext";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Colors } from "@/constants/theme";
+import EmmaChat from "@/components/EmmaChat";
 
 function AppInner() {
   const { isAuthenticated } = useAuthContext();
@@ -45,6 +46,7 @@ function AppInner() {
           <NavigationContainer theme={HiddenGemTheme}>
             <RootStackNavigator />
           </NavigationContainer>
+          <EmmaChat />
           <StatusBar style={isDark ? "light" : "dark"} />
         </KeyboardProvider>
       </GestureHandlerRootView>

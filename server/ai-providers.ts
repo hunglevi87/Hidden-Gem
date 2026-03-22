@@ -1416,6 +1416,89 @@ Important context:
 - Handmade pricing formula: COG × 3-5× depending on category and ingredient quality
 - Designer resale: pricing driven by brand, condition, and current secondary market demand`;
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface StashContext {
+  itemCount: number;
+  totalEstimatedValue: number;
+  topItems: StashItemSummary[];
+}
+
+const EMMA_SYSTEM_CONTEXT = `You are Emma, an expert AI assistant for a designer resale and handmade artisan goods boutique. You help the seller with pricing, copywriting, strategy, and inventory decisions.
+
+Key facts about this shop:
+- Sells designer/luxury resale items (handbags, shoes, jewelry, accessories) AND handmade artisan goods (candles, body butters, soaps, bath products)
+- Never describe items as "vintage," "antique," or "collectible" — use "pre-owned," "pre-loved," or "gently used" instead
+- Handmade pricing: COG × 3-5× depending on category and ingredient quality
+- Designer resale: pricing driven by brand, condition, and secondary market demand on eBay, Poshmark, Depop, The RealReal
+
+Your style:
+- Friendly, confident, and specific — like a trusted advisor who knows this shop personally
+- Reference the seller's actual inventory when relevant
+- Give actionable answers, not generic platitudes
+- Use markdown formatting: **bold** for key points, bullet lists for steps
+- Keep responses concise (under 300 words unless depth is truly needed)`;
+
+export async function emmaChatStream(
+  messages: ChatMessage[],
+  stashContext: StashContext,
+  onChunk: (chunk: string) => void
+): Promise<string> {
+  const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini API key is required for Emma chat");
+  }
+
+  const contextMessage = `${EMMA_SYSTEM_CONTEXT}
+
+## SELLER'S CURRENT STASH
+- Total items: ${stashContext.itemCount}
+- Combined estimated value: $${stashContext.totalEstimatedValue.toFixed(0)}
+${stashContext.topItems.length > 0
+    ? `- Recent inventory:\n${stashContext.topItems.map((item) => {
+      const price = item.suggestedListPrice || item.estimatedValueHigh || (() => {
+        const m = item.estimatedValue?.match(/\$?(\d+)/);
+        return m ? parseInt(m[1], 10) : 0;
+      })();
+      return `  • "${item.title}" (${item.category || "Item"}, ${item.itemType === "handmade" ? "Handmade" : "Designer"}, $${price})`;
+    }).join("\n")}`
+    : ""}
+
+Now answer the seller's question.`;
+
+  const geminiContents = [
+    { role: "user" as const, parts: [{ text: contextMessage }] },
+    { role: "model" as const, parts: [{ text: "Got it! I have full context about your stash. How can I help you today?" }] },
+    ...messages.map((m) => ({
+      role: m.role === "assistant" ? ("model" as const) : ("user" as const),
+      parts: [{ text: m.content }],
+    })),
+  ];
+
+  const gemini = new GoogleGenAI({
+    apiKey,
+    httpOptions: { apiVersion: "v1beta" },
+  });
+
+  const stream = await gemini.models.generateContentStream({
+    model: "gemini-2.5-flash",
+    contents: geminiContents,
+  });
+
+  let fullText = "";
+  for await (const chunk of stream) {
+    const text = chunk.text;
+    if (text) {
+      fullText += text;
+      onChunk(text);
+    }
+  }
+  return fullText || "I wasn't able to respond just now — please try again.";
+}
+
 export async function analyzeShopStrategy(
   stashItems: StashItemSummary[],
   question: string,

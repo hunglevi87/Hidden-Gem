@@ -20,6 +20,9 @@ import {
   generateGiftSets,
   analyzeShopStrategy,
   AIAnalysisSnapshot,
+  emmaChatStream,
+  type ChatMessage,
+  type StashItemSummary,
 } from "./ai-providers";
 import { generateSEOTitle, generateDescription, generateTags, createAIRecord } from "./ai-seo";
 import { uploadProductImage, deleteProductImage } from "./supabase-storage";
@@ -1451,6 +1454,73 @@ Respond ONLY with valid JSON. Example:
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to analyze shop strategy";
       console.error("Error in shop strategy:", error);
+      res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+      res.end();
+    }
+  });
+
+  // POST /api/chat — Emma floating chat assistant (SSE streaming)
+  app.post("/api/chat", requireAuth, async (req: Request, res: Response) => {
+    const userId = res.locals.userId as string;
+    const { messages } = req.body as { messages: ChatMessage[] };
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "messages array is required" });
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    try {
+      const userItems = await db
+        .select()
+        .from(stashItems)
+        .where(eq(stashItems.userId, userId))
+        .orderBy(desc(stashItems.createdAt))
+        .limit(20);
+
+      const totalEstimatedValue = userItems.reduce((sum, item) => {
+        const analysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
+        const price = analysis?.suggestedListPrice || (() => {
+          const m = item.estimatedValue?.match(/\$?(\d+)/);
+          return m ? parseInt(m[1], 10) : 0;
+        })();
+        return sum + price;
+      }, 0);
+
+      const topItems: StashItemSummary[] = userItems.slice(0, 8).map((item) => {
+        const analysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
+        return {
+          id: item.id,
+          title: item.title,
+          category: item.category,
+          estimatedValue: item.estimatedValue,
+          estimatedValueHigh: analysis?.estimatedValueHigh,
+          suggestedListPrice: analysis?.suggestedListPrice,
+          fullImageUrl: item.fullImageUrl,
+          itemType: item.itemType,
+          brand: analysis?.brand,
+          condition: item.condition ?? undefined,
+        };
+      });
+
+      const stashContext = {
+        itemCount: userItems.length,
+        totalEstimatedValue,
+        topItems,
+      };
+
+      await emmaChatStream(messages, stashContext, (chunk) => {
+        res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+      });
+
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Emma couldn't respond";
+      console.error("Error in Emma chat:", error);
       res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
       res.end();
     }
