@@ -380,9 +380,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(result);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to analyze item";
       console.error("Error analyzing item:", error);
-      res.status(500).json({ error: error.message || "Failed to analyze item" });
+      res.status(500).json({ error: message });
     }
   });
 
@@ -720,7 +721,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const offerError = await offerResponse.json().catch(() => ({}));
         console.error("eBay offer error:", offerError);
         
-        const requiresPolicies = offerError.errors?.some((e: any) => 
+        const requiresPolicies = offerError.errors?.some((e: { message?: string; errorId?: number }) => 
           e.message?.includes("policy") || e.errorId === 25002
         );
         
@@ -778,9 +779,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const result = await testProviderConnection(config);
       res.json(result);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Test failed";
       console.error("AI provider test error:", error);
-      res.status(500).json({ success: false, message: error.message || "Test failed" });
+      res.status(500).json({ success: false, message });
     }
   });
 
@@ -1102,9 +1104,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .returning();
 
       res.json(updatedItem);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to generate SEO listing";
       console.error("Error generating SEO listing:", error);
-      res.status(500).json({ error: error.message || "Failed to generate SEO listing" });
+      res.status(500).json({ error: message });
     }
   });
 
@@ -1134,7 +1137,16 @@ Extract the following filters (use null for any filter not mentioned):
 Respond ONLY with valid JSON. Example:
 {"brand":"Louis Vuitton","maxPrice":300,"minPrice":null,"category":"Handbag","condition":null,"publishStatus":null,"keywords":["bags"]}`;
 
-      let filters: any = {};
+      interface StashSearchFilters {
+        brand?: string;
+        category?: string;
+        condition?: string;
+        publishStatus?: string;
+        maxPrice?: number;
+        minPrice?: number;
+        keywords?: string[];
+      }
+      let filters: StashSearchFilters = {};
       try {
         const parseResponse = await ai.models.generateContent({
           model: "gemini-2.5-flash",

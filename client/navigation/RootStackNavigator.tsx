@@ -36,7 +36,7 @@ interface MarketMatch {
   url: string;
 }
 
-interface AnalysisResultParam {
+export interface AnalysisResultParam {
   title: string;
   description: string;
   category: string;

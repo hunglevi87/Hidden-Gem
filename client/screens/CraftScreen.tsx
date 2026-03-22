@@ -522,9 +522,22 @@ function StrategyTab() {
         }
         setIsStreaming(false);
       } else {
-        // Fallback for environments without ReadableStream support
-        const data = await response.json() as { analysis?: string };
-        setAnalysis(data.analysis || "No analysis returned.");
+        // Fallback: server always sends SSE frames; read the full body and parse them
+        const text = await response.text();
+        let fullText = "";
+        for (const line of text.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6).trim();
+          if (payload === "[DONE]") break;
+          try {
+            const parsed = JSON.parse(payload) as { chunk?: string; error?: string };
+            if (parsed.error) throw new Error(parsed.error);
+            if (parsed.chunk) fullText += parsed.chunk;
+          } catch {
+            // skip malformed frames
+          }
+        }
+        setAnalysis(fullText || "No analysis returned.");
       }
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (err: unknown) {

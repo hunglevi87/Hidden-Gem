@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { type ComponentProps, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -27,7 +27,16 @@ type ListingEditorRouteProp = RouteProp<RootStackParamList, "ListingEditor">;
 
 type Platform_ = "ebay" | "poshmark" | "depop" | "stripe";
 
-const PLATFORMS: { key: Platform_; label: string; icon: string; color: string }[] = [
+type FeatherIconName = ComponentProps<typeof Feather>["name"];
+
+interface ExportResult {
+  success?: boolean;
+  listingUrl?: string;
+  productId?: string;
+  error?: string;
+}
+
+const PLATFORMS: { key: Platform_; label: string; icon: FeatherIconName; color: string }[] = [
   { key: "ebay", label: "eBay", icon: "shopping-bag", color: "#E53238" },
   { key: "poshmark", label: "Poshmark", icon: "heart", color: "#C11C84" },
   { key: "depop", label: "Depop", icon: "tag", color: "#FF4040" },
@@ -73,7 +82,7 @@ export default function ListingEditorScreen() {
   const [exportingStripe, setExportingStripe] = useState(false);
 
   const saveMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: Record<string, unknown>) => {
       return apiRequest("POST", "/api/stash", data);
     },
     onSuccess: () => {
@@ -92,7 +101,7 @@ export default function ListingEditorScreen() {
     },
   });
 
-  const updateField = (field: "title" | "description" | "tags" | "suggestedPrice", value: any) => {
+  const updateField = (field: "title" | "description" | "tags" | "suggestedPrice", value: string | number | string[]) => {
     setEditedVersions((prev) => ({
       ...prev,
       [activeTab]: { ...prev[activeTab], [field]: value },
@@ -156,7 +165,7 @@ export default function ListingEditorScreen() {
       }
 
       const ebayData = editedVersions.ebay;
-      const result = await apiRequest("POST", `/api/stash/${stashItemId}/publish/ebay`, {
+      const response = await apiRequest("POST", `/api/stash/${stashItemId}/publish/ebay`, {
         clientId,
         clientSecret,
         refreshToken,
@@ -166,18 +175,20 @@ export default function ListingEditorScreen() {
         customDescription: ebayData.description,
         customPrice: ebayData.suggestedPrice,
       });
+      const result = await response.json() as ExportResult;
 
-      if ((result as any).success) {
+      if (result.success) {
         if (Platform.OS !== "web") {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
-        Alert.alert("Exported to eBay!", `Your listing has been created on eBay.\n\n${(result as any).listingUrl || ""}`);
+        Alert.alert("Exported to eBay!", `Your listing has been created on eBay.\n\n${result.listingUrl || ""}`);
         queryClient.invalidateQueries({ queryKey: ["/api/stash"] });
       } else {
-        Alert.alert("Export Failed", (result as any).error || "Unknown error occurred");
+        Alert.alert("Export Failed", result.error || "Unknown error occurred");
       }
-    } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to export to eBay");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to export to eBay";
+      Alert.alert("Error", message);
     } finally {
       setExportingEbay(false);
     }
@@ -199,21 +210,23 @@ export default function ListingEditorScreen() {
             setExportingStripe(true);
             try {
               const stripeData = editedVersions.stripe;
-              const result = await apiRequest("POST", `/api/stash/${stashItemId}/publish/stripe`, {
+              const response = await apiRequest("POST", `/api/stash/${stashItemId}/publish/stripe`, {
                 customTitle: stripeData.title,
                 customDescription: stripeData.description,
                 customPrice: stripeData.suggestedPrice,
               });
-              if ((result as any).success) {
+              const result = await response.json() as ExportResult;
+              if (result.success) {
                 if (Platform.OS !== "web") {
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 }
                 Alert.alert("Exported to Stripe!", "Your product has been created in Stripe.");
               } else {
-                Alert.alert("Export Failed", (result as any).error || "Unknown error occurred");
+                Alert.alert("Export Failed", result.error || "Unknown error occurred");
               }
-            } catch (error: any) {
-              Alert.alert("Error", error.message || "Failed to export to Stripe");
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : "Failed to export to Stripe";
+              Alert.alert("Error", message);
             } finally {
               setExportingStripe(false);
             }
@@ -246,7 +259,7 @@ export default function ListingEditorScreen() {
             onPress={() => setActiveTab(platform.key)}
           >
             <Feather
-              name={platform.icon as any}
+              name={platform.icon}
               size={16}
               color={activeTab === platform.key ? platform.color : Colors.dark.textSecondary}
             />
@@ -283,7 +296,7 @@ export default function ListingEditorScreen() {
         <View style={styles.card}>
           <View style={styles.platformHeader}>
             <View style={[styles.platformBadge, { backgroundColor: currentPlatform.color + "20" }]}>
-              <Feather name={currentPlatform.icon as any} size={14} color={currentPlatform.color} />
+              <Feather name={currentPlatform.icon} size={14} color={currentPlatform.color} />
               <ThemedText style={[styles.platformBadgeText, { color: currentPlatform.color }]}>
                 {currentPlatform.label}
               </ThemedText>
