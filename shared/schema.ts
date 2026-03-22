@@ -52,6 +52,8 @@ export const stashItems = pgTable("stash_items", {
   ebayListingId: text("ebay_listing_id"),
   itemType: text("item_type").default("designer"),
   handmadeDetails: jsonb("handmade_details"),
+  platformVersions: jsonb("platform_versions"),
+  marketMatches: jsonb("market_matches"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

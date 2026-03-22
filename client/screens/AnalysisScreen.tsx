@@ -11,6 +11,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Modal,
+  Linking,
 } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -46,6 +47,20 @@ const CUSTOM_ENDPOINT_KEY = "custom_ai_endpoint";
 const CUSTOM_API_KEY = "custom_ai_api_key";
 const CUSTOM_MODEL_KEY = "custom_ai_model_name";
 
+interface PlatformListing {
+  title: string;
+  description: string;
+  tags: string[];
+  suggestedPrice: number;
+}
+
+interface MarketMatch {
+  source: string;
+  title: string;
+  price: number;
+  url: string;
+}
+
 interface AnalysisResult {
   // Legacy fields
   title: string;
@@ -74,6 +89,15 @@ interface AnalysisResult {
   aspects: Record<string, string[]>;
   ebayCategoryId: string;
   wooCategory: string;
+  // Multi-platform listing versions
+  platformVersions?: {
+    ebay: PlatformListing;
+    poshmark: PlatformListing;
+    depop: PlatformListing;
+    stripe: PlatformListing;
+  };
+  // Market comparable sold listings
+  marketMatches?: MarketMatch[];
 }
 
 async function secureGet(key: string): Promise<string | null> {
@@ -706,17 +730,48 @@ export default function AnalysisScreen() {
             </View>
           </View>
 
+          {/* Market Matches */}
+          {result.marketMatches && result.marketMatches.length > 0 && (
+            <View style={styles.card}>
+              <ThemedText style={styles.cardTitle}>Comparable Sales</ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.marketMatchesScroll}>
+                {result.marketMatches.map((match, i) => (
+                  <Pressable
+                    key={i}
+                    style={styles.marketMatchCard}
+                    onPress={() => { if (match.url) Linking.openURL(match.url).catch(() => {}); }}
+                  >
+                    <View style={styles.marketMatchSource}>
+                      <ThemedText style={styles.marketMatchSourceText}>{match.source}</ThemedText>
+                    </View>
+                    <ThemedText style={styles.marketMatchPrice}>${match.price}</ThemedText>
+                    <ThemedText style={styles.marketMatchTitle} numberOfLines={2}>{match.title}</ThemedText>
+                    <Feather name="external-link" size={12} color={Colors.dark.textSecondary} style={{ marginTop: 4 }} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <Pressable style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.8 }]} onPress={handleSave}>
               <Feather name="check" size={20} color={Colors.dark.buttonText} />
               <ThemedText style={styles.primaryButtonText}>Looks Good — Save</ThemedText>
             </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [styles.editListingButton, pressed && { opacity: 0.8 }]}
+              onPress={() => navigation.navigate("ListingEditor", { analysisResult: result, fullImageUri, labelImageUri, itemType })}
+            >
+              <Feather name="layers" size={18} color={Colors.dark.primary} />
+              <ThemedText style={styles.editListingButtonText}>Edit Listing by Platform</ThemedText>
+            </Pressable>
             
             <View style={styles.secondaryButtons}>
               <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleEdit}>
                 <Feather name="edit-2" size={18} color={Colors.dark.text} />
-                <ThemedText style={styles.secondaryButtonText}>Edit</ThemedText>
+                <ThemedText style={styles.secondaryButtonText}>Quick Edit</ThemedText>
               </Pressable>
               
               <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleRetry}>
@@ -839,4 +894,16 @@ const styles = StyleSheet.create({
   
   // Retry
   feedbackInput: { backgroundColor: Colors.dark.backgroundSecondary, borderRadius: BorderRadius.sm, padding: Spacing.md, color: Colors.dark.text, ...Typography.body, minHeight: 100, textAlignVertical: "top", borderWidth: 1, borderColor: Colors.dark.border },
+
+  // Market Matches
+  marketMatchesScroll: { marginTop: Spacing.sm },
+  marketMatchCard: { width: 140, backgroundColor: Colors.dark.backgroundSecondary, borderRadius: BorderRadius.md, padding: Spacing.md, marginRight: Spacing.md, borderWidth: 1, borderColor: Colors.dark.border },
+  marketMatchSource: { backgroundColor: Colors.dark.primary + "20", paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: BorderRadius.sm, marginBottom: Spacing.xs, alignSelf: "flex-start" },
+  marketMatchSourceText: { fontSize: 10, color: Colors.dark.primary, fontWeight: "600" },
+  marketMatchPrice: { ...Typography.h4, color: Colors.dark.success, fontWeight: "700", marginBottom: Spacing.xs },
+  marketMatchTitle: { ...Typography.caption, color: Colors.dark.text, lineHeight: 16 },
+
+  // Edit Listing Button
+  editListingButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: Colors.dark.primary + "15", borderWidth: 1, borderColor: Colors.dark.primary, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, gap: Spacing.sm },
+  editListingButtonText: { ...Typography.button, color: Colors.dark.primary },
 });

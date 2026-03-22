@@ -14,6 +14,20 @@ export interface AIProviderConfig {
   secondaryModel?: string;
 }
 
+export interface PlatformListing {
+  title: string;
+  description: string;
+  tags: string[];
+  suggestedPrice: number;
+}
+
+export interface MarketMatch {
+  source: string;
+  title: string;
+  price: number;
+  url: string;
+}
+
 export interface AnalysisResult {
   // Legacy fields (backward compatibility)
   title: string;
@@ -43,6 +57,17 @@ export interface AnalysisResult {
   aspects: Record<string, string[]>;
   ebayCategoryId: string;
   wooCategory: string;
+
+  // Multi-platform listing versions
+  platformVersions?: {
+    ebay: PlatformListing;
+    poshmark: PlatformListing;
+    depop: PlatformListing;
+    stripe: PlatformListing;
+  };
+
+  // Market comparable sold listings
+  marketMatches?: MarketMatch[];
 
   // Item type
   itemType?: "designer" | "handmade";
@@ -77,6 +102,13 @@ Research the current luxury resale market:
 - confidence: One of ["high", "medium", "low"] for overall appraisal confidence
 - marketAnalysis: Detailed paragraph on current resale demand, comparable sold listings, brand desirability, and pricing rationale on platforms like eBay, The RealReal, Poshmark, and Depop
 
+## MARKET COMPARABLE LISTINGS (marketMatches)
+Generate 3-5 realistic comparable sold listings from resale platforms. Each must have:
+- source: Platform name (e.g., "eBay", "Poshmark", "The RealReal", "Depop", "Vestiaire")
+- title: Realistic listing title for that comparable item
+- price: Numeric sold price (just the number, no $)
+- url: Plausible but illustrative URL (e.g., "https://www.ebay.com/itm/example")
+
 ## ITEM IDENTIFICATION & LISTING DATA
 - brand: Identified brand name (or "Unknown" if unbranded)
 - title: Clear, keyword-rich item title (max 80 chars for eBay) — include brand, style, material, and condition
@@ -106,6 +138,14 @@ Provide key-value pairs as an object relevant to this luxury/designer item. Exam
 - Includes: ["Dust Bag", "Authenticity Card"]
 - ebayCategoryId: Suggested eBay category ID (use "1" for generic if unsure)
 - wooCategory: Suggested category name for the storefront
+
+## MULTI-PLATFORM LISTING VERSIONS (platformVersions)
+Generate optimized listing versions for each selling platform. Each version needs title, description, tags (array), and suggestedPrice (number):
+
+- platformVersions.ebay: SEO-dense title with brand/model/condition keywords (max 80 chars). Description uses eBay HTML formatting with bullet points, condition details, and seller policy mentions. Tags are eBay item specifics keywords. Price is the standard resale price.
+- platformVersions.poshmark: Casual community-style title using conversational language (e.g., "Gorgeous LV Neverfull MM 🛍️"). Description is warm, personal, mentions measurements, condition honestly, and uses Poshmark community norms. Tags are comma-style closet tags. Price matches the estimated list price.
+- platformVersions.depop: Short, trendy title that Gen Z/millennial buyers would search (e.g., "y2k coach bag vintage"). Description is brief, emoji-friendly, mentions measurements and condition. Tags use depop hashtag style keywords. Price may be slightly lower to attract younger buyers.
+- platformVersions.stripe: Clean, branded e-commerce copy. Professional product title without platform constraints. Description is polished marketing copy suitable for a boutique checkout page — no emoji, no seller jargon. Tags are clean category and style keywords for search. Price is retail/full price.
 
 Respond ONLY with valid JSON. All fields must be present. Use empty strings/arrays/zeros for unknown values, never omit fields.`;
 
@@ -170,6 +210,21 @@ Provide handmade-relevant key-value pairs:
 - ebayCategoryId: Suggested eBay category ID
 - wooCategory: Suggested category name for the storefront
 
+## MARKET COMPARABLE LISTINGS (marketMatches)
+Generate 3-5 realistic comparable sold listings from artisan/handmade platforms. Each must have:
+- source: Platform name (e.g., "Etsy", "Amazon Handmade", "Notonthehighstreet", "Shopify")
+- title: Realistic listing title for that comparable handmade item
+- price: Numeric sold price (just the number, no $)
+- url: Plausible but illustrative URL (e.g., "https://www.etsy.com/listing/example")
+
+## MULTI-PLATFORM LISTING VERSIONS (platformVersions)
+Generate optimized listing versions for each selling platform. Each version needs title, description, tags (array), and suggestedPrice (number):
+
+- platformVersions.ebay: Ingredient-forward title with product type and natural/handmade keywords (max 80 chars). Description uses eBay HTML formatting with bullet-pointed ingredient list, scent/texture notes, and usage info. Tags are eBay search keywords.
+- platformVersions.poshmark: Casual, sensory title emphasizing scent or key benefit. Description is warm and personal, mentions ingredients, size, and how it feels/smells. Tags use poshmark hashtag style.
+- platformVersions.depop: Short trendy title a younger buyer would search. Brief, emoji-friendly description mentioning hero ingredient and scent. Tags use depop hashtag style.
+- platformVersions.stripe: Clean branded e-commerce copy. Professional product name. Description is polished marketing copy for a boutique checkout — lead with sensory experience, then ingredients and size. Tags are clean category keywords.
+
 Respond ONLY with valid JSON. All fields must be present. Use empty strings/arrays/zeros for unknown values, never omit fields.`;
 }
 
@@ -201,6 +256,13 @@ const FALLBACK_RESULT: AnalysisResult = {
   aspects: { Category: ["Fashion"], Condition: ["Good"] },
   ebayCategoryId: "1",
   wooCategory: "Fashion",
+  platformVersions: {
+    ebay: { title: "Designer Item Pre-Owned Good Condition", description: "<p>Pre-owned designer item in good condition. See photos for details.</p>", tags: ["designer", "luxury", "pre-owned"], suggestedPrice: 75 },
+    poshmark: { title: "Designer item great find", description: "Pre-owned designer item in good condition! DM with questions.", tags: ["designer", "luxury", "preloved"], suggestedPrice: 75 },
+    depop: { title: "vintage designer find", description: "pre-owned designer item good condition 📦 dm for measurements", tags: ["designer", "vintage", "preloved"], suggestedPrice: 65 },
+    stripe: { title: "Pre-Owned Designer Item", description: "A pre-owned designer item in good overall condition.", tags: ["designer", "luxury", "resale"], suggestedPrice: 80 },
+  },
+  marketMatches: [],
 };
 
 function parseAnalysisResult(text: string): AnalysisResult {
@@ -251,6 +313,8 @@ function parseAnalysisResult(text: string): AnalysisResult {
     aspects: parsed.aspects || FALLBACK_RESULT.aspects,
     ebayCategoryId: parsed.ebayCategoryId || FALLBACK_RESULT.ebayCategoryId,
     wooCategory: parsed.wooCategory || FALLBACK_RESULT.wooCategory,
+    platformVersions: parsed.platformVersions || FALLBACK_RESULT.platformVersions,
+    marketMatches: parsed.marketMatches || FALLBACK_RESULT.marketMatches,
   };
 }
 

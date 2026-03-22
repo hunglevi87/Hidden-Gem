@@ -651,6 +651,25 @@ export default function ItemDetailsScreen() {
             </View>
           ) : null}
 
+          {/* Edit Listing by Platform */}
+          {item.aiAnalysis && (
+            <View style={styles.section}>
+              <Pressable
+                style={({ pressed }) => [styles.editListingButton, pressed && { opacity: 0.8 }]}
+                onPress={() => navigation.navigate("ListingEditor", {
+                  analysisResult: item.aiAnalysis as any,
+                  fullImageUri: item.fullImageUrl || undefined,
+                  labelImageUri: item.labelImageUrl || undefined,
+                  itemType: (item as any).itemType || "designer",
+                  stashItemId: item.id,
+                })}
+              >
+                <Feather name="layers" size={18} color={Colors.dark.primary} />
+                <ThemedText style={styles.editListingButtonText}>Edit Listing by Platform</ThemedText>
+              </Pressable>
+            </View>
+          )}
+
           <View style={styles.section}>
             <ThemedText style={styles.sectionLabel}>Publish</ThemedText>
             <View style={styles.publishGrid}>
@@ -1203,5 +1222,20 @@ const styles = StyleSheet.create({
   approvalConfirmText: {
     ...Typography.button,
     color: Colors.dark.buttonText,
+  },
+  editListingButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.dark.primary + "15",
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
+  editListingButtonText: {
+    ...Typography.button,
+    color: Colors.dark.primary,
   },
 });

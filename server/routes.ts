@@ -288,6 +288,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           seoTitle: itemData.seoTitle,
           seoDescription: itemData.seoDescription,
           seoKeywords: itemData.seoKeywords,
+          platformVersions: itemData.platformVersions || null,
+          marketMatches: itemData.marketMatches || null,
         })
         .returning();
       

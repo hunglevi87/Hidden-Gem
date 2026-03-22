@@ -15,11 +15,61 @@ import AIProvidersScreen from "@/screens/AIProvidersScreen";
 import ScanScreen from "@/screens/ScanScreen";
 import HandmadeDetailsScreen from "@/screens/HandmadeDetailsScreen";
 import CraftScreen from "@/screens/CraftScreen";
+import ListingEditorScreen from "@/screens/ListingEditorScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { Colors } from "@/constants/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { HandmadeDetails } from "@shared/types";
+
+interface PlatformListing {
+  title: string;
+  description: string;
+  tags: string[];
+  suggestedPrice: number;
+}
+
+interface MarketMatch {
+  source: string;
+  title: string;
+  price: number;
+  url: string;
+}
+
+interface AnalysisResultParam {
+  title: string;
+  description: string;
+  category: string;
+  estimatedValue: string;
+  condition: string;
+  seoTitle: string;
+  seoDescription: string;
+  seoKeywords: string[];
+  tags: string[];
+  brand: string;
+  subtitle: string;
+  shortDescription: string;
+  fullDescription: string;
+  estimatedValueLow: number;
+  estimatedValueHigh: number;
+  suggestedListPrice: number;
+  confidence: "high" | "medium" | "low";
+  authenticity: string;
+  authenticityConfidence: number;
+  authenticityDetails: string;
+  authenticationTips: string[];
+  marketAnalysis: string;
+  aspects: Record<string, string[]>;
+  ebayCategoryId: string;
+  wooCategory: string;
+  platformVersions?: {
+    ebay: PlatformListing;
+    poshmark: PlatformListing;
+    depop: PlatformListing;
+    stripe: PlatformListing;
+  };
+  marketMatches?: MarketMatch[];
+}
 
 export type RootStackParamList = {
   Onboarding: undefined;
@@ -37,6 +87,13 @@ export type RootStackParamList = {
   Analysis: { fullImageUri: string; labelImageUri?: string; itemType?: "designer" | "handmade"; handmadeDetails?: HandmadeDetails };
   Article: { articleId: number };
   Craft: undefined;
+  ListingEditor: {
+    analysisResult: AnalysisResultParam;
+    fullImageUri?: string;
+    labelImageUri?: string;
+    itemType?: "designer" | "handmade";
+    stashItemId?: number;
+  };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -172,6 +229,13 @@ export default function RootStackNavigator() {
             component={CraftScreen}
             options={{
               headerTitle: "Craft Studio",
+            }}
+          />
+          <Stack.Screen
+            name="ListingEditor"
+            component={ListingEditorScreen}
+            options={{
+              headerTitle: "Listing Editor",
             }}
           />
         </>
