@@ -49,6 +49,7 @@ export default function EmmaChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isInitializingGreeting, setIsInitializingGreeting] = useState(false);
 
   const slideAnim = useRef(new Animated.Value(panelHeight)).current;
   const scrollRef = useRef<ScrollView>(null);
@@ -96,14 +97,17 @@ export default function EmmaChat() {
 
     if (!hasOpened.current) {
       hasOpened.current = true;
+      setIsInitializingGreeting(true);
       setMessages([{ id: "greeting", role: "assistant", content: "", streaming: true }]);
       fetchStashContext().then((stats) => {
-        setMessages([{
-          id: "greeting",
-          role: "assistant",
-          content: buildGreeting(stats),
-          streaming: false,
-        }]);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === "greeting"
+              ? { ...m, content: buildGreeting(stats), streaming: false }
+              : m
+          )
+        );
+        setIsInitializingGreeting(false);
       });
     }
   };
@@ -118,7 +122,7 @@ export default function EmmaChat() {
   };
 
   const sendMessage = async (text: string) => {
-    if (!text.trim() || isStreaming) return;
+    if (!text.trim() || isStreaming || isInitializingGreeting) return;
 
     const userMsg: Message = {
       id: `u-${Date.now()}`,
@@ -242,7 +246,7 @@ export default function EmmaChat() {
 
   const c = Colors.dark;
   const fabBottom = insets.bottom + 70;
-  const showSuggestions = messages.length <= 1 && !isStreaming;
+  const showSuggestions = messages.length <= 1 && !isStreaming && !isInitializingGreeting;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -380,18 +384,18 @@ export default function EmmaChat() {
                 onSubmitEditing={() => sendMessage(input)}
                 returnKeyType="send"
                 blurOnSubmit={false}
-                editable={!isStreaming}
+                editable={!isStreaming && !isInitializingGreeting}
               />
               <Pressable
                 style={[
                   styles.sendBtn,
                   {
                     backgroundColor: c.primary,
-                    opacity: !input.trim() || isStreaming ? 0.4 : 1,
+                    opacity: !input.trim() || isStreaming || isInitializingGreeting ? 0.4 : 1,
                   },
                 ]}
                 onPress={() => sendMessage(input)}
-                disabled={!input.trim() || isStreaming}
+                disabled={!input.trim() || isStreaming || isInitializingGreeting}
                 accessibilityLabel="Send"
               >
                 <Feather name="arrow-up" size={18} color="#fff" />
