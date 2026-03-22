@@ -23,6 +23,7 @@ import {
 } from "./ai-providers";
 import { generateSEOTitle, generateDescription, generateTags, createAIRecord } from "./ai-seo";
 import { uploadProductImage, deleteProductImage } from "./supabase-storage";
+import { requireAuth } from "./auth-middleware";
 import {
   updateEbayListing,
   deleteEbayListing,
@@ -1253,12 +1254,9 @@ Respond ONLY with valid JSON. Example:
   }
 
   // GET /api/craft/gift-sets — list saved gift sets for a user
-  app.get("/api/craft/gift-sets", async (req: Request, res: Response) => {
+  app.get("/api/craft/gift-sets", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.query.userId as string;
-      if (!userId) {
-        return res.status(400).json({ error: "userId is required" });
-      }
+      const userId = res.locals.userId as string;
       const sets = await db
         .select()
         .from(giftSets)
@@ -1273,14 +1271,13 @@ Respond ONLY with valid JSON. Example:
 
   // POST /api/craft/gift-sets — canonical generate endpoint per task spec
   // (also registered as /generate below for backward compat)
-  app.post("/api/craft/gift-sets", async (req: Request, res: Response) => {
+  app.post("/api/craft/gift-sets", requireAuth, async (req: Request, res: Response) => {
     if (req.body?.action === "save") {
       // Route to save handler if explicitly requested via this path
       return res.status(400).json({ error: "Use POST /api/craft/gift-sets/save to persist a set" });
     }
     try {
-      const userId = req.body.userId as string;
-      if (!userId) return res.status(400).json({ error: "userId is required" });
+      const userId = res.locals.userId as string;
 
       const items = await db
         .select()
@@ -1318,12 +1315,9 @@ Respond ONLY with valid JSON. Example:
   });
 
   // POST /api/craft/gift-sets/generate — generate new bundles from stash
-  app.post("/api/craft/gift-sets/generate", async (req: Request, res: Response) => {
+  app.post("/api/craft/gift-sets/generate", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.body.userId as string;
-      if (!userId) {
-        return res.status(400).json({ error: "userId is required" });
-      }
+      const userId = res.locals.userId as string;
 
       const items = await db
         .select()
@@ -1363,10 +1357,10 @@ Respond ONLY with valid JSON. Example:
   });
 
   // POST /api/craft/gift-sets/save — persist a generated gift set (owned by userId)
-  app.post("/api/craft/gift-sets/save", async (req: Request, res: Response) => {
+  app.post("/api/craft/gift-sets/save", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { userId, tier, title, description, marketingHook, itemIds, itemsSnapshot, totalValue, sellingPrice } = req.body as {
-        userId: string;
+      const userId = res.locals.userId as string;
+      const { tier, title, description, marketingHook, itemIds, itemsSnapshot, totalValue, sellingPrice } = req.body as {
         tier: string;
         title: string;
         description?: string;
@@ -1376,8 +1370,8 @@ Respond ONLY with valid JSON. Example:
         totalValue?: number;
         sellingPrice?: number;
       };
-      if (!userId || !tier || !title) {
-        return res.status(400).json({ error: "userId, tier, and title are required" });
+      if (!tier || !title) {
+        return res.status(400).json({ error: "tier and title are required" });
       }
 
       const [saved] = await db
@@ -1404,12 +1398,12 @@ Respond ONLY with valid JSON. Example:
   });
 
   // DELETE /api/craft/gift-sets/:id — remove a saved gift set (ownership enforced)
-  app.delete("/api/craft/gift-sets/:id", async (req: Request, res: Response) => {
+  app.delete("/api/craft/gift-sets/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
-      const userId = req.query.userId as string;
-      if (isNaN(id) || !userId) {
-        return res.status(400).json({ error: "Valid id and userId are required" });
+      const userId = res.locals.userId as string;
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Valid id is required" });
       }
       // Scope deletion to owner — prevents cross-user deletion (IDOR)
       const result = await db
@@ -1427,10 +1421,11 @@ Respond ONLY with valid JSON. Example:
   });
 
   // POST /api/craft/strategy — ask Emma a strategy question (SSE streaming response)
-  app.post("/api/craft/strategy", async (req: Request, res: Response) => {
-    const { userId, question } = req.body as { userId: string; question: string };
-    if (!userId || !question?.trim()) {
-      return res.status(400).json({ error: "userId and question are required" });
+  app.post("/api/craft/strategy", requireAuth, async (req: Request, res: Response) => {
+    const userId = res.locals.userId as string;
+    const { question } = req.body as { question: string };
+    if (!question?.trim()) {
+      return res.status(400).json({ error: "question is required" });
     }
 
     // Set SSE headers before streaming begins

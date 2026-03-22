@@ -311,9 +311,13 @@ function GiftSetCard({
 // ---------------------------------------------------------------------------
 function GiftSetsTab() {
   const { theme } = useTheme();
-  const { user } = useAuthContext();
+  const { user, session } = useAuthContext();
   const queryClient = useQueryClient();
   const userId = user?.id || "demo-user";
+
+  const authHeaders = session?.access_token
+    ? { Authorization: `Bearer ${session.access_token}` }
+    : {};
 
   const [generatedSets, setGeneratedSets] = useState<GiftSet[]>([]);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -322,7 +326,9 @@ function GiftSetsTab() {
     queryKey: ["/api/craft/gift-sets", userId],
     queryFn: async () => {
       const baseUrl = getApiUrl();
-      const res = await fetch(`${baseUrl}api/craft/gift-sets?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(`${baseUrl}api/craft/gift-sets`, {
+        headers: { "Content-Type": "application/json", ...authHeaders },
+      });
       if (!res.ok) throw new Error("Failed to fetch saved sets");
       return res.json();
     },
@@ -330,7 +336,7 @@ function GiftSetsTab() {
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/craft/gift-sets", { userId });
+      const res = await apiRequest("POST", "/api/craft/gift-sets", {}, authHeaders);
       return res.json() as Promise<GiftSet[]>;
     },
     onSuccess: (data: GiftSet[]) => {
@@ -344,7 +350,7 @@ function GiftSetsTab() {
 
   const saveMutation = useMutation({
     mutationFn: async (set: GiftSet) => {
-      const res = await apiRequest("POST", "/api/craft/gift-sets/save", { ...set, userId });
+      const res = await apiRequest("POST", "/api/craft/gift-sets/save", set, authHeaders);
       return res.json();
     },
     onSuccess: () => {
@@ -463,8 +469,7 @@ function GiftSetsTab() {
 // ---------------------------------------------------------------------------
 function StrategyTab() {
   const { theme } = useTheme();
-  const { user } = useAuthContext();
-  const userId = user?.id || "demo-user";
+  const { session } = useAuthContext();
   const [question, setQuestion] = useState("");
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -473,6 +478,10 @@ function StrategyTab() {
 
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
+
+  const authHeaders = session?.access_token
+    ? { Authorization: `Bearer ${session.access_token}` }
+    : {};
 
   const askEmma = useCallback(async (q: string) => {
     if (!q.trim()) return;
@@ -483,8 +492,8 @@ function StrategyTab() {
       const baseUrl = getApiUrl();
       const response = await fetch(`${baseUrl}api/craft/strategy`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, question: q.trim() }),
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ question: q.trim() }),
       });
       if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
@@ -547,7 +556,7 @@ function StrategyTab() {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [userId]);
+  }, [session?.access_token]);
 
   return (
     <KeyboardAvoidingView
