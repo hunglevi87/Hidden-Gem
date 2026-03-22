@@ -15,7 +15,11 @@ import {
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import {
+  useNavigation,
+  useRoute,
+  type RouteProp,
+} from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
@@ -29,7 +33,12 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 
 type AnalysisRouteProp = RouteProp<RootStackParamList, "Analysis">;
 
-type AppraisalState = "appraising" | "reviewing" | "editing" | "retrying" | "stashed";
+type AppraisalState =
+  | "appraising"
+  | "reviewing"
+  | "editing"
+  | "retrying"
+  | "stashed";
 type AIProvider = "gemini" | "openai" | "anthropic" | "openfang" | "custom";
 
 const ACTIVE_PROVIDER_KEY = "ai_active_provider";
@@ -65,7 +74,12 @@ interface AnalysisResult {
   estimatedValueHigh: number;
   suggestedListPrice: number;
   confidence: "high" | "medium" | "low";
-  authenticity: "Authentic" | "Likely Authentic" | "Uncertain" | "Likely Counterfeit" | "Counterfeit";
+  authenticity:
+    | "Authentic"
+    | "Likely Authentic"
+    | "Uncertain"
+    | "Likely Counterfeit"
+    | "Counterfeit";
   authenticityConfidence: number;
   authenticityDetails: string;
   authenticationTips: string[];
@@ -85,7 +99,11 @@ async function secureGet(key: string): Promise<string | null> {
 async function getAnalysisProviderPayload(): Promise<Record<string, string>> {
   const active = await AsyncStorage.getItem(ACTIVE_PROVIDER_KEY);
   const provider: AIProvider =
-    active === "gemini" || active === "openai" || active === "anthropic" || active === "openfang" || active === "custom"
+    active === "gemini" ||
+    active === "openai" ||
+    active === "anthropic" ||
+    active === "openfang" ||
+    active === "custom"
       ? active
       : "gemini";
 
@@ -132,31 +150,41 @@ async function getAnalysisProviderPayload(): Promise<Record<string, string>> {
   return payload;
 }
 
-const CONDITION_OPTIONS = ["New", "Like New", "Very Good", "Good", "Acceptable", "For Parts"];
+const CONDITION_OPTIONS = [
+  "New",
+  "Like New",
+  "Very Good",
+  "Good",
+  "Acceptable",
+  "For Parts",
+];
 
 const AUTHENTICITY_COLORS: Record<string, string> = {
-  "Authentic": Colors.dark.success,
+  Authentic: Colors.dark.success,
   "Likely Authentic": "#22c55e",
-  "Uncertain": Colors.dark.warning || "#f59e0b",
+  Uncertain: Colors.dark.warning || "#f59e0b",
   "Likely Counterfeit": Colors.dark.error,
-  "Counterfeit": "#dc2626",
+  Counterfeit: "#dc2626",
 };
 
 const CONFIDENCE_COLORS: Record<string, string> = {
-  "high": Colors.dark.success,
-  "medium": Colors.dark.warning || "#f59e0b",
-  "low": Colors.dark.error,
+  high: Colors.dark.success,
+  medium: Colors.dark.warning || "#f59e0b",
+  low: Colors.dark.error,
 };
 
 export default function AnalysisScreen() {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<AnalysisRouteProp>();
   const queryClient = useQueryClient();
   const { fullImageUri, labelImageUri } = route.params;
 
   const [state, setState] = useState<AppraisalState>("appraising");
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(
+    null,
+  );
   const [editedResult, setEditedResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retryFeedback, setRetryFeedback] = useState("");
@@ -187,8 +215,16 @@ export default function AnalysisScreen() {
 
     try {
       const formData = new FormData();
-      formData.append("fullImage", { uri: fullImageUri, type: "image/jpeg", name: "full.jpg" } as any);
-      formData.append("labelImage", { uri: labelImageUri, type: "image/jpeg", name: "label.jpg" } as any);
+      formData.append("fullImage", {
+        uri: fullImageUri,
+        type: "image/jpeg",
+        name: "full.jpg",
+      } as any);
+      formData.append("labelImage", {
+        uri: labelImageUri,
+        type: "image/jpeg",
+        name: "label.jpg",
+      } as any);
       const providerPayload = await getAnalysisProviderPayload();
       for (const [key, value] of Object.entries(providerPayload)) {
         formData.append(key, value);
@@ -206,7 +242,7 @@ export default function AnalysisScreen() {
       setAnalysisResult(result);
       setEditedResult(result);
       setState("reviewing");
-      
+
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
@@ -221,13 +257,21 @@ export default function AnalysisScreen() {
 
   const handleRetryAnalysis = async () => {
     if (!analysisResult || !retryFeedback.trim()) return;
-    
+
     setState("appraising");
-    
+
     try {
       const formData = new FormData();
-      formData.append("fullImage", { uri: fullImageUri, type: "image/jpeg", name: "full.jpg" } as any);
-      formData.append("labelImage", { uri: labelImageUri, type: "image/jpeg", name: "label.jpg" } as any);
+      formData.append("fullImage", {
+        uri: fullImageUri,
+        type: "image/jpeg",
+        name: "full.jpg",
+      } as any);
+      formData.append("labelImage", {
+        uri: labelImageUri,
+        type: "image/jpeg",
+        name: "label.jpg",
+      } as any);
       formData.append("previousResult", JSON.stringify(analysisResult));
       formData.append("feedback", retryFeedback);
       const providerPayload = await getAnalysisProviderPayload();
@@ -248,7 +292,7 @@ export default function AnalysisScreen() {
       setEditedResult(result);
       setRetryFeedback("");
       setState("reviewing");
-      
+
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
@@ -301,7 +345,10 @@ export default function AnalysisScreen() {
 
   const addAspect = () => {
     if (!editedResult || !aspectKey.trim() || !aspectValue.trim()) return;
-    const newAspects = { ...editedResult.aspects, [aspectKey.trim()]: [aspectValue.trim()] };
+    const newAspects = {
+      ...editedResult.aspects,
+      [aspectKey.trim()]: [aspectValue.trim()],
+    };
     setEditedResult({ ...editedResult, aspects: newAspects });
     setAspectKey("");
     setAspectValue("");
@@ -318,13 +365,24 @@ export default function AnalysisScreen() {
   if (state === "appraising") {
     return (
       <ThemedView style={styles.container}>
-        <View style={[styles.loadingContainer, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
+        <View
+          style={[
+            styles.loadingContainer,
+            { paddingBottom: insets.bottom + Spacing["2xl"] },
+          ]}
+        >
           <View style={styles.loadingAnimation}>
             <Feather name="star" size={48} color={Colors.dark.primary} />
           </View>
           <ThemedText style={styles.loadingTitle}>Analyzing Item...</ThemedText>
-          <ThemedText style={styles.loadingSubtitle}>Our AI is identifying and appraising your find</ThemedText>
-          <ActivityIndicator size="large" color={Colors.dark.primary} style={{ marginTop: Spacing["2xl"] }} />
+          <ThemedText style={styles.loadingSubtitle}>
+            Our AI is identifying and appraising your find
+          </ThemedText>
+          <ActivityIndicator
+            size="large"
+            color={Colors.dark.primary}
+            style={{ marginTop: Spacing["2xl"] }}
+          />
         </View>
       </ThemedView>
     );
@@ -333,14 +391,29 @@ export default function AnalysisScreen() {
   if (error) {
     return (
       <ThemedView style={styles.container}>
-        <View style={[styles.errorContainer, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
+        <View
+          style={[
+            styles.errorContainer,
+            { paddingBottom: insets.bottom + Spacing["2xl"] },
+          ]}
+        >
           <View style={styles.errorIcon}>
             <Feather name="alert-circle" size={48} color={Colors.dark.error} />
           </View>
           <ThemedText style={styles.errorTitle}>Analysis Failed</ThemedText>
           <ThemedText style={styles.errorSubtitle}>{error}</ThemedText>
-          <Pressable style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.8 }]} onPress={analyzeImages}>
-            <Feather name="refresh-cw" size={20} color={Colors.dark.buttonText} />
+          <Pressable
+            style={({ pressed }) => [
+              styles.retryButton,
+              pressed && { opacity: 0.8 },
+            ]}
+            onPress={analyzeImages}
+          >
+            <Feather
+              name="refresh-cw"
+              size={20}
+              color={Colors.dark.buttonText}
+            />
             <ThemedText style={styles.retryButtonText}>Try Again</ThemedText>
           </Pressable>
         </View>
@@ -351,14 +424,33 @@ export default function AnalysisScreen() {
   if (state === "stashed") {
     return (
       <ThemedView style={styles.container}>
-        <View style={[styles.successContainer, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
+        <View
+          style={[
+            styles.successContainer,
+            { paddingBottom: insets.bottom + Spacing["2xl"] },
+          ]}
+        >
           <View style={styles.successIconLarge}>
-            <Feather name="check-circle" size={64} color={Colors.dark.success} />
+            <Feather
+              name="check-circle"
+              size={64}
+              color={Colors.dark.success}
+            />
           </View>
           <ThemedText style={styles.successTitle}>Saved to Stash!</ThemedText>
-          <ThemedText style={styles.successSubtitle}>Your item has been added to your collection</ThemedText>
-          <Pressable style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.8 }]} onPress={handleStashedComplete}>
-            <ThemedText style={styles.primaryButtonText}>View My Stash</ThemedText>
+          <ThemedText style={styles.successSubtitle}>
+            Your item has been added to your collection
+          </ThemedText>
+          <Pressable
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && { opacity: 0.8 },
+            ]}
+            onPress={handleStashedComplete}
+          >
+            <ThemedText style={styles.primaryButtonText}>
+              View My Stash
+            </ThemedText>
           </Pressable>
         </View>
       </ThemedView>
@@ -368,22 +460,39 @@ export default function AnalysisScreen() {
   if (state === "retrying") {
     return (
       <ThemedView style={styles.container}>
-        <KeyboardAwareScrollViewCompat contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
+        <KeyboardAwareScrollViewCompat
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + Spacing["2xl"] },
+          ]}
+        >
           <View style={styles.imagesRow}>
             <View style={styles.imageContainer}>
-              <Image source={{ uri: fullImageUri }} style={styles.previewImage} resizeMode="cover" />
+              <Image
+                source={{ uri: fullImageUri }}
+                style={styles.previewImage}
+                resizeMode="cover"
+              />
               <ThemedText style={styles.imageLabel}>Full Item</ThemedText>
             </View>
             <View style={styles.imageContainer}>
-              <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
+              <Image
+                source={{ uri: labelImageUri }}
+                style={styles.previewImage}
+                resizeMode="cover"
+              />
               <ThemedText style={styles.imageLabel}>Label</ThemedText>
             </View>
           </View>
 
           <View style={styles.card}>
-            <ThemedText style={styles.cardTitle}>Tell AI What to Fix</ThemedText>
-            <ThemedText style={styles.cardSubtitle}>Describe what the AI missed or got wrong</ThemedText>
-            
+            <ThemedText style={styles.cardTitle}>
+              Tell AI What to Fix
+            </ThemedText>
+            <ThemedText style={styles.cardSubtitle}>
+              Describe what the AI missed or got wrong
+            </ThemedText>
+
             <TextInput
               style={styles.feedbackInput}
               multiline
@@ -395,16 +504,34 @@ export default function AnalysisScreen() {
             />
 
             <View style={styles.buttonRow}>
-              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleBackToReview}>
-                <ThemedText style={styles.secondaryButtonText}>Cancel</ThemedText>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  pressed && { opacity: 0.8 },
+                ]}
+                onPress={handleBackToReview}
+              >
+                <ThemedText style={styles.secondaryButtonText}>
+                  Cancel
+                </ThemedText>
               </Pressable>
-              <Pressable 
-                style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.8 }, !retryFeedback.trim() && { opacity: 0.5 }]} 
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed && { opacity: 0.8 },
+                  !retryFeedback.trim() && { opacity: 0.5 },
+                ]}
                 onPress={handleRetryAnalysis}
                 disabled={!retryFeedback.trim()}
               >
-                <Feather name="refresh-cw" size={18} color={Colors.dark.buttonText} />
-                <ThemedText style={styles.primaryButtonText}>Re-Analyze</ThemedText>
+                <Feather
+                  name="refresh-cw"
+                  size={18}
+                  color={Colors.dark.buttonText}
+                />
+                <ThemedText style={styles.primaryButtonText}>
+                  Re-Analyze
+                </ThemedText>
               </Pressable>
             </View>
           </View>
@@ -416,12 +543,19 @@ export default function AnalysisScreen() {
   if (state === "editing" && editedResult) {
     return (
       <ThemedView style={styles.container}>
-        <KeyboardAwareScrollViewCompat contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
+        <KeyboardAwareScrollViewCompat
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + Spacing["2xl"] },
+          ]}
+        >
           <View style={styles.card}>
             <ThemedText style={styles.cardTitle}>Edit Listing</ThemedText>
 
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.inputLabel}>Title ({editedResult.title.length}/80)</ThemedText>
+              <ThemedText style={styles.inputLabel}>
+                Title ({editedResult.title.length}/80)
+              </ThemedText>
               <TextInput
                 style={styles.textInput}
                 value={editedResult.title}
@@ -431,11 +565,15 @@ export default function AnalysisScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.inputLabel}>Subtitle ({editedResult.subtitle?.length || 0}/55)</ThemedText>
+              <ThemedText style={styles.inputLabel}>
+                Subtitle ({editedResult.subtitle?.length || 0}/55)
+              </ThemedText>
               <TextInput
                 style={styles.textInput}
                 value={editedResult.subtitle || ""}
-                onChangeText={(v) => updateEditedField("subtitle", v.slice(0, 55))}
+                onChangeText={(v) =>
+                  updateEditedField("subtitle", v.slice(0, 55))
+                }
                 maxLength={55}
                 placeholder="Short subtitle for eBay"
                 placeholderTextColor={Colors.dark.textSecondary}
@@ -444,12 +582,16 @@ export default function AnalysisScreen() {
 
             <View style={styles.rowInputs}>
               <View style={[styles.inputGroup, { flex: 1 }]}>
-                <ThemedText style={styles.inputLabel}>List Price ($)</ThemedText>
+                <ThemedText style={styles.inputLabel}>
+                  List Price ($)
+                </ThemedText>
                 <TextInput
                   style={styles.textInput}
                   keyboardType="numeric"
                   value={editedResult.suggestedListPrice?.toString() || ""}
-                  onChangeText={(v) => updateEditedField("suggestedListPrice", parseFloat(v) || 0)}
+                  onChangeText={(v) =>
+                    updateEditedField("suggestedListPrice", parseFloat(v) || 0)
+                  }
                 />
               </View>
               <View style={[styles.inputGroup, { flex: 1 }]}>
@@ -458,10 +600,20 @@ export default function AnalysisScreen() {
                   {CONDITION_OPTIONS.map((c) => (
                     <Pressable
                       key={c}
-                      style={[styles.conditionChip, editedResult.condition === c && styles.conditionChipActive]}
+                      style={[
+                        styles.conditionChip,
+                        editedResult.condition === c &&
+                          styles.conditionChipActive,
+                      ]}
                       onPress={() => updateEditedField("condition", c)}
                     >
-                      <ThemedText style={[styles.conditionChipText, editedResult.condition === c && styles.conditionChipTextActive]}>
+                      <ThemedText
+                        style={[
+                          styles.conditionChipText,
+                          editedResult.condition === c &&
+                            styles.conditionChipTextActive,
+                        ]}
+                      >
                         {c}
                       </ThemedText>
                     </Pressable>
@@ -471,7 +623,9 @@ export default function AnalysisScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.inputLabel}>Short Description</ThemedText>
+              <ThemedText style={styles.inputLabel}>
+                Short Description
+              </ThemedText>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
                 multiline
@@ -484,7 +638,9 @@ export default function AnalysisScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.inputLabel}>Full Description</ThemedText>
+              <ThemedText style={styles.inputLabel}>
+                Full Description
+              </ThemedText>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
                 multiline
@@ -517,20 +673,26 @@ export default function AnalysisScreen() {
                   <Feather name="plus" size={20} color={Colors.dark.primary} />
                 </Pressable>
               </View>
-              {Object.entries(editedResult.aspects || {}).map(([key, values]) => (
-                <View key={key} style={styles.aspectRow}>
-                  <ThemedText style={styles.aspectKey}>{key}:</ThemedText>
-                  <ThemedText style={styles.aspectValue}>{values.join(", ")}</ThemedText>
-                  <Pressable onPress={() => removeAspect(key)}>
-                    <Feather name="x" size={16} color={Colors.dark.error} />
-                  </Pressable>
-                </View>
-              ))}
+              {Object.entries(editedResult.aspects || {}).map(
+                ([key, values]) => (
+                  <View key={key} style={styles.aspectRow}>
+                    <ThemedText style={styles.aspectKey}>{key}:</ThemedText>
+                    <ThemedText style={styles.aspectValue}>
+                      {values.join(", ")}
+                    </ThemedText>
+                    <Pressable onPress={() => removeAspect(key)}>
+                      <Feather name="x" size={16} color={Colors.dark.error} />
+                    </Pressable>
+                  </View>
+                ),
+              )}
             </View>
 
             <View style={styles.rowInputs}>
               <View style={[styles.inputGroup, { flex: 1 }]}>
-                <ThemedText style={styles.inputLabel}>eBay Category ID</ThemedText>
+                <ThemedText style={styles.inputLabel}>
+                  eBay Category ID
+                </ThemedText>
                 <TextInput
                   style={styles.textInput}
                   value={editedResult.ebayCategoryId || ""}
@@ -538,7 +700,9 @@ export default function AnalysisScreen() {
                 />
               </View>
               <View style={[styles.inputGroup, { flex: 1 }]}>
-                <ThemedText style={styles.inputLabel}>WooCommerce Category</ThemedText>
+                <ThemedText style={styles.inputLabel}>
+                  WooCommerce Category
+                </ThemedText>
                 <TextInput
                   style={styles.textInput}
                   value={editedResult.wooCategory || ""}
@@ -548,31 +712,62 @@ export default function AnalysisScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.inputLabel}>Tags (comma separated)</ThemedText>
+              <ThemedText style={styles.inputLabel}>
+                Tags (comma separated)
+              </ThemedText>
               <TextInput
                 style={styles.textInput}
                 value={editedResult.tags?.join(", ") || ""}
-                onChangeText={(v) => updateEditedField("tags", v.split(",").map((t) => t.trim()).filter(Boolean))}
+                onChangeText={(v) =>
+                  updateEditedField(
+                    "tags",
+                    v
+                      .split(",")
+                      .map((t) => t.trim())
+                      .filter(Boolean),
+                  )
+                }
                 placeholder="vintage, collectible, rare"
                 placeholderTextColor={Colors.dark.textSecondary}
               />
             </View>
 
             <View style={styles.buttonRow}>
-              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleBackToReview}>
-                <ThemedText style={styles.secondaryButtonText}>Cancel</ThemedText>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  pressed && { opacity: 0.8 },
+                ]}
+                onPress={handleBackToReview}
+              >
+                <ThemedText style={styles.secondaryButtonText}>
+                  Cancel
+                </ThemedText>
               </Pressable>
-              <Pressable 
-                style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.8 }, saveMutation.isPending && { opacity: 0.6 }]} 
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed && { opacity: 0.8 },
+                  saveMutation.isPending && { opacity: 0.6 },
+                ]}
                 onPress={handleSave}
                 disabled={saveMutation.isPending}
               >
                 {saveMutation.isPending ? (
-                  <ActivityIndicator color={Colors.dark.buttonText} size="small" />
+                  <ActivityIndicator
+                    color={Colors.dark.buttonText}
+                    size="small"
+                  />
                 ) : (
                   <>
-                    <Feather name="save" size={18} color={Colors.dark.buttonText} />
-                    <ThemedText style={styles.primaryButtonText}>Save to Stash</ThemedText>
+                    <Feather
+                      name="save"
+                      size={18}
+                      color={Colors.dark.buttonText}
+                    />
+                    <ThemedText style={styles.primaryButtonText}>
+                      Save to Stash
+                    </ThemedText>
                   </>
                 )}
               </Pressable>
@@ -586,17 +781,30 @@ export default function AnalysisScreen() {
   // ==================== REVIEWING STATE ====================
   if (state === "reviewing" && analysisResult) {
     const result = analysisResult;
-    
+
     return (
       <ThemedView style={styles.container}>
-        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + Spacing["2xl"] },
+          ]}
+        >
           <View style={styles.imagesRow}>
             <View style={styles.imageContainer}>
-              <Image source={{ uri: fullImageUri }} style={styles.previewImage} resizeMode="cover" />
+              <Image
+                source={{ uri: fullImageUri }}
+                style={styles.previewImage}
+                resizeMode="cover"
+              />
               <ThemedText style={styles.imageLabel}>Full Item</ThemedText>
             </View>
             <View style={styles.imageContainer}>
-              <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
+              <Image
+                source={{ uri: labelImageUri }}
+                style={styles.previewImage}
+                resizeMode="cover"
+              />
               <ThemedText style={styles.imageLabel}>Label</ThemedText>
             </View>
           </View>
@@ -605,17 +813,41 @@ export default function AnalysisScreen() {
           <View style={styles.card}>
             <View style={styles.headerRow}>
               <View style={styles.brandBadge}>
-                <ThemedText style={styles.brandText}>{result.brand || "Unknown Brand"}</ThemedText>
+                <ThemedText style={styles.brandText}>
+                  {result.brand || "Unknown Brand"}
+                </ThemedText>
               </View>
-              <View style={[styles.confidenceBadge, { backgroundColor: CONFIDENCE_COLORS[result.confidence] + "20" }]}>
-                <View style={[styles.confidenceDot, { backgroundColor: CONFIDENCE_COLORS[result.confidence] }]} />
-                <ThemedText style={[styles.confidenceText, { color: CONFIDENCE_COLORS[result.confidence] }]}>
+              <View
+                style={[
+                  styles.confidenceBadge,
+                  {
+                    backgroundColor:
+                      CONFIDENCE_COLORS[result.confidence] + "20",
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.confidenceDot,
+                    { backgroundColor: CONFIDENCE_COLORS[result.confidence] },
+                  ]}
+                />
+                <ThemedText
+                  style={[
+                    styles.confidenceText,
+                    { color: CONFIDENCE_COLORS[result.confidence] },
+                  ]}
+                >
                   {result.confidence} confidence
                 </ThemedText>
               </View>
             </View>
             <ThemedText style={styles.itemTitle}>{result.title}</ThemedText>
-            {result.subtitle ? <ThemedText style={styles.itemSubtitle}>{result.subtitle}</ThemedText> : null}
+            {result.subtitle ? (
+              <ThemedText style={styles.itemSubtitle}>
+                {result.subtitle}
+              </ThemedText>
+            ) : null}
           </View>
 
           {/* Value Card */}
@@ -624,40 +856,84 @@ export default function AnalysisScreen() {
             <View style={styles.valueRangeRow}>
               <View style={styles.valueBox}>
                 <ThemedText style={styles.valueLabel}>Value Range</ThemedText>
-                <ThemedText style={styles.valueAmount}>${result.estimatedValueLow} - ${result.estimatedValueHigh}</ThemedText>
+                <ThemedText style={styles.valueAmount}>
+                  ${result.estimatedValueLow} - ${result.estimatedValueHigh}
+                </ThemedText>
               </View>
               <View style={styles.valueBox}>
-                <ThemedText style={styles.valueLabel}>Suggested List Price</ThemedText>
-                <ThemedText style={styles.listPrice}>${result.suggestedListPrice}</ThemedText>
+                <ThemedText style={styles.valueLabel}>
+                  Suggested List Price
+                </ThemedText>
+                <ThemedText style={styles.listPrice}>
+                  ${result.suggestedListPrice}
+                </ThemedText>
               </View>
             </View>
             <View style={styles.conditionRow}>
               <ThemedText style={styles.conditionLabel}>Condition:</ThemedText>
-              <ThemedText style={styles.conditionValue}>{result.condition}</ThemedText>
+              <ThemedText style={styles.conditionValue}>
+                {result.condition}
+              </ThemedText>
             </View>
           </View>
 
           {/* Authentication */}
           <View style={styles.card}>
-            <ThemedText style={styles.cardTitle}>Authentication Assessment</ThemedText>
+            <ThemedText style={styles.cardTitle}>
+              Authentication Assessment
+            </ThemedText>
             <View style={styles.authHeader}>
-              <View style={[styles.authBadge, { backgroundColor: AUTHENTICITY_COLORS[result.authenticity] + "20" }]}>
-                <ThemedText style={[styles.authBadgeText, { color: AUTHENTICITY_COLORS[result.authenticity] }]}>
+              <View
+                style={[
+                  styles.authBadge,
+                  {
+                    backgroundColor:
+                      AUTHENTICITY_COLORS[result.authenticity] + "20",
+                  },
+                ]}
+              >
+                <ThemedText
+                  style={[
+                    styles.authBadgeText,
+                    { color: AUTHENTICITY_COLORS[result.authenticity] },
+                  ]}
+                >
                   {result.authenticity}
                 </ThemedText>
               </View>
               <View style={styles.confidenceBar}>
-                <View style={[styles.confidenceFill, { width: `${result.authenticityConfidence}%`, backgroundColor: AUTHENTICITY_COLORS[result.authenticity] }]} />
+                <View
+                  style={[
+                    styles.confidenceFill,
+                    {
+                      width: `${result.authenticityConfidence}%`,
+                      backgroundColor: AUTHENTICITY_COLORS[result.authenticity],
+                    },
+                  ]}
+                />
               </View>
-              <ThemedText style={styles.confidencePercent}>{result.authenticityConfidence}%</ThemedText>
+              <ThemedText style={styles.confidencePercent}>
+                {result.authenticityConfidence}%
+              </ThemedText>
             </View>
-            <ThemedText style={styles.authDetails}>{result.authenticityDetails}</ThemedText>
-            
-            <ThemedText style={styles.sectionSubtitle}>Authentication Tips</ThemedText>
+            <ThemedText style={styles.authDetails}>
+              {result.authenticityDetails}
+            </ThemedText>
+
+            <ThemedText style={styles.sectionSubtitle}>
+              Authentication Tips
+            </ThemedText>
             {result.authenticationTips?.map((tip, i) => (
               <View key={i} style={styles.tipRow}>
-                <Feather name="shield" size={14} color={Colors.dark.primary} style={styles.tipIcon} />
-                <ThemedText style={styles.tipText}>{i + 1}. {tip}</ThemedText>
+                <Feather
+                  name="shield"
+                  size={14}
+                  color={Colors.dark.primary}
+                  style={styles.tipIcon}
+                />
+                <ThemedText style={styles.tipText}>
+                  {i + 1}. {tip}
+                </ThemedText>
               </View>
             ))}
           </View>
@@ -665,25 +941,39 @@ export default function AnalysisScreen() {
           {/* Market Analysis */}
           <View style={styles.card}>
             <ThemedText style={styles.cardTitle}>Market Analysis</ThemedText>
-            <ThemedText style={styles.marketText}>{result.marketAnalysis}</ThemedText>
+            <ThemedText style={styles.marketText}>
+              {result.marketAnalysis}
+            </ThemedText>
           </View>
 
           {/* Listing Preview */}
           <View style={styles.card}>
-            <ThemedText style={styles.cardTitle}>Generated Listing Preview</ThemedText>
+            <ThemedText style={styles.cardTitle}>
+              Generated Listing Preview
+            </ThemedText>
             <View style={styles.listingPreview}>
               <ThemedText style={styles.previewLabel}>eBay Title</ThemedText>
-              <ThemedText style={styles.previewText}>{result.seoTitle}</ThemedText>
-              
+              <ThemedText style={styles.previewText}>
+                {result.seoTitle}
+              </ThemedText>
+
               <ThemedText style={styles.previewLabel}>Category</ThemedText>
-              <ThemedText style={styles.previewText}>{result.category} (eBay: {result.ebayCategoryId})</ThemedText>
-              
+              <ThemedText style={styles.previewText}>
+                {result.category} (eBay: {result.ebayCategoryId})
+              </ThemedText>
+
               {result.aspects && Object.keys(result.aspects).length > 0 && (
                 <>
-                  <ThemedText style={styles.previewLabel}>Item Specifics</ThemedText>
-                  {Object.entries(result.aspects).slice(0, 4).map(([key, values]) => (
-                    <ThemedText key={key} style={styles.aspectPreview}>• {key}: {values.join(", ")}</ThemedText>
-                  ))}
+                  <ThemedText style={styles.previewLabel}>
+                    Item Specifics
+                  </ThemedText>
+                  {Object.entries(result.aspects)
+                    .slice(0, 4)
+                    .map(([key, values]) => (
+                      <ThemedText key={key} style={styles.aspectPreview}>
+                        • {key}: {values.join(", ")}
+                      </ThemedText>
+                    ))}
                 </>
               )}
             </View>
@@ -691,20 +981,42 @@ export default function AnalysisScreen() {
 
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
-            <Pressable style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.8 }]} onPress={handleSave}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && { opacity: 0.8 },
+              ]}
+              onPress={handleSave}
+            >
               <Feather name="check" size={20} color={Colors.dark.buttonText} />
-              <ThemedText style={styles.primaryButtonText}>Looks Good — Save</ThemedText>
+              <ThemedText style={styles.primaryButtonText}>
+                Looks Good — Save
+              </ThemedText>
             </Pressable>
-            
+
             <View style={styles.secondaryButtons}>
-              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleEdit}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  pressed && { opacity: 0.8 },
+                ]}
+                onPress={handleEdit}
+              >
                 <Feather name="edit-2" size={18} color={Colors.dark.text} />
                 <ThemedText style={styles.secondaryButtonText}>Edit</ThemedText>
               </Pressable>
-              
-              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleRetry}>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  pressed && { opacity: 0.8 },
+                ]}
+                onPress={handleRetry}
+              >
                 <Feather name="refresh-cw" size={18} color={Colors.dark.text} />
-                <ThemedText style={styles.secondaryButtonText}>Try Again</ThemedText>
+                <ThemedText style={styles.secondaryButtonText}>
+                  Try Again
+                </ThemedText>
               </Pressable>
             </View>
           </View>
@@ -719,105 +1031,367 @@ export default function AnalysisScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.dark.backgroundRoot },
   scrollContent: { padding: Spacing.lg },
-  
+
   // Loading & Error States
-  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing["2xl"] },
-  loadingAnimation: { width: 100, height: 100, borderRadius: 50, backgroundColor: Colors.dark.surface, alignItems: "center", justifyContent: "center", marginBottom: Spacing["2xl"] },
-  loadingTitle: { ...Typography.h3, color: Colors.dark.text, marginBottom: Spacing.sm },
-  loadingSubtitle: { ...Typography.body, color: Colors.dark.textSecondary, textAlign: "center" },
-  
-  errorContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing["2xl"] },
-  errorIcon: { width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(239, 68, 68, 0.15)", alignItems: "center", justifyContent: "center", marginBottom: Spacing["2xl"] },
-  errorTitle: { ...Typography.h3, color: Colors.dark.text, marginBottom: Spacing.sm },
-  errorSubtitle: { ...Typography.body, color: Colors.dark.textSecondary, textAlign: "center", marginBottom: Spacing["2xl"] },
-  retryButton: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.dark.primary, paddingHorizontal: Spacing["2xl"], paddingVertical: Spacing.md, borderRadius: BorderRadius.md, gap: Spacing.sm },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing["2xl"],
+  },
+  loadingAnimation: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: Colors.dark.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing["2xl"],
+  },
+  loadingTitle: {
+    ...Typography.h3,
+    color: Colors.dark.text,
+    marginBottom: Spacing.sm,
+  },
+  loadingSubtitle: {
+    ...Typography.body,
+    color: Colors.dark.textSecondary,
+    textAlign: "center",
+  },
+
+  errorContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing["2xl"],
+  },
+  errorIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "rgba(239, 68, 68, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing["2xl"],
+  },
+  errorTitle: {
+    ...Typography.h3,
+    color: Colors.dark.text,
+    marginBottom: Spacing.sm,
+  },
+  errorSubtitle: {
+    ...Typography.body,
+    color: Colors.dark.textSecondary,
+    textAlign: "center",
+    marginBottom: Spacing["2xl"],
+  },
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: Spacing["2xl"],
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
   retryButtonText: { ...Typography.button, color: Colors.dark.buttonText },
-  
+
   // Success State
-  successContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing["2xl"] },
-  successIconLarge: { width: 120, height: 120, borderRadius: 60, backgroundColor: "rgba(34, 197, 94, 0.15)", alignItems: "center", justifyContent: "center", marginBottom: Spacing["2xl"] },
-  successTitle: { ...Typography.h2, color: Colors.dark.text, marginBottom: Spacing.sm },
-  successSubtitle: { ...Typography.body, color: Colors.dark.textSecondary, marginBottom: Spacing["2xl"] },
-  
+  successContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing["2xl"],
+  },
+  successIconLarge: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing["2xl"],
+  },
+  successTitle: {
+    ...Typography.h2,
+    color: Colors.dark.text,
+    marginBottom: Spacing.sm,
+  },
+  successSubtitle: {
+    ...Typography.body,
+    color: Colors.dark.textSecondary,
+    marginBottom: Spacing["2xl"],
+  },
+
   // Images
-  imagesRow: { flexDirection: "row", gap: Spacing.md, marginBottom: Spacing.lg },
+  imagesRow: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
   imageContainer: { flex: 1 },
-  previewImage: { width: "100%", aspectRatio: 1, borderRadius: BorderRadius.md, marginBottom: Spacing.xs },
-  imageLabel: { ...Typography.caption, color: Colors.dark.textSecondary, textAlign: "center" },
-  
+  previewImage: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.xs,
+  },
+  imageLabel: {
+    ...Typography.caption,
+    color: Colors.dark.textSecondary,
+    textAlign: "center",
+  },
+
   // Cards
-  card: { backgroundColor: Colors.dark.surface, borderRadius: BorderRadius.lg, padding: Spacing.lg, marginBottom: Spacing.lg },
-  cardTitle: { ...Typography.h4, color: Colors.dark.text, marginBottom: Spacing.md },
-  cardSubtitle: { ...Typography.body, color: Colors.dark.textSecondary, marginBottom: Spacing.md },
-  
+  card: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
+  cardTitle: {
+    ...Typography.h4,
+    color: Colors.dark.text,
+    marginBottom: Spacing.md,
+  },
+  cardSubtitle: {
+    ...Typography.body,
+    color: Colors.dark.textSecondary,
+    marginBottom: Spacing.md,
+  },
+
   // Review State
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.md },
-  brandBadge: { backgroundColor: Colors.dark.primary + "20", paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
-  brandText: { ...Typography.small, color: Colors.dark.primary, fontWeight: "600" },
-  confidenceBadge: { flexDirection: "row", alignItems: "center", gap: Spacing.xs, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+  },
+  brandBadge: {
+    backgroundColor: Colors.dark.primary + "20",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+  },
+  brandText: {
+    ...Typography.small,
+    color: Colors.dark.primary,
+    fontWeight: "600",
+  },
+  confidenceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+  },
   confidenceDot: { width: 8, height: 8, borderRadius: 4 },
   confidenceText: { ...Typography.caption, fontWeight: "500" },
-  itemTitle: { ...Typography.h3, color: Colors.dark.text, marginBottom: Spacing.xs },
+  itemTitle: {
+    ...Typography.h3,
+    color: Colors.dark.text,
+    marginBottom: Spacing.xs,
+  },
   itemSubtitle: { ...Typography.body, color: Colors.dark.textSecondary },
-  
+
   // Value
-  valueRangeRow: { flexDirection: "row", gap: Spacing.md, marginBottom: Spacing.md },
-  valueBox: { flex: 1, backgroundColor: Colors.dark.backgroundSecondary, padding: Spacing.md, borderRadius: BorderRadius.sm },
-  valueLabel: { ...Typography.caption, color: Colors.dark.textSecondary, marginBottom: Spacing.xs },
+  valueRangeRow: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  valueBox: {
+    flex: 1,
+    backgroundColor: Colors.dark.backgroundSecondary,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+  },
+  valueLabel: {
+    ...Typography.caption,
+    color: Colors.dark.textSecondary,
+    marginBottom: Spacing.xs,
+  },
   valueAmount: { ...Typography.h4, color: Colors.dark.text, fontWeight: "700" },
-  listPrice: { ...Typography.h4, color: Colors.dark.primary, fontWeight: "700" },
+  listPrice: {
+    ...Typography.h4,
+    color: Colors.dark.primary,
+    fontWeight: "700",
+  },
   conditionRow: { flexDirection: "row", gap: Spacing.sm },
   conditionLabel: { ...Typography.body, color: Colors.dark.textSecondary },
-  conditionValue: { ...Typography.body, color: Colors.dark.text, fontWeight: "600" },
-  
+  conditionValue: {
+    ...Typography.body,
+    color: Colors.dark.text,
+    fontWeight: "600",
+  },
+
   // Authentication
-  authHeader: { flexDirection: "row", alignItems: "center", gap: Spacing.md, marginBottom: Spacing.md },
-  authBadge: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
+  authHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  authBadge: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+  },
   authBadgeText: { ...Typography.small, fontWeight: "600" },
-  confidenceBar: { flex: 1, height: 6, backgroundColor: Colors.dark.border, borderRadius: 3, overflow: "hidden" },
+  confidenceBar: {
+    flex: 1,
+    height: 6,
+    backgroundColor: Colors.dark.border,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
   confidenceFill: { height: "100%", borderRadius: 3 },
-  confidencePercent: { ...Typography.small, color: Colors.dark.textSecondary, minWidth: 35 },
-  authDetails: { ...Typography.body, color: Colors.dark.text, marginBottom: Spacing.md },
-  sectionSubtitle: { ...Typography.small, color: Colors.dark.textSecondary, marginTop: Spacing.md, marginBottom: Spacing.sm, textTransform: "uppercase" },
-  tipRow: { flexDirection: "row", alignItems: "flex-start", gap: Spacing.sm, marginBottom: Spacing.sm },
+  confidencePercent: {
+    ...Typography.small,
+    color: Colors.dark.textSecondary,
+    minWidth: 35,
+  },
+  authDetails: {
+    ...Typography.body,
+    color: Colors.dark.text,
+    marginBottom: Spacing.md,
+  },
+  sectionSubtitle: {
+    ...Typography.small,
+    color: Colors.dark.textSecondary,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+    textTransform: "uppercase",
+  },
+  tipRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
   tipIcon: { marginTop: 2 },
   tipText: { ...Typography.body, color: Colors.dark.text, flex: 1 },
-  
+
   // Market
   marketText: { ...Typography.body, color: Colors.dark.text, lineHeight: 22 },
-  
+
   // Listing Preview
-  listingPreview: { backgroundColor: Colors.dark.backgroundSecondary, padding: Spacing.md, borderRadius: BorderRadius.sm },
-  previewLabel: { ...Typography.caption, color: Colors.dark.textSecondary, marginTop: Spacing.sm },
+  listingPreview: {
+    backgroundColor: Colors.dark.backgroundSecondary,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+  },
+  previewLabel: {
+    ...Typography.caption,
+    color: Colors.dark.textSecondary,
+    marginTop: Spacing.sm,
+  },
   previewText: { ...Typography.body, color: Colors.dark.text },
   aspectPreview: { ...Typography.body, color: Colors.dark.textSecondary },
-  
+
   // Buttons
   actionButtons: { gap: Spacing.md, marginTop: Spacing.md },
-  primaryButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: Colors.dark.primary, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, gap: Spacing.sm },
+  primaryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.dark.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
   primaryButtonText: { ...Typography.button, color: Colors.dark.buttonText },
   secondaryButtons: { flexDirection: "row", gap: Spacing.md },
-  secondaryButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: Colors.dark.surface, borderWidth: 1, borderColor: Colors.dark.border, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, gap: Spacing.sm },
+  secondaryButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.dark.surface,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
   secondaryButtonText: { ...Typography.button, color: Colors.dark.text },
   buttonRow: { flexDirection: "row", gap: Spacing.md, marginTop: Spacing.lg },
-  
+
   // Edit Form
   inputGroup: { marginBottom: Spacing.md },
-  inputLabel: { ...Typography.small, color: Colors.dark.textSecondary, marginBottom: Spacing.xs },
-  textInput: { backgroundColor: Colors.dark.backgroundSecondary, borderRadius: BorderRadius.sm, padding: Spacing.md, color: Colors.dark.text, ...Typography.body, borderWidth: 1, borderColor: Colors.dark.border },
+  inputLabel: {
+    ...Typography.small,
+    color: Colors.dark.textSecondary,
+    marginBottom: Spacing.xs,
+  },
+  textInput: {
+    backgroundColor: Colors.dark.backgroundSecondary,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    color: Colors.dark.text,
+    ...Typography.body,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
   textArea: { minHeight: 80, textAlignVertical: "top" },
   rowInputs: { flexDirection: "row", gap: Spacing.md },
   conditionButtons: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.xs },
-  conditionChip: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm, backgroundColor: Colors.dark.backgroundSecondary, borderWidth: 1, borderColor: Colors.dark.border },
-  conditionChipActive: { backgroundColor: Colors.dark.primary, borderColor: Colors.dark.primary },
-  conditionChipText: { ...Typography.caption, color: Colors.dark.textSecondary },
+  conditionChip: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.dark.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  conditionChipActive: {
+    backgroundColor: Colors.dark.primary,
+    borderColor: Colors.dark.primary,
+  },
+  conditionChipText: {
+    ...Typography.caption,
+    color: Colors.dark.textSecondary,
+  },
   conditionChipTextActive: { color: Colors.dark.buttonText },
-  aspectInputRow: { flexDirection: "row", gap: Spacing.sm, marginBottom: Spacing.sm },
-  addAspectButton: { width: 44, height: 44, borderRadius: BorderRadius.sm, backgroundColor: Colors.dark.backgroundSecondary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.dark.border },
-  aspectRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, paddingVertical: Spacing.xs },
-  aspectKey: { ...Typography.body, color: Colors.dark.textSecondary, fontWeight: "600" },
+  aspectInputRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  addAspectButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.dark.backgroundSecondary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  aspectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  aspectKey: {
+    ...Typography.body,
+    color: Colors.dark.textSecondary,
+    fontWeight: "600",
+  },
   aspectValue: { ...Typography.body, color: Colors.dark.text, flex: 1 },
-  
+
   // Retry
-  feedbackInput: { backgroundColor: Colors.dark.backgroundSecondary, borderRadius: BorderRadius.sm, padding: Spacing.md, color: Colors.dark.text, ...Typography.body, minHeight: 100, textAlignVertical: "top", borderWidth: 1, borderColor: Colors.dark.border },
+  feedbackInput: {
+    backgroundColor: Colors.dark.backgroundSecondary,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    color: Colors.dark.text,
+    ...Typography.body,
+    minHeight: 100,
+    textAlignVertical: "top",
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
 });

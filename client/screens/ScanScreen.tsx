@@ -1,5 +1,12 @@
 import React, { useState, useRef, useCallback } from "react";
-import { View, StyleSheet, Pressable, Platform, Alert, Image } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  Platform,
+  Alert,
+  Image,
+} from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,7 +23,8 @@ type ScanStep = "full" | "label";
 
 export default function ScanScreen() {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [step, setStep] = useState<ScanStep>("full");
@@ -25,17 +33,17 @@ export default function ScanScreen() {
 
   const takePicture = useCallback(async () => {
     if (!cameraRef.current) return;
-    
+
     try {
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
-      
+
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
         base64: false,
       });
-      
+
       if (!photo?.uri) {
         Alert.alert("Error", "Failed to capture photo");
         return;
@@ -109,21 +117,34 @@ export default function ScanScreen() {
   if (!permission.granted) {
     return (
       <ThemedView style={styles.container}>
-        <View style={[styles.permissionContainer, { paddingTop: insets.top + Spacing["4xl"] }]}>
+        <View
+          style={[
+            styles.permissionContainer,
+            { paddingTop: insets.top + Spacing["4xl"] },
+          ]}
+        >
           <View style={styles.permissionCard}>
             <View style={styles.permissionIconContainer}>
               <Feather name="camera" size={48} color={Colors.dark.primary} />
             </View>
-            <ThemedText style={styles.permissionTitle}>Camera Access Required</ThemedText>
+            <ThemedText style={styles.permissionTitle}>
+              Camera Access Required
+            </ThemedText>
             <ThemedText style={styles.permissionText}>
-              To scan items for appraisal and listing, HiddenGem needs access to your camera.
+              To scan items for appraisal and listing, HiddenGem needs access to
+              your camera.
             </ThemedText>
             <Pressable
-              style={({ pressed }) => [styles.permissionButton, pressed && { opacity: 0.8 }]}
+              style={({ pressed }) => [
+                styles.permissionButton,
+                pressed && { opacity: 0.8 },
+              ]}
               onPress={requestPermission}
               testID="button-enable-camera"
             >
-              <ThemedText style={styles.permissionButtonText}>Enable Camera</ThemedText>
+              <ThemedText style={styles.permissionButtonText}>
+                Enable Camera
+              </ThemedText>
             </Pressable>
           </View>
         </View>
@@ -139,24 +160,42 @@ export default function ScanScreen() {
         facing="back"
         enableTorch={flash}
       />
-      
-      <View style={[styles.overlay, { paddingTop: insets.top + Spacing.lg, paddingBottom: insets.bottom + Spacing.lg }]}>
+
+      <View
+        style={[
+          styles.overlay,
+          {
+            paddingTop: insets.top + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing.lg,
+          },
+        ]}
+      >
         <View style={styles.topRow}>
           <Pressable
-            style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.closeButton,
+              pressed && { opacity: 0.7 },
+            ]}
             onPress={handleClose}
             testID="button-close-camera"
           >
             <Feather name="x" size={24} color={Colors.dark.text} />
           </Pressable>
-          
+
           <View style={styles.stepIndicator}>
-            <View style={[styles.stepDot, step === "full" && styles.stepDotActive]} />
-            <View style={[styles.stepDot, step === "label" && styles.stepDotActive]} />
+            <View
+              style={[styles.stepDot, step === "full" && styles.stepDotActive]}
+            />
+            <View
+              style={[styles.stepDot, step === "label" && styles.stepDotActive]}
+            />
           </View>
-          
+
           <Pressable
-            style={({ pressed }) => [styles.helpButton, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.helpButton,
+              pressed && { opacity: 0.7 },
+            ]}
             testID="button-help"
           >
             <Feather name="help-circle" size={24} color={Colors.dark.text} />
@@ -166,7 +205,10 @@ export default function ScanScreen() {
         <View style={styles.centerArea}>
           {fullImageUri && step === "label" ? (
             <View style={styles.previewThumbnail}>
-              <Image source={{ uri: fullImageUri }} style={styles.thumbnailImage} />
+              <Image
+                source={{ uri: fullImageUri }}
+                style={styles.thumbnailImage}
+              />
               <View style={styles.thumbnailCheck}>
                 <Feather name="check" size={12} color={Colors.dark.success} />
               </View>
@@ -188,15 +230,25 @@ export default function ScanScreen() {
 
           <View style={styles.controlsRow}>
             <Pressable
-              style={({ pressed }) => [styles.controlButton, pressed && { opacity: 0.7 }]}
+              style={({ pressed }) => [
+                styles.controlButton,
+                pressed && { opacity: 0.7 },
+              ]}
               onPress={toggleFlash}
               testID="button-flash"
             >
-              <Feather name={flash ? "zap" : "zap-off"} size={24} color={Colors.dark.text} />
+              <Feather
+                name={flash ? "zap" : "zap-off"}
+                size={24}
+                color={Colors.dark.text}
+              />
             </Pressable>
 
             <Pressable
-              style={({ pressed }) => [styles.captureButton, pressed && { transform: [{ scale: 0.95 }] }]}
+              style={({ pressed }) => [
+                styles.captureButton,
+                pressed && { transform: [{ scale: 0.95 }] },
+              ]}
               onPress={takePicture}
               testID="button-capture"
             >
@@ -204,7 +256,10 @@ export default function ScanScreen() {
             </Pressable>
 
             <Pressable
-              style={({ pressed }) => [styles.controlButton, pressed && { opacity: 0.7 }]}
+              style={({ pressed }) => [
+                styles.controlButton,
+                pressed && { opacity: 0.7 },
+              ]}
               onPress={pickImage}
               testID="button-gallery"
             >

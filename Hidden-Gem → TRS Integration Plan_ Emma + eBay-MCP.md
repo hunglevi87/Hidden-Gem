@@ -102,11 +102,40 @@ Both paths call eBay MCP comps/sold lookup, then update suggested value fields a
 3.6 (OF Config) ────┘
 ```
 ## 5 — Cloud Run Tonight Readiness
-Final checks before tonight’s cloud run:
-1. Confirm Gemini is default provider and OpenFang remains available as optional provider/fallback path for analyze/retry routes\.
-2. Validate eBay MCP credentials in `integrations` for target seller scope \(token refresh path tested\)\.
+**Validation Run Results (Local - March 13, 2026):**
+
+| Project | Check | Status | Details |
+|---------|-------|--------|---------|
+| TRS | `pnpm lint` | ✅ Passed | 6 warnings (vue/require-default-prop) |
+| TRS | `pnpm typecheck` | ✅ Passed | Warnings only (shadcn component collisions) |
+| TRS | `smoke:sync-queue` | ⚠️ **BLOCKED** | Supabase connection works, TRS tables missing |
+| Hidden-Gem | `npm run lint` | ✅ Passed | 8 errors (unescaped entities), 37 warnings |
+| Hidden-Gem | `npm run check:types` | ⚠️ **8 errors** | Navigation types + missing assets + pRetry |
+
+**Database Schema Gap Identified:**
+- Hidden-Gem tables exist: `users`, `stash_items`, `sync_queue`
+- TRS FlipAgent tables **MISSING**: `sellers`, `products`, `listings`, `integrations`, `ai_generations`
+- **Root Cause**: TRS Supabase migrations (`supabase/migrations/20260308*.sql`) not applied to shared database
+
+**Environment Status:**
+- ✅ Supabase credentials verified (URL + Service Role Key)
+- ✅ eBay credentials present (Client ID, Secret, Refresh Token)
+- ⚠️ OpenFang/Emma orchestration vars empty
+
+**Resume Path:**
+1. Apply TRS Supabase migrations via Supabase dashboard SQL Editor
+2. Verify tables: `sellers`, `products`, `listings`, `integrations`, `ai_generations`
+3. Populate OpenFang/Emma orchestration secrets
+4. Re-run `pnpm validate:orchestration`
+5. Execute final cloud run and capture run IDs
+
+---
+
+**Original Acceptance Scenarios (pending schema fix):**
+1. Confirm Gemini is default provider and OpenFang remains available as optional provider/fallback path for analyze/retry routes.
+2. Validate eBay MCP credentials in `integrations` for target seller scope (token refresh path tested).
 3. Run two acceptance scenarios end-to-end:
-   * **Scenario A**: New scan → identification → command \"Emma check eBay for identified product\" → updated suggested value returned\.
-   * **Scenario B**: Existing stashed item → command \"check eBay now\" → updated suggested value + `lastValuationAt` persisted\.
-4. Ensure queue worker can process `ebay_value_check` actions if sync mode is enabled\.
-5. Capture run artifacts: request/response samples, latency, comp count, and fallback events for post-run review\.
+   * **Scenario A**: New scan → identification → command "Emma check eBay for identified product" → updated suggested value returned.
+   * **Scenario B**: Existing stashed item → command "check eBay now" → updated suggested value + `lastValuationAt` persisted.
+4. Ensure queue worker can process `ebay_value_check` actions if sync mode is enabled.
+5. Capture run artifacts: request/response samples, latency, comp count, and fallback events for post-run review.

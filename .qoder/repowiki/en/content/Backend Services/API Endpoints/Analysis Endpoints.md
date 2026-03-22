@@ -19,11 +19,10 @@
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive OpenFang provider support with intelligent fallback mechanisms
-- Enhanced dynamic provider selection with automatic fallback to Gemini
-- Updated server-side routing to support OpenFang configuration parameters
-- Added OpenFang-specific environment variables and database schema support
-- Integrated OpenFang's multi-model AI routing with automatic vision model selection
+- Updated primary AI provider configuration to default to 'gemini' instead of 'openfang'
+- Enhanced fallback logic to use Gemini as fallback when OpenFang is requested but unavailable
+- Modified default provider selection in retry endpoint to maintain OpenFang preference
+- Updated intelligent fallback mechanism documentation
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -47,10 +46,10 @@ This document describes the item analysis API endpoints that power image-based A
 - Retry mechanism with feedback integration
 - Client-side workflows and error handling
 
-**Updated** Enhanced with OpenFang provider support featuring multi-model AI routing and automatic fallback capabilities.
+**Updated** Enhanced with intelligent provider selection featuring Gemini as the new default provider with OpenFang fallback capabilities.
 
 ## Project Structure
-The analysis feature spans server-side route handlers, AI provider abstractions, and client-side screens that drive the user experience. The system now includes intelligent provider selection with OpenFang as the primary choice and automatic fallback to Gemini.
+The analysis feature spans server-side route handlers, AI provider abstractions, and client-side screens that drive the user experience. The system now includes intelligent provider selection with Gemini as the primary default and automatic fallback to Gemini when OpenFang is unavailable.
 
 ```mermaid
 graph TB
@@ -108,14 +107,14 @@ MIG --> SCHEMA
 ## Core Components
 - Image upload and processing: Multer-backed multipart uploads for full and label images; optional Supabase storage utilities for cloud storage.
 - AI analysis orchestration: Unified provider abstraction supporting Gemini, OpenAI, Anthropic, OpenFang, and custom endpoints with intelligent fallback mechanisms.
-- Intelligent provider selection: OpenFang as default provider with automatic fallback to Gemini when OpenFang is unavailable.
+- Intelligent provider selection: Gemini as default provider with automatic fallback to Gemini when OpenFang is unavailable.
 - Multi-model AI routing: OpenFang's advanced routing system with vision model preference and fallback to GPT-4o, Gemini, or Claude.
 - Pricing analysis and listing suggestions: Enhanced result schema with valuation ranges, suggested list price, and marketplace-specific fields.
 - SEO optimization: Functions to generate eBay-compliant titles, formatted descriptions, and SEO tags.
 - Retry mechanism with feedback: Re-run analysis with previous result and user feedback to refine outputs.
 - Client-side workflow: End-to-end flow from image capture to saved stash item, including retry and edit modes.
 
-**Updated** Added OpenFang provider with multi-model AI routing and automatic fallback capabilities.
+**Updated** Added Gemini as the new default provider with OpenFang fallback capabilities.
 
 **Section sources**
 - [server/routes.ts:39-42](file://server/routes.ts#L39-L42)
@@ -128,20 +127,20 @@ MIG --> SCHEMA
 - [migrations/0004_openfang_settings.sql:1-4](file://migrations/0004_openfang_settings.sql#L1-L4)
 
 ## Architecture Overview
-The analysis pipeline integrates client uploads, server route handlers, AI provider adapters, and optional storage and SEO services. The system now features intelligent provider selection with OpenFang as the primary choice and automatic fallback to Gemini.
+The analysis pipeline integrates client uploads, server route handlers, AI provider adapters, and optional storage and SEO services. The system now features intelligent provider selection with Gemini as the primary default and automatic fallback to Gemini when OpenFang is unavailable.
 
 ```mermaid
 sequenceDiagram
 participant Client as "Client App"
 participant Routes as "Routes (/api)"
 participant Providers as "AI Providers"
-participant OpenFang as "OpenFang API"
 participant Gemini as "Gemini API"
+participant OpenFang as "OpenFang API"
 participant Storage as "Supabase Storage"
 participant SEO as "AI SEO"
 Client->>Routes : POST /api/analyze (multipart/form-data)
 Routes->>Providers : analyzeItem(images, config)
-Providers->>OpenFang : Primary analysis request
+Providers->>OpenFang : Primary analysis request (when requested)
 OpenFang-->>Providers : AnalysisResult or Error
 alt OpenFang Success
 Providers-->>Routes : AnalysisResult
@@ -153,7 +152,7 @@ end
 Routes-->>Client : JSON result
 Client->>Routes : POST /api/analyze/retry (multipart/form-data + previousResult + feedback)
 Routes->>Providers : analyzeItemWithRetry(images, previousResult, feedback)
-Providers->>OpenFang : Primary retry analysis
+Providers->>OpenFang : Primary retry analysis (OpenFang as default)
 OpenFang-->>Providers : Updated AnalysisResult or Error
 alt OpenFang Success
 Providers-->>Routes : Updated AnalysisResult
@@ -167,7 +166,7 @@ Client->>SEO : Optional SEO generation helpers
 SEO-->>Client : SEO title/description/tags
 ```
 
-**Updated** Added intelligent fallback mechanism showing OpenFang-to-Gemini automatic switching.
+**Updated** Added intelligent fallback mechanism showing Gemini-to-Gemini automatic switching when OpenFang is requested but fails.
 
 **Diagram sources**
 - [server/routes.ts:299-385](file://server/routes.ts#L299-L385)
@@ -193,18 +192,13 @@ SEO-->>Client : SEO title/description/tags
 flowchart TD
 Start(["POST /api/analyze"]) --> Parse["Parse multipart fields<br/>fullImage, labelImage"]
 Parse --> BuildPrompt["Build multimodal prompt"]
-BuildPrompt --> CallAI["Call AI provider (OpenFang as default)"]
-CallAI --> OpenFang["OpenFang API"]
-OpenFang --> OFSuccess{"OpenFang success?"}
-OFSuccess --> |Yes| ReturnOK["Return AnalysisResult"]
-OFSuccess --> |No| Fallback["Automatic fallback to Gemini"]
-Fallback --> Gemini["Gemini API"]
-Gemini --> GeminiResult["Return fallback AnalysisResult"]
+BuildPrompt --> CallAI["Call AI provider (Gemini as default)"]
+CallAI --> Gemini["Gemini API"]
+Gemini --> ReturnOK["Return AnalysisResult"]
 ReturnOK --> End(["Done"])
-GeminiResult --> End
 ```
 
-**Updated** Added OpenFang-to-Gemini automatic fallback flow.
+**Updated** Changed default provider from OpenFang to Gemini for primary analysis.
 
 **Diagram sources**
 - [server/routes.ts:299-385](file://server/routes.ts#L299-L385)
@@ -227,13 +221,13 @@ GeminiResult --> End
   - OpenFang: multi-model AI routing with vision model preference and fallback to GPT-4o, Gemini, or Claude.
   - Custom: generic OpenAI-compatible endpoint with validation.
 - Intelligent fallback:
-  - OpenFang as default provider with automatic fallback to Gemini when unavailable.
+  - Gemini as default provider with automatic fallback to Gemini when OpenFang fails or is unavailable.
   - Supports explicit provider override via request parameters.
 - Parsing and fallback:
   - Robust JSON parsing with fallback to a comprehensive default result.
   - Merges partial results with defaults for backward compatibility.
 
-**Updated** Added OpenFang provider with multi-model AI routing and intelligent fallback mechanisms.
+**Updated** Added Gemini as the new default provider with OpenFang fallback mechanisms.
 
 ```mermaid
 classDiagram
@@ -275,13 +269,13 @@ class AIProviders {
 +analyzeItemWithRetry(config, images, previousResult, feedback) AnalysisResult
 +testProviderConnection(config) Result
 }
-class OpenFangProvider {
-+multiModelRouting() VisionModel
-+automaticFallback() AlternativeProvider
+class GeminiProvider {
++defaultProvider()
++fallbackMechanism()
 }
 AIProviders --> AIProviderConfig : "uses"
 AIProviders --> AnalysisResult : "produces"
-OpenFangProvider --> AIProviders : "extends"
+GeminiProvider --> AIProviders : "extends"
 ```
 
 **Diagram sources**
@@ -302,8 +296,8 @@ OpenFangProvider --> AIProviders : "extends"
 - [server/ai-providers.ts:604-695](file://server/ai-providers.ts#L604-L695)
 
 ### Intelligent Provider Selection and Fallback
-- Default provider: OpenFang with multi-model AI routing
-- Automatic fallback: When OpenFang fails or is unavailable, automatically switches to Gemini
+- Default provider: Gemini as primary default with OpenFang fallback capability
+- Automatic fallback: When OpenFang is requested but fails or is unavailable, automatically switches to Gemini
 - Fallback conditions:
   - Explicit provider override prevents fallback (only OpenFang can trigger fallback)
   - Requested provider is not OpenFang: no automatic fallback
@@ -313,11 +307,11 @@ OpenFangProvider --> AIProviders : "extends"
   - Fallback to GPT-4o, Gemini-2.5-flash, or Claude-sonnet-4-20250514
   - Automatic model selection based on image content and provider capabilities
 
-**Updated** New intelligent provider selection and fallback mechanism.
+**Updated** New intelligent provider selection and fallback mechanism with Gemini as default.
 
 ```mermaid
 flowchart TD
-Start(["Provider Selection"]) --> Default["Default: OpenFang"]
+Start(["Provider Selection"]) --> Default["Default: Gemini (Primary)"]
 Default --> CheckOverride{"Explicit override?"}
 CheckOverride --> |Yes| UseOverride["Use requested provider"]
 CheckOverride --> |No| TryOpenFang["Try OpenFang"]
@@ -415,18 +409,18 @@ Record --> Audit["Audit trail"]
   - Re-runs analysis with the same provider stack including intelligent fallback.
   - Returns updated AnalysisResult.
 
-**Updated** Retry mechanism now includes intelligent provider fallback.
+**Updated** Retry mechanism maintains OpenFang as default provider while preserving fallback capabilities.
 
 ```mermaid
 sequenceDiagram
 participant Client as "Client App"
 participant Routes as "Routes (/api)"
 participant Providers as "AI Providers"
-participant OpenFang as "OpenFang API"
 participant Gemini as "Gemini API"
+participant OpenFang as "OpenFang API"
 Client->>Routes : POST /api/analyze/retry (formData + previousResult + feedback)
 Routes->>Providers : analyzeItemWithRetry(images, previousResult, feedback)
-Providers->>OpenFang : Primary retry analysis
+Providers->>OpenFang : Primary retry analysis (OpenFang as default)
 OpenFang-->>Providers : Updated AnalysisResult or Error
 alt OpenFang Success
 Providers-->>Routes : Updated AnalysisResult
@@ -438,7 +432,7 @@ end
 Routes-->>Client : JSON result
 ```
 
-**Updated** Added OpenFang-to-Gemini automatic fallback in retry flow.
+**Updated** Added Gemini-to-Gemini automatic fallback in retry flow when OpenFang fails.
 
 **Diagram sources**
 - [server/routes.ts:672-711](file://server/routes.ts#L672-L711)
@@ -456,13 +450,13 @@ Routes-->>Client : JSON result
   - Calls POST /api/analyze
   - Presents review/edit/retry/save UI
   - Saves to stash via POST /api/stash
-- AIProvidersScreen manages OpenFang configuration:
+- AIProvidersScreen manages provider configuration:
   - API key management with secure input
   - Base URL configuration for custom OpenFang deployments
   - Model selection with automatic routing option
   - Connection testing for provider validation
 
-**Updated** Added OpenFang configuration management in client.
+**Updated** Added provider configuration management in client.
 
 ```mermaid
 sequenceDiagram
@@ -500,16 +494,16 @@ API-->>ProvidersScreen : Connection status
 
 ## Dependency Analysis
 - Route handlers depend on:
-  - AI provider abstraction for analysis with OpenFang support
+  - AI provider abstraction for analysis with Gemini as default
   - Supabase storage utilities for optional cloud storage
   - Shared schema for database models
 - Client depends on:
   - query-client for API communication
   - Supabase auth for session management
   - marketplace helpers for publishing integrations
-  - AIProvidersScreen for OpenFang configuration management
+  - AIProvidersScreen for provider configuration management
 
-**Updated** Added OpenFang configuration dependency.
+**Updated** Added Gemini as default provider dependency.
 
 ```mermaid
 graph LR
@@ -552,12 +546,12 @@ OpenFangDB["migrations/0004_openfang_settings.sql"] --> Schema
 ## Performance Considerations
 - Image size limits: Multer memory storage with 10 MB per file; consider Supabase storage for larger assets.
 - AI provider timeouts: Configure provider clients appropriately; implement retries at the application level where needed.
-- Intelligent fallback: OpenFang-to-Gemini fallback adds minimal latency overhead.
+- Intelligent fallback: Gemini-to-Gemini fallback adds minimal latency overhead.
 - Multi-model routing: OpenFang's routing system optimizes model selection for different image types.
 - JSON parsing: Fallback ensures resilience against provider output inconsistencies.
 - Client caching: Use React Query to avoid redundant requests; invalidate queries after stash saves.
 
-**Updated** Added considerations for OpenFang multi-model routing and intelligent fallback performance.
+**Updated** Added considerations for Gemini default provider and OpenFang fallback performance.
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -579,7 +573,7 @@ Common issues and resolutions:
 - CORS and logging:
   - Origin handling and request logging are enabled; verify allowed origins and request timing in logs.
 
-**Updated** Added OpenFang-specific troubleshooting and intelligent fallback guidance.
+**Updated** Added Gemini-specific troubleshooting and intelligent fallback guidance.
 
 **Section sources**
 - [server/routes.ts:39-42](file://server/routes.ts#L39-L42)
@@ -592,9 +586,9 @@ Common issues and resolutions:
 - [server/index.ts:70-101](file://server/index.ts#L70-L101)
 
 ## Conclusion
-The analysis endpoints provide a robust, extensible pipeline for image-based AI analysis, pricing insights, and SEO optimization. With support for multiple AI providers including OpenFang's intelligent multi-model routing, a structured result schema, and a feedback-driven retry mechanism with automatic fallback capabilities, the system enables accurate and actionable item assessments. The intelligent provider selection ensures optimal performance and reliability through automatic fallback to Gemini when OpenFang is unavailable. Client-side integration offers a smooth user experience from capture to saved stash with comprehensive OpenFang configuration management.
+The analysis endpoints provide a robust, extensible pipeline for image-based AI analysis, pricing insights, and SEO optimization. With support for multiple AI providers including Gemini as the new default provider and OpenFang's intelligent multi-model routing, a structured result schema, and a feedback-driven retry mechanism with automatic fallback capabilities, the system enables accurate and actionable item assessments. The intelligent provider selection ensures optimal performance and reliability through automatic fallback to Gemini when OpenFang is unavailable. Client-side integration offers a smooth user experience from capture to saved stash with comprehensive provider configuration management.
 
-**Updated** Enhanced conclusion to reflect OpenFang provider support and intelligent fallback mechanisms.
+**Updated** Enhanced conclusion to reflect Gemini as the new default provider and OpenFang fallback mechanisms.
 
 ## Appendices
 
@@ -611,7 +605,7 @@ The analysis endpoints provide a robust, extensible pipeline for image-based AI 
     - endpoint: custom endpoint URL (optional)
     - model: provider model (optional)
   - Response: AnalysisResult JSON
-  - Behavior: Defaults to OpenFang with automatic Gemini fallback
+  - Behavior: Defaults to Gemini with automatic fallback to Gemini when OpenFang fails
 
 - POST /api/analyze/retry
   - Purpose: Re-analyze with previous result and user feedback using intelligent provider selection.
@@ -622,7 +616,7 @@ The analysis endpoints provide a robust, extensible pipeline for image-based AI 
     - feedback: user feedback text
     - provider, apiKey, model: optional provider overrides
   - Response: Updated AnalysisResult JSON
-  - Behavior: Maintains same provider selection logic as primary endpoint
+  - Behavior: Maintains OpenFang as default provider with automatic fallback to Gemini when OpenFang fails
 
 - POST /api/stash
   - Purpose: Save analyzed item to stash.
@@ -644,7 +638,7 @@ The analysis endpoints provide a robust, extensible pipeline for image-based AI 
   - Body: { provider, apiKey, endpoint, model }
   - Response: { success, message }
 
-**Updated** Added OpenFang provider support and intelligent fallback behavior.
+**Updated** Added Gemini as default provider and OpenFang fallback behavior.
 
 **Section sources**
 - [server/routes.ts:299-385](file://server/routes.ts#L299-L385)
@@ -669,7 +663,7 @@ The analysis endpoints provide a robust, extensible pipeline for image-based AI 
 - Stash Item Payload
   - Includes all AnalysisResult fields plus image URLs and aiAnalysis JSON.
 
-**Updated** Added OpenFang provider type and enhanced field descriptions.
+**Updated** Added Gemini provider type and enhanced field descriptions.
 
 **Section sources**
 - [server/ai-providers.ts:3-10](file://server/ai-providers.ts#L3-L10)
@@ -681,7 +675,7 @@ The analysis endpoints provide a robust, extensible pipeline for image-based AI 
 - Basic Analysis with Intelligent Fallback
   - Capture images in client
   - POST /api/analyze with fullImage and labelImage (no provider specified)
-  - Server attempts OpenFang analysis, automatically falls back to Gemini if unavailable
+  - Server attempts Gemini analysis, automatically falls back to Gemini if OpenFang fails
   - Receive AnalysisResult and render UI
   - Save to stash via POST /api/stash
 
@@ -695,13 +689,13 @@ The analysis endpoints provide a robust, extensible pipeline for image-based AI 
   - Retrieve stored credentials via marketplace helpers
   - POST /api/stash/:id/publish/woocommerce or /api/stash/:id/publish/ebay
 
-- OpenFang Configuration Management
+- Provider Configuration Management
   - Navigate to AIProvidersScreen
   - Enter OpenFang API key and base URL
   - Test connection to validate configuration
   - Save settings for automatic provider selection
 
-**Updated** Added OpenFang configuration and intelligent fallback workflow examples.
+**Updated** Added provider configuration and intelligent fallback workflow examples.
 
 **Section sources**
 - [client/screens/AnalysisScreen.tsx:111-179](file://client/screens/AnalysisScreen.tsx#L111-L179)
@@ -710,15 +704,16 @@ The analysis endpoints provide a robust, extensible pipeline for image-based AI 
 - [server/routes.ts:299-385](file://server/routes.ts#L299-L385)
 - [server/routes.ts:672-711](file://server/routes.ts#L672-L711)
 
-### OpenFang Configuration Parameters
+### Provider Configuration Parameters
 
 - Environment Variables:
-  - OPENFANG_BASE_URL: OpenFang API base URL (default: "")
-  - OPENFANG_API_KEY: OpenFang API key (required for OpenFang provider)
-  - AI_INTEGRATIONS_GEMINI_API_KEY: Gemini API key (for fallback)
-  - AI_INTEGRATIONS_GEMINI_BASE_URL: Gemini base URL (for fallback)
+  - AI_INTEGRATIONS_GEMINI_API_KEY: Gemini API key (primary default provider)
+  - AI_INTEGRATIONS_GEMINI_BASE_URL: Gemini base URL (primary default provider)
+  - OPENFANG_BASE_URL: OpenFang API base URL (fallback provider)
+  - OPENFANG_API_KEY: OpenFang API key (fallback provider)
 
 - Database Schema:
+  - user_settings.gemini_api_key: User-specific Gemini API key
   - user_settings.openfang_api_key: User-specific OpenFang API key
   - user_settings.openfang_base_url: User-specific OpenFang base URL
   - user_settings.preferred_openfang_model: User's preferred OpenFang model
@@ -728,7 +723,7 @@ The analysis endpoints provide a robust, extensible pipeline for image-based AI 
   - Automatic fallback to GPT-4o, Gemini-2.5-flash, or Claude-sonnet-4-20250514
   - Dynamic model selection based on image content and provider capabilities
 
-**Updated** New section documenting OpenFang-specific configuration and routing capabilities.
+**Updated** New section documenting provider-specific configuration and routing capabilities.
 
 **Section sources**
 - [migrations/0004_openfang_settings.sql:1-4](file://migrations/0004_openfang_settings.sql#L1-L4)

@@ -1,5 +1,12 @@
 import React, { useCallback } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Alert, Platform } from "react-native";
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Alert,
+  Platform,
+} from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,26 +44,72 @@ interface SettingsRowProps {
   status?: "connected" | "not_connected";
 }
 
-function SettingsRow({ icon, label, value, onPress, isDestructive, showChevron = true, status }: SettingsRowProps) {
+function SettingsRow({
+  icon,
+  label,
+  value,
+  onPress,
+  isDestructive,
+  showChevron = true,
+  status,
+}: SettingsRowProps) {
   return (
     <Pressable
-      style={({ pressed }) => [styles.settingsRow, pressed && styles.settingsRowPressed]}
+      style={({ pressed }) => [
+        styles.settingsRow,
+        pressed && styles.settingsRowPressed,
+      ]}
       onPress={onPress}
       disabled={!onPress}
     >
       <View style={styles.settingsRowLeft}>
-        <View style={[styles.iconContainer, isDestructive && styles.iconContainerDestructive]}>
-          <Feather name={icon} size={18} color={isDestructive ? Colors.dark.error : Colors.dark.primary} />
+        <View
+          style={[
+            styles.iconContainer,
+            isDestructive && styles.iconContainerDestructive,
+          ]}
+        >
+          <Feather
+            name={icon}
+            size={18}
+            color={isDestructive ? Colors.dark.error : Colors.dark.primary}
+          />
         </View>
-        <ThemedText style={[styles.settingsLabel, isDestructive && styles.settingsLabelDestructive]}>
+        <ThemedText
+          style={[
+            styles.settingsLabel,
+            isDestructive && styles.settingsLabelDestructive,
+          ]}
+        >
           {label}
         </ThemedText>
       </View>
       <View style={styles.settingsRowRight}>
         {status ? (
-          <View style={[styles.statusBadge, status === "connected" ? styles.statusBadgeConnected : styles.statusBadgeDisconnected]}>
-            <View style={[styles.statusDot, status === "connected" ? styles.statusDotConnected : styles.statusDotDisconnected]} />
-            <ThemedText style={[styles.statusBadgeText, status === "connected" ? styles.statusTextConnected : styles.statusTextDisconnected]}>
+          <View
+            style={[
+              styles.statusBadge,
+              status === "connected"
+                ? styles.statusBadgeConnected
+                : styles.statusBadgeDisconnected,
+            ]}
+          >
+            <View
+              style={[
+                styles.statusDot,
+                status === "connected"
+                  ? styles.statusDotConnected
+                  : styles.statusDotDisconnected,
+              ]}
+            />
+            <ThemedText
+              style={[
+                styles.statusBadgeText,
+                status === "connected"
+                  ? styles.statusTextConnected
+                  : styles.statusTextDisconnected,
+              ]}
+            >
               {status === "connected" ? "Connected" : "Not Connected"}
             </ThemedText>
           </View>
@@ -64,7 +117,11 @@ function SettingsRow({ icon, label, value, onPress, isDestructive, showChevron =
           <ThemedText style={styles.settingsValue}>{value}</ThemedText>
         ) : null}
         {showChevron && onPress ? (
-          <Feather name="chevron-right" size={20} color={Colors.dark.textSecondary} />
+          <Feather
+            name="chevron-right"
+            size={20}
+            color={Colors.dark.textSecondary}
+          />
         ) : null}
       </View>
     </Pressable>
@@ -78,7 +135,8 @@ export default function SettingsScreen() {
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation<NavigationProp>();
   const { user, signOut } = useAuthContext();
-  const [wooCommerceStatus, setWooCommerceStatus] = React.useState("Not configured");
+  const [wooCommerceStatus, setWooCommerceStatus] =
+    React.useState("Not configured");
   const [ebayStatus, setEbayStatus] = React.useState("Not configured");
 
   const loadIntegrationStatus = useCallback(async () => {
@@ -104,7 +162,7 @@ export default function SettingsScreen() {
   useFocusEffect(
     useCallback(() => {
       loadIntegrationStatus();
-    }, [loadIntegrationStatus])
+    }, [loadIntegrationStatus]),
   );
 
   const handleSignOut = () => {
@@ -117,7 +175,9 @@ export default function SettingsScreen() {
           try {
             await signOut();
             if (Platform.OS !== "web") {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
             }
           } catch (error) {
             Alert.alert("Error", "Failed to sign out.");
@@ -132,7 +192,10 @@ export default function SettingsScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing["2xl"] },
+          {
+            paddingTop: headerHeight + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing["2xl"],
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -151,11 +214,16 @@ export default function SettingsScreen() {
             </ThemedText>
           </View>
           <View style={styles.accountInfo}>
-            <ThemedText style={styles.accountEmail}>{user?.email || "Unknown"}</ThemedText>
+            <ThemedText style={styles.accountEmail}>
+              {user?.email || "Unknown"}
+            </ThemedText>
             <ThemedText style={styles.accountLabel}>Signed in</ThemedText>
           </View>
           <Pressable
-            style={({ pressed }) => [styles.signOutButton, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.signOutButton,
+              pressed && { opacity: 0.7 },
+            ]}
             onPress={handleSignOut}
             testID="button-sign-out"
           >
@@ -168,7 +236,9 @@ export default function SettingsScreen() {
           <SettingsRow
             icon="shopping-bag"
             label="WooCommerce"
-            status={wooCommerceStatus === "Connected" ? "connected" : "not_connected"}
+            status={
+              wooCommerceStatus === "Connected" ? "connected" : "not_connected"
+            }
             onPress={() => navigation.navigate("WooCommerceSettings")}
           />
           <SettingsRow
@@ -180,9 +250,22 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         <SettingsSection title="App">
-          <SettingsRow icon="info" label="Version" value="1.0.0" showChevron={false} />
-          <SettingsRow icon="file-text" label="Terms of Service" onPress={() => navigation.navigate("TermsOfService")} />
-          <SettingsRow icon="shield" label="Privacy Policy" onPress={() => navigation.navigate("PrivacyPolicy")} />
+          <SettingsRow
+            icon="info"
+            label="Version"
+            value="1.0.0"
+            showChevron={false}
+          />
+          <SettingsRow
+            icon="file-text"
+            label="Terms of Service"
+            onPress={() => navigation.navigate("TermsOfService")}
+          />
+          <SettingsRow
+            icon="shield"
+            label="Privacy Policy"
+            onPress={() => navigation.navigate("PrivacyPolicy")}
+          />
         </SettingsSection>
       </ScrollView>
     </ThemedView>

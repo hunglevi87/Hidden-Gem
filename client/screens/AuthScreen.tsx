@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, Platform, Image } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Image,
+} from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
@@ -25,7 +34,7 @@ export default function AuthScreen() {
   const handleAuth = async () => {
     setErrorMessage(null);
     setSuccessMessage(null);
-    
+
     if (!email || !password) {
       setErrorMessage("Please enter both email and password.");
       return;
@@ -50,7 +59,8 @@ export default function AuthScreen() {
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-      const msg = error.message || error.error_description || "Authentication failed";
+      const msg =
+        error.message || error.error_description || "Authentication failed";
       setErrorMessage(msg);
     } finally {
       setLoading(false);
@@ -83,7 +93,10 @@ export default function AuthScreen() {
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + Spacing["4xl"], paddingBottom: insets.bottom + Spacing["2xl"] },
+          {
+            paddingTop: insets.top + Spacing["4xl"],
+            paddingBottom: insets.bottom + Spacing["2xl"],
+          },
         ]}
       >
         <View style={styles.logoContainer}>
@@ -104,7 +117,12 @@ export default function AuthScreen() {
 
         <View style={styles.formContainer}>
           <View style={styles.inputContainer}>
-            <Feather name="mail" size={20} color={Colors.dark.textSecondary} style={styles.inputIcon} />
+            <Feather
+              name="mail"
+              size={20}
+              color={Colors.dark.textSecondary}
+              style={styles.inputIcon}
+            />
             <View style={styles.inputWrapper}>
               <ThemedText style={styles.inputLabel}>Email</ThemedText>
               <TextInput
@@ -122,7 +140,12 @@ export default function AuthScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <Feather name="lock" size={20} color={Colors.dark.textSecondary} style={styles.inputIcon} />
+            <Feather
+              name="lock"
+              size={20}
+              color={Colors.dark.textSecondary}
+              style={styles.inputIcon}
+            />
             <View style={styles.inputWrapper}>
               <ThemedText style={styles.inputLabel}>Password</ThemedText>
               <View style={styles.passwordRow}>
@@ -137,8 +160,15 @@ export default function AuthScreen() {
                   style={[styles.textInput, styles.passwordInput]}
                   testID="input-password"
                 />
-                <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                  <Feather name={showPassword ? "eye-off" : "eye"} size={20} color={Colors.dark.textSecondary} />
+                <Pressable
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeButton}
+                >
+                  <Feather
+                    name={showPassword ? "eye-off" : "eye"}
+                    size={20}
+                    color={Colors.dark.textSecondary}
+                  />
                 </Pressable>
               </View>
             </View>
@@ -146,15 +176,25 @@ export default function AuthScreen() {
 
           {errorMessage ? (
             <View style={styles.messageContainer} testID="error-message">
-              <Feather name="alert-circle" size={16} color={Colors.dark.error} />
+              <Feather
+                name="alert-circle"
+                size={16}
+                color={Colors.dark.error}
+              />
               <ThemedText style={styles.errorText}>{errorMessage}</ThemedText>
             </View>
           ) : null}
 
           {successMessage ? (
             <View style={styles.successContainer} testID="success-message">
-              <Feather name="check-circle" size={16} color={Colors.dark.success} />
-              <ThemedText style={styles.successText}>{successMessage}</ThemedText>
+              <Feather
+                name="check-circle"
+                size={16}
+                color={Colors.dark.success}
+              />
+              <ThemedText style={styles.successText}>
+                {successMessage}
+              </ThemedText>
             </View>
           ) : null}
 
@@ -175,7 +215,11 @@ export default function AuthScreen() {
                 <ThemedText style={styles.authButtonText}>
                   {isSignUp ? "Create Account" : "Sign In"}
                 </ThemedText>
-                <Feather name="arrow-right" size={20} color={Colors.dark.buttonText} />
+                <Feather
+                  name="arrow-right"
+                  size={20}
+                  color={Colors.dark.buttonText}
+                />
               </>
             )}
           </Pressable>
@@ -220,7 +264,9 @@ export default function AuthScreen() {
             testID="button-switch-auth"
           >
             <ThemedText style={styles.switchText}>
-              {isSignUp ? "Already have an account? " : "Don't have an account? "}
+              {isSignUp
+                ? "Already have an account? "
+                : "Don't have an account? "}
               <ThemedText style={styles.switchTextHighlight}>
                 {isSignUp ? "Sign In" : "Sign Up"}
               </ThemedText>

@@ -42,7 +42,7 @@ export default function RootStackNavigator() {
   const showAuthScreen = !isAuthenticated && isConfigured;
 
   return (
-    <Stack.Navigator 
+    <Stack.Navigator
       screenOptions={{
         ...screenOptions,
         contentStyle: { backgroundColor: Colors.dark.backgroundRoot },

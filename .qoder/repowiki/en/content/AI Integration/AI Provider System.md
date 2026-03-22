@@ -8,7 +8,6 @@
 - [AnalysisScreen.tsx](file://client/screens/AnalysisScreen.tsx)
 - [ai-seo.ts](file://server/ai-seo.ts)
 - [ENVIRONMENT.md](file://ENVIRONMENT.md)
-- [index.ts](file://server/index.ts)
 - [types.ts](file://shared/types.ts)
 - [schema.ts](file://shared/schema.ts)
 - [0004_openfang_settings.sql](file://migrations/0004_openfang_settings.sql)
@@ -16,6 +15,7 @@
 
 ## Update Summary
 **Changes Made**
+- Updated default provider logic to Gemini as the primary provider with OpenFang as optional multi-model routing
 - Enhanced OpenFang provider integration with comprehensive multi-model routing capabilities
 - Added automatic vision model selection with intelligent fallback mechanisms
 - Implemented advanced routing configuration with "prefer" and "fallback" arrays
@@ -35,7 +35,7 @@
 9. [Conclusion](#conclusion)
 
 ## Introduction
-This document describes the AI provider factory system in Hidden-Gem, which abstracts multiple AI services behind a unified interface for item analysis and listing generation. The system now includes OpenFang as a sophisticated multi-model AI routing provider alongside existing Gemini, OpenAI, and Anthropic services. It covers provider configuration, authentication, endpoint management, validation, security restrictions for custom endpoints, unified analysis interface, provider-specific implementations, connection testing, error handling, and performance considerations.
+This document describes the AI provider factory system in Hidden-Gem, which abstracts multiple AI services behind a unified interface for item analysis and listing generation. The system now includes OpenFang as a sophisticated multi-model AI routing provider alongside existing Gemini, OpenAI, and Anthropic services. Gemini is configured as the default provider for optimal user experience, while OpenFang remains available as an optional multi-model routing option. It covers provider configuration, authentication, endpoint management, validation, security restrictions for custom endpoints, unified analysis interface, provider-specific implementations, connection testing, error handling, and performance considerations.
 
 ## Project Structure
 The AI provider system spans both the backend server and the React Native client:
@@ -91,7 +91,7 @@ SEO --> DB
 - [ai-providers.ts:380-396](file://server/ai-providers.ts#L380-L396)
 
 ## Architecture Overview
-The system exposes a unified API to clients while delegating provider-specific logic to dedicated handlers. The backend validates configurations, enforces security, and parses provider responses into a standardized format. The enhanced OpenFang provider adds sophisticated multi-model routing capabilities with automatic vision model selection and intelligent fallback mechanisms.
+The system exposes a unified API to clients while delegating provider-specific logic to dedicated handlers. The backend validates configurations, enforces security, and parses provider responses into a standardized format. The enhanced OpenFang provider adds sophisticated multi-model routing capabilities with automatic vision model selection and intelligent fallback mechanisms. Gemini is configured as the default provider for seamless user experience, while OpenFang provides advanced multi-model routing as an optional enhancement.
 
 ```mermaid
 sequenceDiagram
@@ -130,7 +130,7 @@ Routes-->>Client : AnalysisResult
 ## Detailed Component Analysis
 
 ### AI Provider Factory
-The factory defines a unified interface and implements provider-specific logic with validation and security checks. The factory now includes OpenFang as a supported provider with advanced multi-model routing capabilities and automatic fallback mechanisms.
+The factory defines a unified interface and implements provider-specific logic with validation and security checks. The factory now includes OpenFang as a supported provider with advanced multi-model routing capabilities and automatic fallback mechanisms. Gemini is configured as the default provider, while OpenFang provides optional multi-model routing.
 
 ```mermaid
 classDiagram
@@ -193,7 +193,7 @@ AnalysisResult --> ProviderFactory : "produces"
 - [ai-providers.ts:380-396](file://server/ai-providers.ts#L380-L396)
 
 ### Provider Selection Logic
-The factory routes requests based on the provider field, with validation and fallback behavior. The enhanced OpenFang provider uses sophisticated routing with automatic model selection and intelligent fallback mechanisms.
+The factory routes requests based on the provider field, with validation and fallback behavior. The enhanced OpenFang provider uses sophisticated routing with automatic model selection and intelligent fallback mechanisms. Gemini is configured as the default provider with OpenFang as an optional multi-model routing option.
 
 ```mermaid
 flowchart TD
@@ -272,11 +272,12 @@ MergeDefaults --> Return([Return AnalysisResult])
 
 ### Provider-Specific Implementations
 
-#### Google Gemini
+#### Google Gemini (Default Provider)
 - Uses @google/genai SDK
 - Supports Replit AI integrations via environment variables
 - Model defaults to a modern Flash model
 - Response parsed as JSON
+- **Updated**: Now configured as the default provider for optimal user experience
 
 **Section sources**
 - [ai-providers.ts:224-248](file://server/ai-providers.ts#L224-L248)
@@ -299,7 +300,7 @@ MergeDefaults --> Return([Return AnalysisResult])
 **Section sources**
 - [ai-providers.ts:289-332](file://server/ai-providers.ts#L289-L332)
 
-#### OpenFang (Enhanced)
+#### OpenFang (Enhanced - Optional Multi-Model Routing)
 - **New Provider**: Sophisticated multi-model AI routing with automatic vision model selection
 - Requires API key and base URL configuration
 - Supports advanced routing configuration with "prefer" and "fallback" arrays
@@ -307,6 +308,7 @@ MergeDefaults --> Return([Return AnalysisResult])
 - Automatic vision model selection for optimal image analysis performance
 - Intelligent routing that prefers vision-capable models for image-heavy analysis
 - Comprehensive fallback mechanisms to ensure analysis completion even with provider issues
+- **Updated**: Available as optional multi-model routing option alongside the default Gemini provider
 
 **Updated** Enhanced with multi-model routing capabilities, automatic vision model selection, and improved fallback mechanisms
 
@@ -403,7 +405,7 @@ Routes-->>Client : AnalysisResult
 ### Client Integration
 
 #### Provider Configuration UI
-The client allows users to configure providers, select models, and test connections. The enhanced OpenFang provider includes comprehensive multi-model routing configuration with automatic model selection and routing preference management.
+The client allows users to configure providers, select models, and test connections. The enhanced OpenFang provider includes comprehensive multi-model routing configuration with automatic model selection and routing preference management. Gemini is pre-selected as the default provider.
 
 ```mermaid
 flowchart TD
@@ -421,7 +423,7 @@ RenderSections --> SaveSettings["Save settings to storage"]
 - [AIProvidersScreen.tsx:104-263](file://client/screens/AIProvidersScreen.tsx#L104-L263)
 
 #### Analysis Workflow
-The client triggers analysis, displays results, and supports editing and retry. The enhanced OpenFang provider maintains sophisticated routing configuration throughout the analysis process with automatic fallback handling.
+The client triggers analysis, displays results, and supports editing and retry. The enhanced OpenFang provider maintains sophisticated routing configuration throughout the analysis process with automatic fallback handling. Gemini is configured as the default provider with OpenFang as an optional enhancement.
 
 ```mermaid
 sequenceDiagram
@@ -457,6 +459,16 @@ Routes-->>Client : Updated AnalysisResult
 - [AnalysisScreen.tsx:145-179](file://client/screens/AnalysisScreen.tsx#L145-L179)
 - [routes.ts:299-385](file://server/routes.ts#L299-L385)
 - [routes.ts:672-711](file://server/routes.ts#L672-L711)
+
+### Default Provider Logic
+The system now implements Gemini as the default AI provider with OpenFang as an optional multi-model routing option. The default provider selection logic prioritizes user experience while maintaining flexibility for advanced users.
+
+**Updated** Gemini is now the default provider, while OpenFang remains available as an optional multi-model routing option
+
+**Section sources**
+- [routes.ts:322-328](file://server/routes.ts#L322-L328)
+- [routes.ts:774-780](file://server/routes.ts#L774-L780)
+- [AIProvidersScreen.tsx:111](file://client/screens/AIProvidersScreen.tsx#L111)
 
 ### SEO Generation and Audit Trail
 The system generates SEO metadata and persists AI generations to the database.
@@ -513,7 +525,7 @@ Factory --> SEO
 - [schema.ts:174-187](file://shared/schema.ts#L174-L187)
 
 ## Performance Considerations
-- Gemini: Uses modern Flash model by default; consider model selection for latency vs. accuracy trade-offs
+- **Gemini**: Uses modern Flash model by default; configured as the default provider for optimal balance of speed and accuracy
 - OpenAI: JSON response format reduces parsing overhead; ensure model selection aligns with budget and speed targets
 - Anthropic: Uses Messages API; consider token limits and model capabilities
 - **OpenFang**: Advanced multi-model routing with automatic vision model selection; built-in fallback mechanisms reduce provider downtime risk and improve analysis reliability
@@ -530,6 +542,7 @@ Common issues and resolutions:
 - Custom endpoint failures: Ensure endpoint supports OpenAI-compatible chat/completions
 - **OpenFang routing issues**: Verify base URL configuration, routing preferences, and fallback model availability
 - **OpenFang multi-model failures**: Check that vision-capable models are available in the routing configuration
+- **Default provider issues**: If Gemini fails, verify Replit AI integration configuration or configure custom API key
 - CORS issues: Verify allowed origins and headers in server setup
 - Database connectivity: Confirm DATABASE_URL and migration status
 
@@ -540,4 +553,4 @@ Common issues and resolutions:
 - [ENVIRONMENT.md:18-32](file://ENVIRONMENT.md#L18-L32)
 
 ## Conclusion
-The AI provider factory system provides a robust, secure, and extensible abstraction over multiple AI services. The enhanced OpenFang integration significantly improves the system's capabilities with sophisticated multi-model routing, automatic vision model selection, and intelligent fallback mechanisms. The system standardizes configuration, enforces security, and offers a unified result format. The client integrates seamlessly with provider testing and analysis workflows, while the backend maintains clean separation of concerns and supports future provider additions. The OpenFang provider serves as the primary multi-model execution handler, providing enhanced reliability and performance through its advanced routing capabilities.
+The AI provider factory system provides a robust, secure, and extensible abstraction over multiple AI services. The enhanced OpenFang integration significantly improves the system's capabilities with sophisticated multi-model routing, automatic vision model selection, and intelligent fallback mechanisms. Gemini is configured as the default provider for optimal user experience, while OpenFang remains available as an optional multi-model routing option for advanced users. The system standardizes configuration, enforces security, and offers a unified result format. The client integrates seamlessly with provider testing and analysis workflows, while the backend maintains clean separation of concerns and supports future provider additions. The OpenFang provider serves as the primary multi-model execution handler, providing enhanced reliability and performance through its advanced routing capabilities while maintaining Gemini as the default choice for most users.

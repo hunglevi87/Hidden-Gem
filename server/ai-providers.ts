@@ -1,6 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
 
-export type AIProviderType = "gemini" | "openai" | "anthropic" | "custom" | "openfang";
+export type AIProviderType =
+  | "gemini"
+  | "openai"
+  | "anthropic"
+  | "custom"
+  | "openfang";
 
 export interface AIProviderConfig {
   provider: AIProviderType;
@@ -30,7 +35,12 @@ export interface AnalysisResult {
   estimatedValueHigh: number;
   suggestedListPrice: number;
   confidence: "high" | "medium" | "low";
-  authenticity: "Authentic" | "Likely Authentic" | "Uncertain" | "Likely Counterfeit" | "Counterfeit";
+  authenticity:
+    | "Authentic"
+    | "Likely Authentic"
+    | "Uncertain"
+    | "Likely Counterfeit"
+    | "Counterfeit";
   authenticityConfidence: number;
   authenticityDetails: string;
   authenticationTips: string[];
@@ -106,23 +116,32 @@ const FALLBACK_RESULT: AnalysisResult = {
   estimatedValue: "$50-$100",
   condition: "Good",
   seoTitle: "Vintage Collectible Item for Sale",
-  seoDescription: "Authentic vintage collectible in excellent condition. Perfect for collectors.",
+  seoDescription:
+    "Authentic vintage collectible in excellent condition. Perfect for collectors.",
   seoKeywords: ["vintage", "collectible", "antique"],
   tags: ["vintage", "collectible"],
   // New enhanced fields
   brand: "Unknown",
   subtitle: "Vintage collectible item",
   shortDescription: "A vintage collectible item in good condition.",
-  fullDescription: "<p>This is a vintage collectible item in good overall condition. Please review photos carefully as they form part of the description.</p>",
+  fullDescription:
+    "<p>This is a vintage collectible item in good overall condition. Please review photos carefully as they form part of the description.</p>",
   estimatedValueLow: 50,
   estimatedValueHigh: 100,
   suggestedListPrice: 75,
   confidence: "low",
   authenticity: "Uncertain",
   authenticityConfidence: 50,
-  authenticityDetails: "Unable to perform detailed authentication analysis. Please consult a professional authenticator for high-value items.",
-  authenticationTips: ["Check for brand markings and serial numbers", "Examine hardware quality and materials", "Compare with official product images", "Consult professional authenticator for valuable items"],
-  marketAnalysis: "Market analysis unavailable. Research comparable sold listings on eBay and other marketplaces to determine fair market value.",
+  authenticityDetails:
+    "Unable to perform detailed authentication analysis. Please consult a professional authenticator for high-value items.",
+  authenticationTips: [
+    "Check for brand markings and serial numbers",
+    "Examine hardware quality and materials",
+    "Compare with official product images",
+    "Consult professional authenticator for valuable items",
+  ],
+  marketAnalysis:
+    "Market analysis unavailable. Research comparable sold listings on eBay and other marketplaces to determine fair market value.",
   aspects: { Category: ["Collectible"], Condition: ["Good"] },
   ebayCategoryId: "1",
   wooCategory: "Collectibles",
@@ -130,7 +149,7 @@ const FALLBACK_RESULT: AnalysisResult = {
 
 function parseAnalysisResult(text: string): AnalysisResult {
   let parsed: Partial<AnalysisResult>;
-  
+
   try {
     parsed = JSON.parse(text);
   } catch {
@@ -158,20 +177,35 @@ function parseAnalysisResult(text: string): AnalysisResult {
     seoDescription: parsed.seoDescription || FALLBACK_RESULT.seoDescription,
     seoKeywords: parsed.seoKeywords || FALLBACK_RESULT.seoKeywords,
     tags: parsed.tags || FALLBACK_RESULT.tags,
-    
+
     // New enhanced fields with defaults
     brand: parsed.brand || FALLBACK_RESULT.brand,
     subtitle: parsed.subtitle || FALLBACK_RESULT.subtitle,
-    shortDescription: parsed.shortDescription || FALLBACK_RESULT.shortDescription,
+    shortDescription:
+      parsed.shortDescription || FALLBACK_RESULT.shortDescription,
     fullDescription: parsed.fullDescription || FALLBACK_RESULT.fullDescription,
-    estimatedValueLow: typeof parsed.estimatedValueLow === 'number' ? parsed.estimatedValueLow : FALLBACK_RESULT.estimatedValueLow,
-    estimatedValueHigh: typeof parsed.estimatedValueHigh === 'number' ? parsed.estimatedValueHigh : FALLBACK_RESULT.estimatedValueHigh,
-    suggestedListPrice: typeof parsed.suggestedListPrice === 'number' ? parsed.suggestedListPrice : FALLBACK_RESULT.suggestedListPrice,
+    estimatedValueLow:
+      typeof parsed.estimatedValueLow === "number"
+        ? parsed.estimatedValueLow
+        : FALLBACK_RESULT.estimatedValueLow,
+    estimatedValueHigh:
+      typeof parsed.estimatedValueHigh === "number"
+        ? parsed.estimatedValueHigh
+        : FALLBACK_RESULT.estimatedValueHigh,
+    suggestedListPrice:
+      typeof parsed.suggestedListPrice === "number"
+        ? parsed.suggestedListPrice
+        : FALLBACK_RESULT.suggestedListPrice,
     confidence: parsed.confidence || FALLBACK_RESULT.confidence,
     authenticity: parsed.authenticity || FALLBACK_RESULT.authenticity,
-    authenticityConfidence: typeof parsed.authenticityConfidence === 'number' ? parsed.authenticityConfidence : FALLBACK_RESULT.authenticityConfidence,
-    authenticityDetails: parsed.authenticityDetails || FALLBACK_RESULT.authenticityDetails,
-    authenticationTips: parsed.authenticationTips || FALLBACK_RESULT.authenticationTips,
+    authenticityConfidence:
+      typeof parsed.authenticityConfidence === "number"
+        ? parsed.authenticityConfidence
+        : FALLBACK_RESULT.authenticityConfidence,
+    authenticityDetails:
+      parsed.authenticityDetails || FALLBACK_RESULT.authenticityDetails,
+    authenticationTips:
+      parsed.authenticationTips || FALLBACK_RESULT.authenticationTips,
     marketAnalysis: parsed.marketAnalysis || FALLBACK_RESULT.marketAnalysis,
     aspects: parsed.aspects || FALLBACK_RESULT.aspects,
     ebayCategoryId: parsed.ebayCategoryId || FALLBACK_RESULT.ebayCategoryId,
@@ -179,7 +213,13 @@ function parseAnalysisResult(text: string): AnalysisResult {
   };
 }
 
-const VALID_PROVIDERS = new Set(["gemini", "openai", "anthropic", "custom", "openfang"]);
+const VALID_PROVIDERS = new Set([
+  "gemini",
+  "openai",
+  "anthropic",
+  "custom",
+  "openfang",
+]);
 
 function validateProvider(provider: string): provider is AIProviderType {
   return VALID_PROVIDERS.has(provider);
@@ -205,31 +245,51 @@ function validateCustomEndpoint(endpoint: string): void {
     "::1",
     "169.254.",
     "10.",
-    "172.16.", "172.17.", "172.18.", "172.19.",
-    "172.20.", "172.21.", "172.22.", "172.23.",
-    "172.24.", "172.25.", "172.26.", "172.27.",
-    "172.28.", "172.29.", "172.30.", "172.31.",
+    "172.16.",
+    "172.17.",
+    "172.18.",
+    "172.19.",
+    "172.20.",
+    "172.21.",
+    "172.22.",
+    "172.23.",
+    "172.24.",
+    "172.25.",
+    "172.26.",
+    "172.27.",
+    "172.28.",
+    "172.29.",
+    "172.30.",
+    "172.31.",
     "192.168.",
     "metadata.google",
     ".internal",
   ];
 
   for (const pattern of blockedPatterns) {
-    if (hostname === pattern || hostname.startsWith(pattern) || hostname.endsWith(pattern)) {
-      throw new Error("Custom endpoint cannot target private or internal network addresses");
+    if (
+      hostname === pattern ||
+      hostname.startsWith(pattern) ||
+      hostname.endsWith(pattern)
+    ) {
+      throw new Error(
+        "Custom endpoint cannot target private or internal network addresses",
+      );
     }
   }
 }
 
 async function analyzeWithGemini(
   images: ImageInput[],
-  config: AIProviderConfig
+  config: AIProviderConfig,
 ): Promise<AnalysisResult> {
   const ai = new GoogleGenAI({
     apiKey: config.apiKey || process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
     httpOptions: {
       apiVersion: config.apiKey ? "v1beta" : "",
-      baseUrl: config.apiKey ? undefined : process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+      baseUrl: config.apiKey
+        ? undefined
+        : process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
     },
   });
 
@@ -249,7 +309,7 @@ async function analyzeWithGemini(
 
 async function analyzeWithOpenAI(
   images: ImageInput[],
-  config: AIProviderConfig
+  config: AIProviderConfig,
 ): Promise<AnalysisResult> {
   if (!config.apiKey) {
     throw new Error("OpenAI API key is required");
@@ -278,7 +338,9 @@ async function analyzeWithOpenAI(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `OpenAI API error: ${response.status}`);
+    throw new Error(
+      error.error?.message || `OpenAI API error: ${response.status}`,
+    );
   }
 
   const data = await response.json();
@@ -288,7 +350,7 @@ async function analyzeWithOpenAI(
 
 async function analyzeWithAnthropic(
   images: ImageInput[],
-  config: AIProviderConfig
+  config: AIProviderConfig,
 ): Promise<AnalysisResult> {
   if (!config.apiKey) {
     throw new Error("Anthropic API key is required");
@@ -323,7 +385,9 @@ async function analyzeWithAnthropic(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `Anthropic API error: ${response.status}`);
+    throw new Error(
+      error.error?.message || `Anthropic API error: ${response.status}`,
+    );
   }
 
   const data = await response.json();
@@ -333,16 +397,24 @@ async function analyzeWithAnthropic(
 
 async function analyzeWithOpenFang(
   images: ImageInput[],
-  config: AIProviderConfig
+  config: AIProviderConfig,
 ): Promise<AnalysisResult> {
-  const baseUrl = (config.endpoint || process.env.OPENFANG_BASE_URL || "").replace(/\/+$/, "");
+  const baseUrl = (
+    config.endpoint ||
+    process.env.OPENFANG_BASE_URL ||
+    ""
+  ).replace(/\/+$/, "");
   const apiKey = config.apiKey || process.env.OPENFANG_API_KEY || "";
 
   if (!baseUrl) {
-    throw new Error("OpenFang base URL is required. Set OPENFANG_BASE_URL or configure in settings.");
+    throw new Error(
+      "OpenFang base URL is required. Set OPENFANG_BASE_URL or configure in settings.",
+    );
   }
   if (!apiKey) {
-    throw new Error("OpenFang API key is required. Set OPENFANG_API_KEY or configure in settings.");
+    throw new Error(
+      "OpenFang API key is required. Set OPENFANG_API_KEY or configure in settings.",
+    );
   }
 
   const content: any[] = [{ type: "text", text: ANALYSIS_PROMPT }];
@@ -380,7 +452,9 @@ async function analyzeWithOpenFang(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `OpenFang API error: ${response.status}`);
+    throw new Error(
+      error.error?.message || `OpenFang API error: ${response.status}`,
+    );
   }
 
   const data = await response.json();
@@ -390,7 +464,7 @@ async function analyzeWithOpenFang(
 
 async function analyzeWithCustom(
   images: ImageInput[],
-  config: AIProviderConfig
+  config: AIProviderConfig,
 ): Promise<AnalysisResult> {
   if (!config.endpoint) {
     throw new Error("Custom AI endpoint URL is required");
@@ -405,7 +479,9 @@ async function analyzeWithCustom(
     });
   }
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
   if (config.apiKey) {
     headers["Authorization"] = `Bearer ${config.apiKey}`;
   }
@@ -426,7 +502,9 @@ async function analyzeWithCustom(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `Custom AI error: ${response.status}`);
+    throw new Error(
+      error.error?.message || `Custom AI error: ${response.status}`,
+    );
   }
 
   const data = await response.json();
@@ -436,7 +514,7 @@ async function analyzeWithCustom(
 
 export async function analyzeItem(
   config: AIProviderConfig,
-  images: ImageInput[]
+  images: ImageInput[],
 ): Promise<AnalysisResult> {
   switch (config.provider) {
     case "gemini":
@@ -478,11 +556,12 @@ export async function analyzeItemWithRetry(
   config: AIProviderConfig,
   images: ImageInput[],
   previousResult: AnalysisResult,
-  feedback: string
+  feedback: string,
 ): Promise<AnalysisResult> {
-  const retryPrompt = RETRY_PROMPT_TEMPLATE
-    .replace("{previousReport}", JSON.stringify(previousResult, null, 2))
-    .replace("{feedback}", feedback);
+  const retryPrompt = RETRY_PROMPT_TEMPLATE.replace(
+    "{previousReport}",
+    JSON.stringify(previousResult, null, 2),
+  ).replace("{feedback}", feedback);
 
   const retryConfig = { ...config, retryPrompt };
 
@@ -505,13 +584,15 @@ export async function analyzeItemWithRetry(
 async function analyzeWithGeminiRetry(
   images: ImageInput[],
   config: AIProviderConfig,
-  retryPrompt: string
+  retryPrompt: string,
 ): Promise<AnalysisResult> {
   const ai = new GoogleGenAI({
     apiKey: config.apiKey || process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
     httpOptions: {
       apiVersion: config.apiKey ? "v1beta" : "",
-      baseUrl: config.apiKey ? undefined : process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+      baseUrl: config.apiKey
+        ? undefined
+        : process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
     },
   });
 
@@ -532,7 +613,7 @@ async function analyzeWithGeminiRetry(
 async function analyzeWithOpenAIRetry(
   images: ImageInput[],
   config: AIProviderConfig,
-  retryPrompt: string
+  retryPrompt: string,
 ): Promise<AnalysisResult> {
   if (!config.apiKey) {
     throw new Error("OpenAI API key is required");
@@ -561,7 +642,9 @@ async function analyzeWithOpenAIRetry(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `OpenAI API error: ${response.status}`);
+    throw new Error(
+      error.error?.message || `OpenAI API error: ${response.status}`,
+    );
   }
 
   const data = await response.json();
@@ -572,7 +655,7 @@ async function analyzeWithOpenAIRetry(
 async function analyzeWithAnthropicRetry(
   images: ImageInput[],
   config: AIProviderConfig,
-  retryPrompt: string
+  retryPrompt: string,
 ): Promise<AnalysisResult> {
   if (!config.apiKey) {
     throw new Error("Anthropic API key is required");
@@ -607,7 +690,9 @@ async function analyzeWithAnthropicRetry(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `Anthropic API error: ${response.status}`);
+    throw new Error(
+      error.error?.message || `Anthropic API error: ${response.status}`,
+    );
   }
 
   const data = await response.json();
@@ -618,16 +703,24 @@ async function analyzeWithAnthropicRetry(
 async function analyzeWithOpenFangRetry(
   images: ImageInput[],
   config: AIProviderConfig,
-  retryPrompt: string
+  retryPrompt: string,
 ): Promise<AnalysisResult> {
-  const baseUrl = (config.endpoint || process.env.OPENFANG_BASE_URL || "").replace(/\/+$/, "");
+  const baseUrl = (
+    config.endpoint ||
+    process.env.OPENFANG_BASE_URL ||
+    ""
+  ).replace(/\/+$/, "");
   const apiKey = config.apiKey || process.env.OPENFANG_API_KEY || "";
 
   if (!baseUrl) {
-    throw new Error("OpenFang base URL is required. Set OPENFANG_BASE_URL or configure in settings.");
+    throw new Error(
+      "OpenFang base URL is required. Set OPENFANG_BASE_URL or configure in settings.",
+    );
   }
   if (!apiKey) {
-    throw new Error("OpenFang API key is required. Set OPENFANG_API_KEY or configure in settings.");
+    throw new Error(
+      "OpenFang API key is required. Set OPENFANG_API_KEY or configure in settings.",
+    );
   }
 
   const content: any[] = [{ type: "text", text: retryPrompt }];
@@ -665,7 +758,9 @@ async function analyzeWithOpenFangRetry(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `OpenFang API error: ${response.status}`);
+    throw new Error(
+      error.error?.message || `OpenFang API error: ${response.status}`,
+    );
   }
 
   const data = await response.json();
@@ -676,7 +771,7 @@ async function analyzeWithOpenFangRetry(
 async function analyzeWithCustomRetry(
   images: ImageInput[],
   config: AIProviderConfig,
-  retryPrompt: string
+  retryPrompt: string,
 ): Promise<AnalysisResult> {
   if (!config.endpoint) {
     throw new Error("Custom AI endpoint URL is required");
@@ -691,7 +786,9 @@ async function analyzeWithCustomRetry(
     });
   }
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
   if (config.apiKey) {
     headers["Authorization"] = `Bearer ${config.apiKey}`;
   }
@@ -712,7 +809,9 @@ async function analyzeWithCustomRetry(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `Custom AI error: ${response.status}`);
+    throw new Error(
+      error.error?.message || `Custom AI error: ${response.status}`,
+    );
   }
 
   const data = await response.json();
@@ -721,16 +820,19 @@ async function analyzeWithCustomRetry(
 }
 
 export async function testProviderConnection(
-  config: AIProviderConfig
+  config: AIProviderConfig,
 ): Promise<{ success: boolean; message: string }> {
   try {
     switch (config.provider) {
       case "gemini": {
         const ai = new GoogleGenAI({
-          apiKey: config.apiKey || process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
+          apiKey:
+            config.apiKey || process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
           httpOptions: {
             apiVersion: config.apiKey ? "v1beta" : "",
-            baseUrl: config.apiKey ? undefined : process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+            baseUrl: config.apiKey
+              ? undefined
+              : process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
           },
         });
         const response = await ai.models.generateContent({
@@ -744,26 +846,35 @@ export async function testProviderConnection(
       }
 
       case "openai": {
-        if (!config.apiKey) return { success: false, message: "OpenAI API key is required" };
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${config.apiKey}`,
-            "Content-Type": "application/json",
+        if (!config.apiKey)
+          return { success: false, message: "OpenAI API key is required" };
+        const response = await fetch(
+          "https://api.openai.com/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${config.apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: config.model || "gpt-4o",
+              messages: [{ role: "user", content: "Reply with: OK" }],
+              max_tokens: 5,
+            }),
           },
-          body: JSON.stringify({
-            model: config.model || "gpt-4o",
-            messages: [{ role: "user", content: "Reply with: OK" }],
-            max_tokens: 5,
-          }),
-        });
-        if (response.ok) return { success: true, message: "OpenAI connection successful" };
+        );
+        if (response.ok)
+          return { success: true, message: "OpenAI connection successful" };
         const error = await response.json().catch(() => ({}));
-        return { success: false, message: error.error?.message || `OpenAI error: ${response.status}` };
+        return {
+          success: false,
+          message: error.error?.message || `OpenAI error: ${response.status}`,
+        };
       }
 
       case "anthropic": {
-        if (!config.apiKey) return { success: false, message: "Anthropic API key is required" };
+        if (!config.apiKey)
+          return { success: false, message: "Anthropic API key is required" };
         const response = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: {
@@ -777,15 +888,23 @@ export async function testProviderConnection(
             messages: [{ role: "user", content: "Reply with: OK" }],
           }),
         });
-        if (response.ok) return { success: true, message: "Anthropic connection successful" };
+        if (response.ok)
+          return { success: true, message: "Anthropic connection successful" };
         const error = await response.json().catch(() => ({}));
-        return { success: false, message: error.error?.message || `Anthropic error: ${response.status}` };
+        return {
+          success: false,
+          message:
+            error.error?.message || `Anthropic error: ${response.status}`,
+        };
       }
 
       case "custom": {
-        if (!config.endpoint) return { success: false, message: "Custom endpoint URL is required" };
+        if (!config.endpoint)
+          return { success: false, message: "Custom endpoint URL is required" };
         validateCustomEndpoint(config.endpoint);
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
         if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
         const baseUrl = config.endpoint.replace(/\/+$/, "");
         const url = baseUrl.includes("/v1/chat/completions")
@@ -800,16 +919,30 @@ export async function testProviderConnection(
             max_tokens: 5,
           }),
         });
-        if (response.ok) return { success: true, message: "Custom endpoint connection successful" };
+        if (response.ok)
+          return {
+            success: true,
+            message: "Custom endpoint connection successful",
+          };
         const error = await response.json().catch(() => ({}));
-        return { success: false, message: error.error?.message || `Connection failed: ${response.status}` };
+        return {
+          success: false,
+          message:
+            error.error?.message || `Connection failed: ${response.status}`,
+        };
       }
 
       case "openfang": {
-        const ofBaseUrl = (config.endpoint || process.env.OPENFANG_BASE_URL || "").replace(/\/+$/, "");
+        const ofBaseUrl = (
+          config.endpoint ||
+          process.env.OPENFANG_BASE_URL ||
+          ""
+        ).replace(/\/+$/, "");
         const ofApiKey = config.apiKey || process.env.OPENFANG_API_KEY || "";
-        if (!ofBaseUrl) return { success: false, message: "OpenFang base URL is required" };
-        if (!ofApiKey) return { success: false, message: "OpenFang API key is required" };
+        if (!ofBaseUrl)
+          return { success: false, message: "OpenFang base URL is required" };
+        if (!ofApiKey)
+          return { success: false, message: "OpenFang API key is required" };
         const ofUrl = ofBaseUrl.includes("/v1/chat/completions")
           ? ofBaseUrl
           : `${ofBaseUrl}/v1/chat/completions`;
@@ -825,15 +958,25 @@ export async function testProviderConnection(
             max_tokens: 5,
           }),
         });
-        if (response.ok) return { success: true, message: "OpenFang connection successful" };
+        if (response.ok)
+          return { success: true, message: "OpenFang connection successful" };
         const error = await response.json().catch(() => ({}));
-        return { success: false, message: error.error?.message || `OpenFang error: ${response.status}` };
+        return {
+          success: false,
+          message: error.error?.message || `OpenFang error: ${response.status}`,
+        };
       }
 
       default:
-        return { success: false, message: `Unsupported provider: ${config.provider}` };
+        return {
+          success: false,
+          message: `Unsupported provider: ${config.provider}`,
+        };
     }
   } catch (error: any) {
-    return { success: false, message: error.message || "Connection test failed" };
+    return {
+      success: false,
+      message: error.message || "Connection test failed",
+    };
   }
 }

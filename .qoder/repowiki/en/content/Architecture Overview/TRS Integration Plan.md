@@ -24,10 +24,11 @@
 ## Update Summary
 **Changes Made**
 - Updated all references from "Botsee" to "OpenFang" throughout the document
-- Revised architecture sections to describe OpenFang as the multi-model execution hand
-- Enhanced OpenFang integration documentation for Telegram bot handlers
-- Updated conclusion sections to unify Emma and OpenFang capabilities
+- Revised architecture sections to describe OpenFang as the multi-model execution hand with Gemini as the baseline identification hand
+- Enhanced OpenFang integration documentation for Telegram bot handlers with routing preferences
+- Updated conclusion sections to unify Emma and OpenFang capabilities with Gemini-first execution approach
 - Added migration reference for OpenFang settings table structure
+- Updated API documentation to reflect Gemini as default provider with OpenFang fallback capability
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -44,6 +45,8 @@
 This document presents the TRS Integration Plan for the HiddenGem project. TRS (The Relic Shop) serves as the storefront/admin consumer and orchestration surface over the shared Supabase infrastructure. The plan focuses on integrating Emma (AI system) and OpenFang (multi-model execution hand) with TRS, establishing robust marketplace orchestration via a sync queue worker, migrating legacy inventory to the canonical FlipAgent model, and implementing secure authentication and real-time updates.
 
 The project leverages a dual-inventory model where legacy `stash_items` coexists with the richer `products`/`listings` schema. TRS must treat `products` as the canonical inventory source and establish clear migration paths and governance to prevent divergence.
+
+**Updated** The implementation now follows a Gemini-first execution approach where Gemini serves as the baseline identification hand, with OpenFang available as an optional multi-model routing provider. The OpenFang routing system prioritizes vision-based models while falling back to Gemini, OpenAI, and Claude when needed.
 
 ## Project Structure
 The repository combines a React Native client, an Express server, shared database schemas, and database migrations. The client handles authentication, scanning, and UI flows. The server exposes REST APIs for AI analysis, marketplace publishing, notifications, and content management. Shared schemas define the canonical database contracts, while migrations establish table structures and Row-Level Security (RLS) policies.
@@ -97,9 +100,11 @@ Schema --> Migrations
 ## Core Components
 - **Dual Inventory Model**: Legacy `stash_items` and canonical `products`/`listings`. TRS must prioritize `products` for orchestration and migration from `stash_items`.
 - **Sync Queue Worker**: A missing component that processes `sync_queue` entries to execute marketplace API calls and update listing states.
-- **Emma AI Integration**: The `analyzeWithOpenFang()` pathway and related AI providers support TRS in generating structured listings and analytics.
+- **Emma AI Integration**: The `analyzeWithOpenFang()` pathway and related AI providers support TRS in generating structured listings and analytics, with Gemini as the baseline provider and OpenFang as optional multi-model routing.
 - **eBay MCP Orchestration**: Functions for token refresh, inventory updates, and listing lifecycle management integrate with TRS workflows.
 - **Authentication and RLS**: Supabase-based authentication and RLS policies govern access to seller data and orchestration resources.
+
+**Updated** The AI integration now implements a Gemini-first approach where Gemini serves as the default provider for analysis requests, with OpenFang available as an optional multi-model routing provider that can fall back to GPT-4o, Gemini-2.5-flash, and Claude-sonnet-4-20250514 when needed.
 
 **Section sources**
 - [Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md:4-8](file://Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md#L4-L8)
@@ -110,9 +115,11 @@ Schema --> Migrations
 
 ## Architecture Overview
 The TRS architecture centers on shared Supabase infrastructure with distinct roles:
-- **Emma/OpenFang Hand**: Executes AI analysis and provides critique via Telegram or direct API calls.
+- **Emma/OpenFang Hand**: Executes AI analysis with Gemini as the baseline provider and OpenFang as optional multi-model routing. The OpenFang system prioritizes vision-based models while falling back to other providers.
 - **TRS Orchestration**: Manages marketplace OAuth, sync queue processing, and listing lifecycle.
 - **Client Application**: Provides scanning, analysis, and inventory management UI for end-users.
+
+**Updated** The architecture now reflects the Gemini-first execution approach where OpenFang serves as the optional multi-model routing provider with vision-based priority and fallback capabilities.
 
 ```mermaid
 graph TB
@@ -124,7 +131,7 @@ subgraph "TRS Orchestration"
 Auth["Authentication Middleware"]
 SyncWorker["Sync Queue Worker"]
 eBaySvc["eBay MCP Integration"]
-OpenFang["OpenFang Provider"]
+OpenFang["OpenFang Provider<br/>(Vision-first routing)"]
 Storage["Supabase Storage"]
 end
 subgraph "Shared Supabase"
@@ -203,6 +210,9 @@ TRS needs a clean API surface for Emma analysis with seller context and structur
 - Accept sellerId context
 - Persist analysis to `ai_generations`
 - Support retries with feedback
+- Default to Gemini provider with OpenFang fallback capability
+
+**Updated** The analysis API now defaults to Gemini as the baseline provider, with OpenFang available as an optional provider that can be selected for multi-model routing. The OpenFang implementation includes vision-first routing with fallback to other providers.
 
 ```mermaid
 sequenceDiagram
@@ -212,7 +222,7 @@ participant AI as "AI Providers"
 participant DB as "Database"
 TRS->>API : POST /api/analyze (multipart images + context)
 API->>AI : analyzeItem(config, images)
-AI-->>API : AnalysisResult
+AI-->>API : AnalysisResult (Gemini default)
 API->>DB : Insert ai_generations record
 API-->>TRS : Structured analysis
 ```
@@ -232,9 +242,11 @@ API-->>TRS : Structured analysis
 A Telegram bot handler should:
 - Receive item photos
 - Upload to Supabase Storage
-- Trigger Emma analysis
+- Trigger Emma analysis with OpenFang routing
 - Create `products` or `stash_items` row
 - Return formatted critique in OpenFang persona
+
+**Updated** The Telegram bot integration now leverages OpenFang's vision-first routing system, which prioritizes vision-based models while falling back to Gemini, OpenAI, and Claude when needed.
 
 ```mermaid
 sequenceDiagram
@@ -247,8 +259,8 @@ User->>Bot : Send item photos
 Bot->>Storage : Upload images
 Storage-->>Bot : Public URLs
 Bot->>API : POST /api/analyze (with URLs)
-API->>AI : analyzeItem(...)
-AI-->>API : AnalysisResult
+API->>AI : analyzeWithOpenFang(config, images)
+AI-->>API : AnalysisResult (vision-first routing)
 API-->>Bot : Structured analysis
 Bot-->>User : Formatted critique
 ```
@@ -325,6 +337,8 @@ TRS interacts with several key tables:
 - `sync_queue`: Async job orchestration
 - `integrations`: OAuth credentials and token lifecycle
 - `ai_generations`: Audit trail for AI analysis
+
+**Updated** The database schema now includes OpenFang settings in the `user_settings` table with columns for API key, base URL, and preferred model, supporting the optional OpenFang provider configuration.
 
 ```mermaid
 erDiagram
@@ -425,17 +439,32 @@ numeric quality_score
 text user_feedback
 timestamp created_at
 }
+USER_SETTINGS {
+uuid id PK
+uuid user_id FK
+text openfang_api_key
+text openfang_base_url
+text preferred_openfang_model
+text gemini_api_key
+text gemini_base_url
+text preferred_gemini_model
+int high_value_threshold
+timestamp created_at
+timestamp updated_at
+}
 SELLERS ||--o{ PRODUCTS : "owns"
 PRODUCTS ||--o{ LISTINGS : "contains"
 SELLERS ||--o{ SYNC_QUEUE : "owns"
 SELLERS ||--o{ INTEGRATIONS : "has"
 SELLERS ||--o{ AI_GENERATIONS : "generates"
+SELLERS ||--o{ USER_SETTINGS : "configured"
 ```
 
 **Diagram sources**
 - [shared/schema.ts:120-225](file://shared/schema.ts#L120-L225)
 - [migrations/0001_flipagent_tables.sql:5-117](file://migrations/0001_flipagent_tables.sql#L5-L117)
 - [migrations/0002_rls_policies.sql:1-66](file://migrations/0002_rls_policies.sql#L1-L66)
+- [migrations/0004_openfang_settings.sql:1-4](file://migrations/0004_openfang_settings.sql#L1-L4)
 
 **Section sources**
 - [shared/schema.ts:120-225](file://shared/schema.ts#L120-L225)
@@ -450,12 +479,14 @@ The TRS integration depends on:
 - eBay MCP integration functions
 - Client-side authentication and navigation
 
+**Updated** The dependency graph now includes OpenFang as an optional AI provider dependency with Gemini as the baseline provider.
+
 ```mermaid
 graph LR
 Auth["Supabase Auth"] --> RLS["RLS Policies"]
 RLS --> DB["Shared Schemas"]
 DB --> Routes["Express Routes"]
-Routes --> AI["AI Providers"]
+Routes --> AI["AI Providers<br/>(Gemini + OpenFang)"]
 Routes --> eBay["eBay MCP"]
 Client["Client App"] --> Routes
 Client --> Supabase["Supabase Client"]
@@ -475,9 +506,12 @@ Client --> Supabase["Supabase Client"]
 
 ## Performance Considerations
 - **Sync Queue Worker**: Implement efficient polling with backoff, parallel processing per marketplace, and idempotent job execution to avoid duplicate listings.
-- **AI Analysis**: Cache provider configurations and use structured prompts to reduce latency and improve consistency.
+- **AI Analysis**: Cache provider configurations and use structured prompts to reduce latency and improve consistency. Gemini serves as the baseline provider for optimal performance.
 - **Database Operations**: Use bulk operations for listing updates and ensure proper indexing on `sync_queue` and `listings` tables.
 - **Real-time Updates**: Consider Supabase Realtime subscriptions or database triggers for live UI updates instead of polling.
+- **OpenFang Routing**: The vision-first routing system optimizes for image analysis performance while providing fallback options when needed.
+
+**Updated** Performance considerations now include the Gemini-first approach and OpenFang's vision-based routing optimization.
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -485,9 +519,12 @@ Common issues and resolutions:
 - **No Sync Queue Worker**: Build a worker that processes pending jobs and updates statuses; monitor `maxRetries` and error messages.
 - **RLS vs Service Role**: When using service_role, enforce application-level authorization to prevent unauthorized cross-seller access.
 - **eBay Token Expiry**: Proactively check `integrations.token_expires_at` and call `refreshEbayAccessToken()` before API calls.
-- **OpenFang Availability**: Add circuit breakers and fallback logic to alternate providers when OpenFang is unavailable.
+- **OpenFang Availability**: Add circuit breakers and fallback logic to alternate providers when OpenFang is unavailable. Gemini serves as the baseline fallback.
 - **API Authentication**: Add auth middleware to protect `/api/*` endpoints; ensure JWT validation and RLS enforcement.
 - **Supabase Realtime**: Configure Realtime subscriptions or triggers for live updates on `products`, `listings`, and `sync_queue`.
+- **Gemini Provider Issues**: Monitor Gemini API quotas and fallback mechanisms when OpenFang routing fails.
+
+**Updated** Troubleshooting now includes Gemini provider monitoring and OpenFang routing fallback scenarios.
 
 **Section sources**
 - [Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md:59-67](file://Hidden-Gem → TRS Integration Plan_ Emma + eBay-MCP.md#L59-L67)
@@ -496,6 +533,8 @@ Common issues and resolutions:
 - [shared/schema.ts:194-208](file://shared/schema.ts#L194-L208)
 
 ## Conclusion
-The TRS Integration Plan establishes a clear path to unify Emma and OpenFang capabilities with TRS orchestration. By implementing a sync queue worker, migrating legacy inventory to the canonical `products` model, securing authentication with RLS-aware access controls, and integrating eBay MCP workflows, TRS can achieve automated, reliable, and scalable marketplace publishing. The phased sequencing prioritizes foundational components first, ensuring a robust and maintainable system.
+The TRS Integration Plan establishes a clear path to unify Emma and OpenFang capabilities with TRS orchestration. By implementing a sync queue worker, migrating legacy inventory to the canonical `products` model, securing authentication with RLS-aware access controls, and integrating eBay MCP workflows, TRS can achieve automated, reliable, and scalable marketplace publishing.
 
-**Updated** The documentation has been comprehensively updated to replace all Botsee references with OpenFang throughout, reflecting the current implementation where OpenFang serves as the multi-model execution hand and the primary AI integration point for TRS. The architecture sections now accurately describe OpenFang's role in both direct API analysis and Telegram bot integration, while the conclusion emphasizes the unified capabilities of Emma and OpenFang working together in the TRS ecosystem.
+**Updated** The implementation now follows a Gemini-first execution approach where OpenFang serves as the optional multi-model routing provider with vision-based priority and fallback capabilities. This architecture ensures optimal performance for image analysis while maintaining flexibility for diverse AI provider needs.
+
+The phased sequencing prioritizes foundational components first, ensuring a robust and maintainable system that leverages Gemini as the baseline identification hand while preserving OpenFang as a powerful optional provider for specialized use cases.

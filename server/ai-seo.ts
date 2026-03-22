@@ -63,9 +63,7 @@ export function generateTags(analysis: GeminiAnalysisResult): string[] {
     analysis.category || "",
     analysis.color || "",
     analysis.style_name || "",
-    analysis.condition
-      ? `${analysis.condition.toLowerCase()}-condition`
-      : "",
+    analysis.condition ? `${analysis.condition.toLowerCase()}-condition` : "",
     analysis.material || "",
     "luxury",
     "curated",
