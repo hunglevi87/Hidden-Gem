@@ -42,8 +42,8 @@ interface GiftSet {
   marketingHook: string;
   itemIds: number[];
   itemsSnapshot: ItemSnapshot[];
-  totalValue: number;
-  sellingPrice: number;
+  totalValue: number | string;
+  sellingPrice: number | string;
   createdAt?: string;
   saved?: boolean;
 }
@@ -137,19 +137,48 @@ function renderInlineBold(text: string, boldColor: string, normalColor: string):
 }
 
 // ---------------------------------------------------------------------------
-// Gift Set Card
+// Gift Set Card  (supports inline tweaking before save)
 // ---------------------------------------------------------------------------
 function GiftSetCard({
   set,
   onSave,
   isSaving,
+  onUpdate,
 }: {
   set: GiftSet;
   onSave?: () => void;
   isSaving?: boolean;
+  onUpdate?: (updates: Partial<Pick<GiftSet, "sellingPrice" | "marketingHook" | "itemIds" | "itemsSnapshot">>) => void;
 }) {
   const { theme } = useTheme();
   const tierStyle = TIER_COLORS[set.tier] || TIER_COLORS.Core;
+
+  // Normalize numeric fields — DB returns them as strings from NUMERIC columns
+  const totalVal = Number(set.totalValue) || 0;
+  const sellVal = Number(set.sellingPrice) || 0;
+
+  // Local edit state for text inputs (only used when onUpdate is provided)
+  const [priceInput, setPriceInput] = useState(sellVal > 0 ? String(Math.round(sellVal)) : "");
+  const [hookInput, setHookInput] = useState(set.marketingHook || "");
+
+  const commitEdit = () => {
+    if (!onUpdate) return;
+    const newPrice = parseFloat(priceInput);
+    onUpdate({
+      sellingPrice: isNaN(newPrice) ? set.sellingPrice : newPrice,
+      marketingHook: hookInput,
+    });
+  };
+
+  const removeItem = (itemId: number) => {
+    if (!onUpdate) return;
+    onUpdate({
+      itemIds: set.itemIds.filter((id) => id !== itemId),
+      itemsSnapshot: set.itemsSnapshot.filter((i) => i.id !== itemId),
+    });
+  };
+
+  const canEdit = !!onUpdate && !set.saved;
 
   return (
     <View style={[styles.giftCard, { backgroundColor: theme.surface, borderColor: tierStyle.border }]}>
@@ -158,22 +187,45 @@ function GiftSetCard({
           <ThemedText style={[styles.tierBadgeText, { color: tierStyle.text }]}>{set.tier}</ThemedText>
         </View>
         <View style={styles.priceRow}>
-          {set.totalValue > 0 && (
+          {totalVal > 0 && (
             <ThemedText style={[styles.totalValue, { color: theme.textSecondary }]}>
-              ${set.totalValue.toFixed(0)} value
+              ${Math.round(totalVal)} value
             </ThemedText>
           )}
-          {set.sellingPrice > 0 && (
+          {canEdit ? (
+            <View style={[styles.priceInputWrapper, { borderColor: theme.border }]}>
+              <ThemedText style={[styles.priceCurrency, { color: theme.primary }]}>$</ThemedText>
+              <TextInput
+                style={[styles.priceInput, { color: theme.primary }]}
+                value={priceInput}
+                onChangeText={setPriceInput}
+                onBlur={commitEdit}
+                keyboardType="numeric"
+                placeholder="Price"
+                placeholderTextColor={theme.textSecondary}
+              />
+            </View>
+          ) : sellVal > 0 ? (
             <ThemedText style={[styles.sellingPrice, { color: theme.primary }]}>
-              ${set.sellingPrice.toFixed(0)}
+              ${Math.round(sellVal)}
             </ThemedText>
-          )}
+          ) : null}
         </View>
       </View>
 
       <ThemedText style={[styles.giftTitle, { color: theme.text }]}>{set.title}</ThemedText>
 
-      {set.marketingHook ? (
+      {canEdit ? (
+        <TextInput
+          style={[styles.hookInput, { color: theme.primary, borderColor: theme.border }]}
+          value={hookInput}
+          onChangeText={setHookInput}
+          onBlur={commitEdit}
+          placeholder="Edit marketing hook..."
+          placeholderTextColor={theme.textSecondary}
+          multiline
+        />
+      ) : set.marketingHook ? (
         <ThemedText style={[styles.marketingHook, { color: theme.primary }]}>
           "{set.marketingHook}"
         </ThemedText>
@@ -186,25 +238,41 @@ function GiftSetCard({
       ) : null}
 
       {set.itemsSnapshot?.length > 0 && (
-        <View style={styles.itemThumbnails}>
-          {set.itemsSnapshot.slice(0, 4).map((item) => (
-            <View key={item.id} style={styles.thumbnailWrapper}>
-              {item.fullImageUrl ? (
-                <Image source={{ uri: item.fullImageUrl }} style={styles.thumbnail} resizeMode="cover" />
-              ) : (
-                <View style={[styles.thumbnailPlaceholder, { backgroundColor: theme.backgroundSecondary }]}>
-                  <Feather name="package" size={14} color={theme.textSecondary} />
-                </View>
-              )}
-            </View>
-          ))}
-          {set.itemsSnapshot.length > 4 && (
-            <View style={[styles.thumbnailMore, { backgroundColor: theme.backgroundSecondary }]}>
-              <ThemedText style={[styles.thumbnailMoreText, { color: theme.textSecondary }]}>
-                +{set.itemsSnapshot.length - 4}
-              </ThemedText>
-            </View>
+        <View>
+          {canEdit && (
+            <ThemedText style={[styles.tweakHint, { color: theme.textSecondary }]}>
+              Tap × to remove an item
+            </ThemedText>
           )}
+          <View style={styles.itemThumbnails}>
+            {set.itemsSnapshot.slice(0, 6).map((item) => (
+              <View key={item.id} style={styles.thumbnailWrapper}>
+                {item.fullImageUrl ? (
+                  <Image source={{ uri: item.fullImageUrl }} style={styles.thumbnail} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.thumbnailPlaceholder, { backgroundColor: theme.backgroundSecondary }]}>
+                    <Feather name="package" size={14} color={theme.textSecondary} />
+                  </View>
+                )}
+                {canEdit && (
+                  <Pressable
+                    style={[styles.removeItemBtn, { backgroundColor: theme.error || "#ef4444" }]}
+                    onPress={() => removeItem(item.id)}
+                    hitSlop={6}
+                  >
+                    <Feather name="x" size={8} color="#fff" />
+                  </Pressable>
+                )}
+              </View>
+            ))}
+            {set.itemsSnapshot.length > 6 && (
+              <View style={[styles.thumbnailMore, { backgroundColor: theme.backgroundSecondary }]}>
+                <ThemedText style={[styles.thumbnailMoreText, { color: theme.textSecondary }]}>
+                  +{set.itemsSnapshot.length - 6}
+                </ThemedText>
+              </View>
+            )}
+          </View>
         </View>
       )}
 
@@ -262,14 +330,15 @@ function GiftSetsTab() {
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/craft/gift-sets/generate", { userId });
-      return res.json();
+      const res = await apiRequest("POST", "/api/craft/gift-sets", { userId });
+      return res.json() as Promise<GiftSet[]>;
     },
     onSuccess: (data: GiftSet[]) => {
       setGeneratedSets(data);
     },
-    onError: (err: any) => {
-      Alert.alert("Emma couldn't generate sets", err.message || "Please try again.");
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : "Please try again.";
+      Alert.alert("Emma couldn't generate sets", message);
     },
   });
 
@@ -281,10 +350,15 @@ function GiftSetsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/craft/gift-sets", userId] });
     },
-    onError: (err: any) => {
-      Alert.alert("Couldn't save set", err.message || "Please try again.");
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : "Please try again.";
+      Alert.alert("Couldn't save set", message);
     },
   });
+
+  const handleUpdateSet = useCallback((index: number, updates: Partial<GiftSet>) => {
+    setGeneratedSets((prev) => prev.map((s, i) => (i === index ? { ...s, ...updates } : s)));
+  }, []);
 
   const handleSave = useCallback(async (set: GiftSet, index: number) => {
     setSavingId(`gen-${index}`);
@@ -354,6 +428,7 @@ function GiftSetsTab() {
               set={set}
               onSave={() => handleSave(set, i)}
               isSaving={savingId === `gen-${i}`}
+              onUpdate={(updates) => handleUpdateSet(i, updates)}
             />
           ))}
         </View>

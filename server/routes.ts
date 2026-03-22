@@ -1257,6 +1257,52 @@ Respond ONLY with valid JSON. Example:
     }
   });
 
+  // POST /api/craft/gift-sets — canonical generate endpoint per task spec
+  // (also registered as /generate below for backward compat)
+  app.post("/api/craft/gift-sets", async (req: Request, res: Response) => {
+    if (req.body?.action === "save") {
+      // Route to save handler if explicitly requested via this path
+      return res.status(400).json({ error: "Use POST /api/craft/gift-sets/save to persist a set" });
+    }
+    try {
+      const userId = req.body.userId as string;
+      if (!userId) return res.status(400).json({ error: "userId is required" });
+
+      const items = await db
+        .select()
+        .from(stashItems)
+        .where(eq(stashItems.userId, userId))
+        .orderBy(desc(stashItems.createdAt));
+
+      if (items.length === 0) {
+        return res.status(400).json({ error: "No items in your stash to bundle" });
+      }
+
+      const summaries = buildStashSummaries(items);
+      const generatedSets = await generateGiftSets(summaries);
+      const itemMap = new Map(items.map((i) => [i.id, i]));
+      const setsWithSnapshots = generatedSets.map((set) => ({
+        ...set,
+        itemsSnapshot: set.itemIds
+          .map((id) => itemMap.get(id))
+          .filter((i): i is NonNullable<typeof i> => i !== undefined)
+          .map((i) => ({
+            id: i.id,
+            title: i.title,
+            fullImageUrl: i.fullImageUrl,
+            estimatedValue: i.estimatedValue,
+            category: i.category,
+          })),
+      }));
+
+      res.json(setsWithSnapshots);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to generate gift sets";
+      console.error("Error generating gift sets:", error);
+      res.status(500).json({ error: message });
+    }
+  });
+
   // POST /api/craft/gift-sets/generate — generate new bundles from stash
   app.post("/api/craft/gift-sets/generate", async (req: Request, res: Response) => {
     try {
