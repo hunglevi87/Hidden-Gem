@@ -1208,3 +1208,174 @@ export async function testProviderConnection(
     return { success: false, message: error.message || "Connection test failed" };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Craft & Strategy Studio — Gift Set Generation + Shop Strategy Analysis
+// ---------------------------------------------------------------------------
+
+export interface StashItemSummary {
+  id: number;
+  title: string;
+  category: string | null;
+  estimatedValue: string | null;
+  estimatedValueHigh?: number;
+  suggestedListPrice?: number;
+  fullImageUrl: string | null;
+  itemType: string | null;
+  brand?: string;
+  condition?: string;
+}
+
+export interface GeneratedGiftSet {
+  tier: "Budget" | "Starter" | "Core" | "Premium" | "Ultimate";
+  title: string;
+  description: string;
+  marketingHook: string;
+  itemIds: number[];
+  totalValue: number;
+  sellingPrice: number;
+}
+
+const GIFT_SET_PROMPT_TEMPLATE = `You are Emma, a luxury resale and artisan shop strategist. You are looking at a seller's current inventory and must create 5 gift bundle tiers that make commercial sense. Bundle items that complement each other logically — by brand family, aesthetic, category, or use case.
+
+## INVENTORY
+{inventory}
+
+## YOUR TASK
+Create exactly 5 gift set tiers. Each tier must group 2-5 items that make sense together. A single high-value item can be its own tier set (e.g. Ultimate = one exceptional designer piece).
+
+Tiers (from accessible to premium):
+1. Budget — under $100 total selling price
+2. Starter — $100-$250 total selling price
+3. Core — $250-$500 total selling price
+4. Premium — $500-$1000 total selling price
+5. Ultimate — $1000+ total selling price (best items, max luxury/artisan impact)
+
+Rules:
+- Each item can only appear in ONE tier
+- Only use item IDs that exist in the inventory list above
+- sellingPrice should be 5-15% less than totalValue (bundle discount incentive)
+- If inventory is too small to fill all 5 tiers meaningfully, use fewer items per tier or repeat categories with the best matches
+- marketingHook: 1 punchy sentence for marketing copy (benefit-led, not price-led)
+- description: 2-3 sentences describing the experience of the bundle
+
+Respond ONLY with a valid JSON array of exactly 5 objects:
+[
+  {
+    "tier": "Budget",
+    "title": "...",
+    "description": "...",
+    "marketingHook": "...",
+    "itemIds": [1, 5],
+    "totalValue": 85,
+    "sellingPrice": 75
+  },
+  ...
+]`;
+
+export async function generateGiftSets(
+  stashItems: StashItemSummary[]
+): Promise<GeneratedGiftSet[]> {
+  const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini API key is required for gift set generation");
+  }
+
+  const inventoryText = stashItems
+    .map((item) => {
+      const price = item.suggestedListPrice || item.estimatedValueHigh
+        || (() => {
+          const match = item.estimatedValue?.match(/\$?(\d+)/);
+          return match ? parseInt(match[1], 10) : 0;
+        })();
+      return `- ID:${item.id} | "${item.title}" | ${item.category || "Item"} | ${item.itemType === "handmade" ? "Handmade" : "Designer"} | $${price}`;
+    })
+    .join("\n");
+
+  const prompt = GIFT_SET_PROMPT_TEMPLATE.replace("{inventory}", inventoryText);
+
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: { apiVersion: "v1beta" },
+  });
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    config: { responseMimeType: "application/json" },
+  });
+
+  const text = response.text || "[]";
+  let parsed: GeneratedGiftSet[];
+  try {
+    parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) throw new Error("Not an array");
+  } catch {
+    const match = text.match(/\[[\s\S]*\]/);
+    if (match) {
+      parsed = JSON.parse(match[0]);
+    } else {
+      throw new Error("Failed to parse gift sets from Emma's response");
+    }
+  }
+
+  return parsed.slice(0, 5);
+}
+
+const STRATEGY_PROMPT_TEMPLATE = `You are Emma, a seasoned shop strategy advisor for a designer resale and handmade artisan goods boutique. You have access to the seller's live inventory below and must answer their question with specific, actionable insights.
+
+## SELLER'S INVENTORY SNAPSHOT
+{inventory}
+
+## SELLER'S QUESTION
+{question}
+
+## YOUR RESPONSE FORMAT
+- Use markdown formatting: **bold** for emphasis, ## for section headers, - for bullet points
+- Reference actual item names and prices from the inventory where relevant
+- Be specific and actionable — no generic advice
+- Keep response focused and structured (max 400 words)
+- Avoid generic platitudes. Emma speaks like a trusted advisor who knows this specific shop.
+
+Important context:
+- This shop sells designer/luxury resale items AND handmade artisan goods (candles, body butters, soaps, etc.)
+- Never use "vintage," "antique," or "collectible" language
+- Handmade pricing formula: COG × 3-5× depending on category and ingredient quality
+- Designer resale: pricing driven by brand, condition, and current secondary market demand`;
+
+export async function analyzeShopStrategy(
+  stashItems: StashItemSummary[],
+  question: string
+): Promise<string> {
+  const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini API key is required for shop strategy");
+  }
+
+  const inventoryText = stashItems
+    .map((item) => {
+      const price = item.suggestedListPrice || item.estimatedValueHigh
+        || (() => {
+          const match = item.estimatedValue?.match(/\$?(\d+)/);
+          return match ? parseInt(match[1], 10) : 0;
+        })();
+      return `- "${item.title}" (${item.category || "Item"}, ${item.itemType === "handmade" ? "Handmade" : "Designer"}, $${price}, ${item.condition || "Unknown condition"})`;
+    })
+    .join("\n");
+
+  const prompt = STRATEGY_PROMPT_TEMPLATE
+    .replace("{inventory}", inventoryText)
+    .replace("{question}", question);
+
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: { apiVersion: "v1beta" },
+  });
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+  });
+
+  return response.text || "Emma was unable to analyze your shop at this time. Please try again.";
+}

@@ -14,6 +14,7 @@ import PrivacyPolicyScreen from "@/screens/PrivacyPolicyScreen";
 import AIProvidersScreen from "@/screens/AIProvidersScreen";
 import ScanScreen from "@/screens/ScanScreen";
 import HandmadeDetailsScreen from "@/screens/HandmadeDetailsScreen";
+import CraftScreen from "@/screens/CraftScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { Colors } from "@/constants/theme";
@@ -35,6 +36,7 @@ export type RootStackParamList = {
   HandmadeDetails: undefined;
   Analysis: { fullImageUri: string; labelImageUri?: string; itemType?: "designer" | "handmade"; handmadeDetails?: HandmadeDetails };
   Article: { articleId: number };
+  Craft: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -163,6 +165,13 @@ export default function RootStackNavigator() {
             options={{
               presentation: "modal",
               headerTitle: "Handmade Item Details",
+            }}
+          />
+          <Stack.Screen
+            name="Craft"
+            component={CraftScreen}
+            options={{
+              headerTitle: "Craft Studio",
             }}
           />
         </>

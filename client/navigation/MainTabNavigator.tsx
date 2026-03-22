@@ -11,6 +11,7 @@ import { Colors, Spacing } from "@/constants/theme";
 import DiscoverScreen from "@/screens/DiscoverScreen";
 import ItemTypeSelectorScreen from "@/screens/ItemTypeSelectorScreen";
 import StashScreen from "@/screens/StashScreen";
+import CraftScreen from "@/screens/CraftScreen";
 import { ThemedText } from "@/components/ThemedText";
 import { useAuthContext } from "@/contexts/AuthContext";
 import type { RootStackParamList } from "./RootStackNavigator";
@@ -19,6 +20,7 @@ export type MainTabParamList = {
   DiscoverTab: undefined;
   ScanTab: undefined;
   StashTab: undefined;
+  CraftTab: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -136,6 +138,17 @@ export default function MainTabNavigator() {
           headerTitle: "",
           tabBarIcon: ({ color, size }) => (
             <Feather name="grid" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="CraftTab"
+        component={CraftScreen}
+        options={{
+          title: "Craft",
+          headerTitle: "",
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="gift" size={size} color={color} />
           ),
         }}
       />

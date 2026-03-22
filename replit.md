@@ -51,6 +51,10 @@ Preferred communication style: Simple, everyday language.
 - **HandmadeDetailsScreen**: Form for handmade product details before camera capture
 - **ScanScreen**: Camera screen, now a root stack modal — handles both 1-photo (handmade) and 2-photo (designer) flows via itemType param
 - **Stash Tab**: Grid view of inventory items with publish status badges, natural-language search
+- **Craft Tab** (`CraftScreen`): Two-tab studio — Gift Set Builder + Shop Strategy
+  - **Gift Sets**: Emma bundles the stash into 5 tiers (Budget → Ultimate) with marketing hooks, pricing, and thumbnail previews. Save sets to Supabase for the storefront via `/api/craft/gift-sets`.
+  - **Strategy**: Ask Emma any inventory question using quick prompt shortcuts or free-form text. Emma responds with structured markdown referencing real item names/prices. Route: `/api/craft/strategy`.
+  - **DB**: `gift_sets` table (id, userId, tier, title, description, marketing_hook, item_ids, items_snapshot, total_value, selling_price, created_at)
 - **Settings**: Marketplace integrations (WooCommerce, eBay), AI provider config, appearance (dark/light toggle), account management
 
 ### Path Aliases

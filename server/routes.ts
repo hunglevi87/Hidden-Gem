@@ -4,7 +4,7 @@ import multer from "multer";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { db } from "./db";
-import { articles, stashItems, userSettings, products, sellers, listingsTable, syncQueue } from "@shared/schema";
+import { articles, stashItems, userSettings, products, sellers, listingsTable, syncQueue, giftSets } from "@shared/schema";
 import { eq, desc, count, and, ilike, lte, gte, or, SQL } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { 
@@ -16,7 +16,9 @@ import {
   correctAnalysis,
   AIProviderType,
   buildHandmadePrompt,
-  HandmadeDetails
+  HandmadeDetails,
+  generateGiftSets,
+  analyzeShopStrategy,
 } from "./ai-providers";
 import { generateSEOTitle, generateDescription, generateTags, createAIRecord } from "./ai-seo";
 import { uploadProductImage, deleteProductImage } from "./supabase-storage";
@@ -1209,6 +1211,173 @@ Respond ONLY with valid JSON. Example:
     } catch (error) {
       console.error("Stash search error:", error);
       res.status(500).json({ error: "Failed to search stash" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Craft & Strategy Studio Routes
+  // ---------------------------------------------------------------------------
+
+  // GET /api/craft/gift-sets — list saved gift sets for a user
+  app.get("/api/craft/gift-sets", async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+      const sets = await db
+        .select()
+        .from(giftSets)
+        .where(eq(giftSets.userId, userId))
+        .orderBy(desc(giftSets.createdAt));
+      res.json(sets);
+    } catch (error) {
+      console.error("Error fetching gift sets:", error);
+      res.status(500).json({ error: "Failed to fetch gift sets" });
+    }
+  });
+
+  // POST /api/craft/gift-sets/generate — generate new bundles from stash
+  app.post("/api/craft/gift-sets/generate", async (req: Request, res: Response) => {
+    try {
+      const userId = req.body.userId as string;
+      if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+
+      // Fetch the user's stash items
+      const items = await db
+        .select()
+        .from(stashItems)
+        .where(eq(stashItems.userId, userId))
+        .orderBy(desc(stashItems.createdAt));
+
+      if (items.length === 0) {
+        return res.status(400).json({ error: "No items in your stash to bundle" });
+      }
+
+      const summaries = items.map((item) => {
+        const analysis = item.aiAnalysis as any;
+        return {
+          id: item.id,
+          title: item.title,
+          category: item.category,
+          estimatedValue: item.estimatedValue,
+          estimatedValueHigh: typeof analysis?.estimatedValueHigh === "number" ? analysis.estimatedValueHigh : undefined,
+          suggestedListPrice: typeof analysis?.suggestedListPrice === "number" ? analysis.suggestedListPrice : undefined,
+          fullImageUrl: item.fullImageUrl,
+          itemType: item.itemType,
+          brand: typeof analysis?.brand === "string" ? analysis.brand : undefined,
+          condition: item.condition ?? undefined,
+        };
+      });
+
+      const generatedSets = await generateGiftSets(summaries);
+
+      // Attach item snapshots so the client can display thumbnails without extra queries
+      const itemMap = new Map(items.map((i) => [i.id, i]));
+      const setsWithSnapshots = generatedSets.map((set) => ({
+        ...set,
+        itemsSnapshot: set.itemIds
+          .map((id) => itemMap.get(id))
+          .filter(Boolean)
+          .map((item) => ({
+            id: item!.id,
+            title: item!.title,
+            fullImageUrl: item!.fullImageUrl,
+            estimatedValue: item!.estimatedValue,
+            category: item!.category,
+          })),
+      }));
+
+      res.json(setsWithSnapshots);
+    } catch (error: any) {
+      console.error("Error generating gift sets:", error);
+      res.status(500).json({ error: error.message || "Failed to generate gift sets" });
+    }
+  });
+
+  // POST /api/craft/gift-sets/save — persist a generated gift set
+  app.post("/api/craft/gift-sets/save", async (req: Request, res: Response) => {
+    try {
+      const { userId, tier, title, description, marketingHook, itemIds, itemsSnapshot, totalValue, sellingPrice } = req.body;
+      if (!userId || !tier || !title) {
+        return res.status(400).json({ error: "userId, tier, and title are required" });
+      }
+
+      const [saved] = await db
+        .insert(giftSets)
+        .values({
+          userId,
+          tier,
+          title,
+          description: description || null,
+          marketingHook: marketingHook || null,
+          itemIds: itemIds || [],
+          itemsSnapshot: itemsSnapshot || null,
+          totalValue: totalValue ? String(totalValue) : null,
+          sellingPrice: sellingPrice ? String(sellingPrice) : null,
+        })
+        .returning();
+
+      res.status(201).json(saved);
+    } catch (error: any) {
+      console.error("Error saving gift set:", error);
+      res.status(500).json({ error: error.message || "Failed to save gift set" });
+    }
+  });
+
+  // DELETE /api/craft/gift-sets/:id — remove a saved gift set
+  app.delete("/api/craft/gift-sets/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Valid id is required" });
+      }
+      await db.delete(giftSets).where(eq(giftSets.id, id));
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting gift set:", error);
+      res.status(500).json({ error: "Failed to delete gift set" });
+    }
+  });
+
+  // POST /api/craft/strategy — ask Emma a strategy question
+  app.post("/api/craft/strategy", async (req: Request, res: Response) => {
+    try {
+      const { userId, question } = req.body;
+      if (!userId || !question?.trim()) {
+        return res.status(400).json({ error: "userId and question are required" });
+      }
+
+      // Fetch the user's stash items for context
+      const items = await db
+        .select()
+        .from(stashItems)
+        .where(eq(stashItems.userId, userId))
+        .orderBy(desc(stashItems.createdAt));
+
+      const summaries = items.map((item) => {
+        const analysis = item.aiAnalysis as any;
+        return {
+          id: item.id,
+          title: item.title,
+          category: item.category,
+          estimatedValue: item.estimatedValue,
+          estimatedValueHigh: typeof analysis?.estimatedValueHigh === "number" ? analysis.estimatedValueHigh : undefined,
+          suggestedListPrice: typeof analysis?.suggestedListPrice === "number" ? analysis.suggestedListPrice : undefined,
+          fullImageUrl: item.fullImageUrl,
+          itemType: item.itemType,
+          brand: typeof analysis?.brand === "string" ? analysis.brand : undefined,
+          condition: item.condition ?? undefined,
+        };
+      });
+
+      const analysis = await analyzeShopStrategy(summaries, question.trim());
+      res.json({ analysis });
+    } catch (error: any) {
+      console.error("Error in shop strategy:", error);
+      res.status(500).json({ error: error.message || "Failed to analyze shop strategy" });
     }
   });
 
