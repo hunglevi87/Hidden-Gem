@@ -4,12 +4,29 @@ import multer from "multer";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { db } from "./db";
-import { articles, stashItems, userSettings, products, sellers, listingsTable, syncQueue } from "@shared/schema";
-import { eq, desc, count, and, ilike, lte, gte, or, SQL } from "drizzle-orm";
+import { articles, stashItems, userSettings, products, sellers, listingsTable, syncQueue, giftSets } from "@shared/schema";
+import { eq, desc, count, and, ilike, lte, gte, or, SQL, sql } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
-import { testProviderConnection, AIProviderConfig, analyzeItemWithRetry, AnalysisResult } from "./ai-providers";
+import { 
+  testProviderConnection, 
+  AIProviderConfig, 
+  analyzeItemWithRetry, 
+  AnalysisResult,
+  analyzeWithFallback,
+  correctAnalysis,
+  AIProviderType,
+  buildHandmadePrompt,
+  HandmadeDetails,
+  generateGiftSets,
+  analyzeShopStrategy,
+  AIAnalysisSnapshot,
+  emmaChatStream,
+  type ChatMessage,
+  type StashItemSummary,
+} from "./ai-providers";
 import { generateSEOTitle, generateDescription, generateTags, createAIRecord } from "./ai-seo";
 import { uploadProductImage, deleteProductImage } from "./supabase-storage";
+import { requireAuth } from "./auth-middleware";
 import {
   updateEbayListing,
   deleteEbayListing,
@@ -27,7 +44,6 @@ import {
   disablePriceTracking,
   getPriceTrackingStatus,
 } from "./services/notification";
-
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
   httpOptions: {
@@ -35,6 +51,7 @@ const ai = new GoogleGenAI({
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
   },
 });
+
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -275,6 +292,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           seoTitle: itemData.seoTitle,
           seoDescription: itemData.seoDescription,
           seoKeywords: itemData.seoKeywords,
+          platformVersions: itemData.platformVersions || null,
+          marketMatches: itemData.marketMatches || null,
         })
         .returning();
       
@@ -302,85 +321,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ]), async (req: Request, res: Response) => {
     try {
       const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      const userId = req.body.userId || "anonymous";
       
       const fullImageFile = files?.fullImage?.[0];
       const labelImageFile = files?.labelImage?.[0];
 
-      const prompt = `You are an expert appraiser and reseller assistant. Analyze this collectible/vintage item and provide a detailed assessment.
-
-Based on the images provided (one showing the full item and one showing the label/tag), please provide:
-1. A clear, descriptive title for the item
-2. A detailed description suitable for a listing
-3. The category (e.g., Handbag, Watch, Clothing, Electronics, Collectible, etc.)
-4. An estimated resale value range (e.g., "$150-$200")
-5. The condition (Excellent, Very Good, Good, Fair, Poor)
-6. An SEO-optimized title for online listings
-7. An SEO-optimized description
-8. 5-10 relevant SEO keywords
-9. 3-5 relevant tags for categorization
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "title": "Item title",
-  "description": "Detailed description...",
-  "category": "Category name",
-  "estimatedValue": "$XX-$XX",
-  "condition": "Condition rating",
-  "seoTitle": "SEO optimized title",
-  "seoDescription": "SEO optimized description...",
-  "seoKeywords": ["keyword1", "keyword2", "keyword3"],
-  "tags": ["tag1", "tag2", "tag3"]
-}`;
-
-      const parts: any[] = [{ text: prompt }];
-
-      if (fullImageFile) {
-        parts.push({
-          inlineData: {
-            mimeType: fullImageFile.mimetype,
-            data: fullImageFile.buffer.toString("base64"),
-          },
-        });
+      if (!fullImageFile) {
+        return res.status(400).json({ error: "Full image is required" });
       }
 
-      if (labelImageFile) {
-        parts.push({
-          inlineData: {
-            mimeType: labelImageFile.mimetype,
-            data: labelImageFile.buffer.toString("base64"),
-          },
-        });
-      }
+      // 1. Get user configuration
+      const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+      
+      const provider = (req.body.provider as AIProviderType) || (settings?.openfangApiKey ? "openfang" : "gemini");
+      const config: AIProviderConfig = {
+        provider,
+        apiKey: (req.body.apiKey as string | undefined) || (provider === "openfang" ? settings?.openfangApiKey || undefined : settings?.geminiApiKey || undefined),
+        endpoint: (req.body.endpoint as string | undefined) || (provider === "openfang" ? settings?.openfangBaseUrl || undefined : undefined),
+        model: (req.body.model as string | undefined) || (provider === "openfang" ? settings?.preferredOpenfangModel || undefined : settings?.preferredGeminiModel || undefined),
+        secondaryProvider: settings?.huggingfaceApiKey ? "custom" : undefined,
+        secondaryApiKey: settings?.huggingfaceApiKey || undefined,
+        secondaryEndpoint: settings?.huggingfaceApiKey ? process.env.HUGGINGFACE_CUSTOM_ENDPOINT : undefined,
+      };
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts }],
-        config: {
-          responseMimeType: "application/json",
-        },
+      // 2. Prepare images
+      const images: { mimeType: string; data: string }[] = [];
+      images.push({
+        mimeType: fullImageFile.mimetype,
+        data: fullImageFile.buffer.toString("base64"),
       });
 
-      const text = response.text || "";
-      
-      try {
-        const result = JSON.parse(text);
-        res.json(result);
-      } catch (parseError) {
-        res.json({
-          title: "Vintage Item",
-          description: "A vintage collectible item in good condition.",
-          category: "Collectible",
-          estimatedValue: "$50-$100",
-          condition: "Good",
-          seoTitle: "Vintage Collectible Item for Sale",
-          seoDescription: "Authentic vintage collectible in excellent condition. Perfect for collectors.",
-          seoKeywords: ["vintage", "collectible", "antique"],
-          tags: ["vintage", "collectible"],
+      if (labelImageFile) {
+        images.push({
+          mimeType: labelImageFile.mimetype,
+          data: labelImageFile.buffer.toString("base64"),
         });
       }
-    } catch (error) {
+
+      // 3. Build prompt (handmade vs designer)
+      const itemType = req.body.itemType as string | undefined;
+      let prompt: string | undefined;
+      if (itemType === "handmade" && req.body.handmadeDetails) {
+        try {
+          const details: HandmadeDetails = typeof req.body.handmadeDetails === "string"
+            ? JSON.parse(req.body.handmadeDetails)
+            : req.body.handmadeDetails;
+          prompt = buildHandmadePrompt(details);
+          console.log("Using handmade prompt for analysis");
+        } catch (e) {
+          console.warn("Failed to parse handmadeDetails, using default prompt");
+        }
+      }
+
+      // 4. Analyze with fallback
+      console.log(`Starting analysis for user ${userId} with primary provider ${config.provider}`);
+      let result = await analyzeWithFallback(images, config, prompt);
+
+      // 5. Run correction pass if secondary provider is configured
+      if (config.secondaryProvider || process.env.OPENFANG_API_KEY) {
+        console.log("Running correction pass...");
+        result = await correctAnalysis(result, config);
+      }
+      
+      res.json(result);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to analyze item";
       console.error("Error analyzing item:", error);
-      res.status(500).json({ error: "Failed to analyze item" });
+      res.status(500).json({ error: message });
     }
   });
 
@@ -472,7 +479,7 @@ Respond ONLY with valid JSON in this exact format:
       }
 
       if (!skipThresholdCheck) {
-        const aiAnalysis = item.aiAnalysis as any;
+        const aiAnalysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
         const suggestedPrice = aiAnalysis?.suggestedListPrice;
         if (suggestedPrice) {
           const userId = (req.body.userId as string) || item.userId;
@@ -570,7 +577,7 @@ Respond ONLY with valid JSON in this exact format:
       }
 
       if (!skipThresholdCheck) {
-        const aiAnalysis = item.aiAnalysis as any;
+        const aiAnalysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
         const suggestedPrice = aiAnalysis?.suggestedListPrice;
         if (suggestedPrice) {
           const userId = (req.body.userId as string) || item.userId;
@@ -718,7 +725,7 @@ Respond ONLY with valid JSON in this exact format:
         const offerError = await offerResponse.json().catch(() => ({}));
         console.error("eBay offer error:", offerError);
         
-        const requiresPolicies = offerError.errors?.some((e: any) => 
+        const requiresPolicies = offerError.errors?.some((e: { message?: string; errorId?: number }) => 
           e.message?.includes("policy") || e.errorId === 25002
         );
         
@@ -776,9 +783,10 @@ Respond ONLY with valid JSON in this exact format:
 
       const result = await testProviderConnection(config);
       res.json(result);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Test failed";
       console.error("AI provider test error:", error);
-      res.status(500).json({ success: false, message: error.message || "Test failed" });
+      res.status(500).json({ success: false, message });
     }
   });
 
@@ -791,7 +799,7 @@ Respond ONLY with valid JSON in this exact format:
       const fullImageFile = files?.fullImage?.[0];
       const labelImageFile = files?.labelImage?.[0];
       
-      const { previousResult, feedback, provider, apiKey, model } = req.body;
+      const { previousResult, feedback, provider, apiKey, endpoint, model } = req.body;
       
       if (!previousResult || !feedback) {
         return res.status(400).json({ error: "previousResult and feedback are required" });
@@ -805,9 +813,11 @@ Respond ONLY with valid JSON in this exact format:
         images.push({ mimeType: labelImageFile.mimetype, data: labelImageFile.buffer.toString("base64") });
       }
 
-      const config: AIProviderConfig = {
-        provider: provider || "gemini",
+      const requestedProvider = typeof provider === "string" && provider.trim() ? provider.trim() : undefined;
+      const primaryConfig: AIProviderConfig = {
+        provider: (requestedProvider || "openfang") as AIProviderConfig["provider"],
         apiKey,
+        endpoint,
         model,
       };
 
@@ -815,8 +825,23 @@ Respond ONLY with valid JSON in this exact format:
         ? JSON.parse(previousResult) 
         : previousResult;
 
-      const result = await analyzeItemWithRetry(config, images, parsedPrevious, feedback);
-      res.json(result);
+      try {
+        const result = await analyzeItemWithRetry(primaryConfig, images, parsedPrevious, feedback);
+        return res.json(result);
+      } catch (primaryError) {
+        const canFallbackToGemini = requestedProvider === "openfang";
+        if (!canFallbackToGemini) {
+          throw primaryError;
+        }
+
+        const fallbackConfig: AIProviderConfig = {
+          provider: "gemini",
+          model: "gemini-2.5-flash",
+        };
+
+        const fallbackResult = await analyzeItemWithRetry(fallbackConfig, images, parsedPrevious, feedback);
+        return res.json(fallbackResult);
+      }
     } catch (error) {
       console.error("Error in retry analysis:", error);
       res.status(500).json({ error: "Failed to re-analyze item" });
@@ -1036,6 +1061,60 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
+  app.post("/api/seo/generate", async (req: Request, res: Response) => {
+    try {
+      const { itemId, userId } = req.body;
+      if (!itemId) {
+        return res.status(400).json({ error: "Item ID is required" });
+      }
+
+      // 1. Get the item and its current analysis
+      const [item] = await db.select().from(stashItems).where(eq(stashItems.id, parseInt(itemId)));
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+
+      if (!item.aiAnalysis) {
+        return res.status(400).json({ error: "Item has no AI analysis to optimize" });
+      }
+
+      // 2. Get user configuration for AI
+      const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId || item.userId));
+      
+      const provider = (settings?.openfangApiKey ? "openfang" : "gemini");
+      const config: AIProviderConfig = {
+        provider: provider as AIProviderType,
+        apiKey: provider === "openfang" ? settings?.openfangApiKey || undefined : settings?.geminiApiKey || undefined,
+        endpoint: provider === "openfang" ? settings?.openfangBaseUrl || undefined : undefined,
+        model: provider === "openfang" ? settings?.preferredOpenfangModel || undefined : settings?.preferredGeminiModel || undefined,
+        secondaryProvider: settings?.openfangApiKey && settings?.geminiApiKey ? "gemini" : undefined,
+      };
+
+      // 3. Generate SEO Listing
+      const { generateSEOListing } = await import("./ai-providers");
+      const optimizedResult = await generateSEOListing(item.aiAnalysis as AnalysisResult, config);
+
+      // 4. Update the item in the database
+      const [updatedItem] = await db.update(stashItems)
+        .set({
+          title: optimizedResult.title,
+          seoTitle: optimizedResult.seoTitle || optimizedResult.title,
+          seoDescription: optimizedResult.seoDescription || optimizedResult.description,
+          seoKeywords: optimizedResult.seoKeywords || [],
+          aiAnalysis: optimizedResult,
+          updatedAt: new Date()
+        })
+        .where(eq(stashItems.id, parseInt(itemId)))
+        .returning();
+
+      res.json(updatedItem);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to generate SEO listing";
+      console.error("Error generating SEO listing:", error);
+      res.status(500).json({ error: message });
+    }
+  });
+
   app.post("/api/stash/search", async (req: Request, res: Response) => {
     try {
       const { query, userId } = req.body;
@@ -1062,7 +1141,16 @@ Extract the following filters (use null for any filter not mentioned):
 Respond ONLY with valid JSON. Example:
 {"brand":"Louis Vuitton","maxPrice":300,"minPrice":null,"category":"Handbag","condition":null,"publishStatus":null,"keywords":["bags"]}`;
 
-      let filters: any = {};
+      interface StashSearchFilters {
+        brand?: string;
+        category?: string;
+        condition?: string;
+        publishStatus?: string;
+        maxPrice?: number;
+        minPrice?: number;
+        keywords?: string[];
+      }
+      let filters: StashSearchFilters = {};
       try {
         const parseResponse = await ai.models.generateContent({
           model: "gemini-2.5-flash",
@@ -1142,6 +1230,316 @@ Respond ONLY with valid JSON. Example:
     } catch (error) {
       console.error("Stash search error:", error);
       res.status(500).json({ error: "Failed to search stash" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Craft & Strategy Studio Routes
+  // ---------------------------------------------------------------------------
+
+  // Helper: build stash summaries from DB items without unsafe any casts
+  function buildStashSummaries(items: (typeof stashItems.$inferSelect)[]) {
+    return items.map((item) => {
+      const analysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
+      return {
+        id: item.id,
+        title: item.title,
+        category: item.category,
+        estimatedValue: item.estimatedValue,
+        estimatedValueHigh: typeof analysis.estimatedValueHigh === "number" ? analysis.estimatedValueHigh : undefined,
+        suggestedListPrice: typeof analysis.suggestedListPrice === "number" ? analysis.suggestedListPrice : undefined,
+        fullImageUrl: item.fullImageUrl,
+        itemType: item.itemType,
+        brand: typeof analysis.brand === "string" ? analysis.brand : undefined,
+        condition: item.condition ?? undefined,
+      };
+    });
+  }
+
+  // GET /api/craft/gift-sets — list saved gift sets for a user
+  app.get("/api/craft/gift-sets", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = res.locals.userId as string;
+      const sets = await db
+        .select()
+        .from(giftSets)
+        .where(eq(giftSets.userId, userId))
+        .orderBy(desc(giftSets.createdAt));
+      res.json(sets);
+    } catch (error) {
+      console.error("Error fetching gift sets:", error);
+      res.status(500).json({ error: "Failed to fetch gift sets" });
+    }
+  });
+
+  // POST /api/craft/gift-sets — canonical generate endpoint per task spec
+  // (also registered as /generate below for backward compat)
+  app.post("/api/craft/gift-sets", requireAuth, async (req: Request, res: Response) => {
+    if (req.body?.action === "save") {
+      // Route to save handler if explicitly requested via this path
+      return res.status(400).json({ error: "Use POST /api/craft/gift-sets/save to persist a set" });
+    }
+    try {
+      const userId = res.locals.userId as string;
+
+      const items = await db
+        .select()
+        .from(stashItems)
+        .where(eq(stashItems.userId, userId))
+        .orderBy(desc(stashItems.createdAt));
+
+      if (items.length === 0) {
+        return res.status(400).json({ error: "No items in your stash to bundle" });
+      }
+
+      const summaries = buildStashSummaries(items);
+      const generatedSets = await generateGiftSets(summaries);
+      const itemMap = new Map(items.map((i) => [i.id, i]));
+      const setsWithSnapshots = generatedSets.map((set) => ({
+        ...set,
+        itemsSnapshot: set.itemIds
+          .map((id) => itemMap.get(id))
+          .filter((i): i is NonNullable<typeof i> => i !== undefined)
+          .map((i) => ({
+            id: i.id,
+            title: i.title,
+            fullImageUrl: i.fullImageUrl,
+            estimatedValue: i.estimatedValue,
+            category: i.category,
+          })),
+      }));
+
+      res.json(setsWithSnapshots);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to generate gift sets";
+      console.error("Error generating gift sets:", error);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // POST /api/craft/gift-sets/generate — generate new bundles from stash
+  app.post("/api/craft/gift-sets/generate", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = res.locals.userId as string;
+
+      const items = await db
+        .select()
+        .from(stashItems)
+        .where(eq(stashItems.userId, userId))
+        .orderBy(desc(stashItems.createdAt));
+
+      if (items.length === 0) {
+        return res.status(400).json({ error: "No items in your stash to bundle" });
+      }
+
+      const summaries = buildStashSummaries(items);
+      const generatedSets = await generateGiftSets(summaries);
+
+      // Attach item snapshots for client display (no extra round-trips needed)
+      const itemMap = new Map(items.map((i) => [i.id, i]));
+      const setsWithSnapshots = generatedSets.map((set) => ({
+        ...set,
+        itemsSnapshot: set.itemIds
+          .map((id) => itemMap.get(id))
+          .filter((i): i is NonNullable<typeof i> => i !== undefined)
+          .map((i) => ({
+            id: i.id,
+            title: i.title,
+            fullImageUrl: i.fullImageUrl,
+            estimatedValue: i.estimatedValue,
+            category: i.category,
+          })),
+      }));
+
+      res.json(setsWithSnapshots);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to generate gift sets";
+      console.error("Error generating gift sets:", error);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // POST /api/craft/gift-sets/save — persist a generated gift set (owned by userId)
+  app.post("/api/craft/gift-sets/save", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = res.locals.userId as string;
+      const { tier, title, description, marketingHook, itemIds, itemsSnapshot, totalValue, sellingPrice } = req.body as {
+        tier: string;
+        title: string;
+        description?: string;
+        marketingHook?: string;
+        itemIds?: number[];
+        itemsSnapshot?: unknown;
+        totalValue?: number;
+        sellingPrice?: number;
+      };
+      if (!tier || !title) {
+        return res.status(400).json({ error: "tier and title are required" });
+      }
+
+      const [saved] = await db
+        .insert(giftSets)
+        .values({
+          userId,
+          tier,
+          title,
+          description: description ?? null,
+          marketingHook: marketingHook ?? null,
+          itemIds: Array.isArray(itemIds) ? itemIds : [],
+          itemsSnapshot: itemsSnapshot ?? null,
+          totalValue: totalValue != null ? String(totalValue) : null,
+          sellingPrice: sellingPrice != null ? String(sellingPrice) : null,
+        })
+        .returning();
+
+      res.status(201).json(saved);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to save gift set";
+      console.error("Error saving gift set:", error);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // DELETE /api/craft/gift-sets/:id — remove a saved gift set (ownership enforced)
+  app.delete("/api/craft/gift-sets/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const userId = res.locals.userId as string;
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Valid id is required" });
+      }
+      // Scope deletion to owner — prevents cross-user deletion (IDOR)
+      const result = await db
+        .delete(giftSets)
+        .where(and(eq(giftSets.id, id), eq(giftSets.userId, userId)))
+        .returning({ id: giftSets.id });
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Gift set not found or not owned by you" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting gift set:", error);
+      res.status(500).json({ error: "Failed to delete gift set" });
+    }
+  });
+
+  // POST /api/craft/strategy — ask Emma a strategy question (SSE streaming response)
+  app.post("/api/craft/strategy", requireAuth, async (req: Request, res: Response) => {
+    const userId = res.locals.userId as string;
+    const { question } = req.body as { question: string };
+    if (!question?.trim()) {
+      return res.status(400).json({ error: "question is required" });
+    }
+
+    // Set SSE headers before streaming begins
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    try {
+      const items = await db
+        .select()
+        .from(stashItems)
+        .where(eq(stashItems.userId, userId))
+        .orderBy(desc(stashItems.createdAt));
+
+      const summaries = buildStashSummaries(items);
+      await analyzeShopStrategy(summaries, question.trim(), (chunk) => {
+        res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+      });
+
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to analyze shop strategy";
+      console.error("Error in shop strategy:", error);
+      res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+      res.end();
+    }
+  });
+
+  // Helper: build full stash context for the authenticated user
+  async function buildUserStashContext(userId: string): Promise<{ itemCount: number; totalEstimatedValue: number; topItems: StashItemSummary[] }> {
+    const [stats] = await db
+      .select({
+        itemCount: count(),
+        totalValue: sql<string>`COALESCE(SUM((${stashItems.aiAnalysis}->>'suggestedListPrice')::numeric), 0)`,
+      })
+      .from(stashItems)
+      .where(eq(stashItems.userId, userId));
+
+    const topRows = await db
+      .select()
+      .from(stashItems)
+      .where(eq(stashItems.userId, userId))
+      .orderBy(desc(stashItems.createdAt))
+      .limit(8);
+
+    const topItems: StashItemSummary[] = topRows.map((item) => {
+      const analysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
+      return {
+        id: item.id,
+        title: item.title,
+        category: item.category,
+        estimatedValue: item.estimatedValue,
+        estimatedValueHigh: analysis?.estimatedValueHigh,
+        suggestedListPrice: analysis?.suggestedListPrice,
+        fullImageUrl: item.fullImageUrl,
+        itemType: item.itemType,
+        brand: analysis?.brand,
+        condition: item.condition ?? undefined,
+      };
+    });
+
+    return {
+      itemCount: stats?.itemCount ?? 0,
+      totalEstimatedValue: parseFloat(stats?.totalValue ?? "0"),
+      topItems,
+    };
+  }
+
+  // GET /api/chat/context — fetch stash context at panel open time
+  app.get("/api/chat/context", requireAuth, async (req: Request, res: Response) => {
+    const userId = res.locals.userId as string;
+    try {
+      const ctx = await buildUserStashContext(userId);
+      return res.json({ itemCount: ctx.itemCount, totalEstimatedValue: ctx.totalEstimatedValue });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch stash context";
+      console.error("Error fetching chat context:", error);
+      return res.status(500).json({ error: message });
+    }
+  });
+
+  // POST /api/chat — Emma floating chat assistant (SSE streaming)
+  app.post("/api/chat", requireAuth, async (req: Request, res: Response) => {
+    const userId = res.locals.userId as string;
+    const { messages } = req.body as { messages: ChatMessage[] };
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "messages array is required" });
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    try {
+      const stashContext = await buildUserStashContext(userId);
+
+      await emmaChatStream(messages, stashContext, (chunk) => {
+        res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+      });
+
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Emma couldn't respond";
+      console.error("Error in Emma chat:", error);
+      res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+      res.end();
     }
   });
 

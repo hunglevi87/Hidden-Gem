@@ -1,73 +1,22 @@
 import React, { useState, useEffect } from "react";
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Image,
-  ActivityIndicator,
-  Alert,
-  Share,
-  Platform,
-} from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, Alert, Share, Platform } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
-import {
-  useNavigation,
-  useRoute,
-  type RouteProp,
-} from "@react-navigation/native";
+import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { apiRequest } from "@/lib/query-client";
-import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import type { RootStackParamList, AnalysisResultParam } from "@/navigation/RootStackNavigator";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import {
-  getWooCommerceSettings,
-  getEbaySettings,
-  publishToWooCommerce,
-  publishToEbay,
-} from "@/lib/marketplace";
+import { getWooCommerceSettings, getEbaySettings, publishToWooCommerce, publishToEbay } from "@/lib/marketplace";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type ItemDetailsRouteProp = RouteProp<RootStackParamList, "ItemDetails">;
 
-interface AIAnalysis {
-  title: string;
-  description: string;
-  category: string;
-  estimatedValue: string;
-  estimatedValueLow?: number;
-  estimatedValueHigh?: number;
-  suggestedListPrice?: number;
-  condition: string;
-  brand?: string;
-  subtitle?: string;
-  shortDescription?: string;
-  fullDescription?: string;
-  seoTitle: string;
-  seoDescription: string;
-  seoKeywords: string[];
-  tags: string[];
-  confidence?: "high" | "medium" | "low";
-  authenticity?:
-    | "Authentic"
-    | "Likely Authentic"
-    | "Uncertain"
-    | "Likely Counterfeit"
-    | "Counterfeit";
-  authenticityConfidence?: number;
-  authenticityDetails?: string;
-  authenticationTips?: string[];
-  marketAnalysis?: string;
-  aspects?: Record<string, string[]>;
-  ebayCategoryId?: string;
-  wooCategory?: string;
-}
 
 interface StashItem {
   id: number;
@@ -87,22 +36,24 @@ interface StashItem {
   publishedToEbay: boolean;
   woocommerceUrl: string | null;
   ebayUrl: string | null;
-  aiAnalysis: AIAnalysis | null;
+  aiAnalysis: AnalysisResultParam | null;
+  itemType: string | null;
+  userId: string;
   createdAt: string;
 }
 
 const AUTHENTICITY_COLORS: Record<string, string> = {
-  Authentic: Colors.dark.success,
+  "Authentic": Colors.dark.success,
   "Likely Authentic": "#22c55e",
-  Uncertain: Colors.dark.warning || "#f59e0b",
+  "Uncertain": Colors.dark.warning || "#f59e0b",
   "Likely Counterfeit": Colors.dark.error,
-  Counterfeit: "#dc2626",
+  "Counterfeit": "#dc2626",
 };
 
 const CONFIDENCE_COLORS: Record<string, string> = {
-  high: Colors.dark.success,
-  medium: Colors.dark.warning || "#f59e0b",
-  low: Colors.dark.error,
+  "high": Colors.dark.success,
+  "medium": Colors.dark.warning || "#f59e0b",
+  "low": Colors.dark.error,
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -114,24 +65,19 @@ export default function ItemDetailsScreen() {
   const route = useRoute<ItemDetailsRouteProp>();
   const queryClient = useQueryClient();
   const { itemId } = route.params;
-
+  
   const [wooConnected, setWooConnected] = useState(false);
   const [ebayConnected, setEbayConnected] = useState(false);
   const [publishingWoo, setPublishingWoo] = useState(false);
   const [publishingEbay, setPublishingEbay] = useState(false);
+  const [generatingSEO, setGeneratingSEO] = useState(false);
   const [approvalGate, setApprovalGate] = useState<{
     visible: boolean;
     platform: "woocommerce" | "ebay" | null;
     suggestedPrice: number;
     threshold: number;
     message: string;
-  }>({
-    visible: false,
-    platform: null,
-    suggestedPrice: 0,
-    threshold: 500,
-    message: "",
-  });
+  }>({ visible: false, platform: null, suggestedPrice: 0, threshold: 500, message: "" });
 
   useEffect(() => {
     checkConnections();
@@ -144,11 +90,7 @@ export default function ItemDetailsScreen() {
     setEbayConnected(ebayStatus === "connected");
   };
 
-  const {
-    data: item,
-    isLoading,
-    error,
-  } = useQuery<StashItem>({
+  const { data: item, isLoading, error } = useQuery<StashItem>({
     queryKey: ["/api/stash", itemId],
   });
 
@@ -177,46 +119,36 @@ export default function ItemDetailsScreen() {
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      "Delete Item",
-      "Are you sure you want to delete this item from your stash?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => deleteMutation.mutate(),
-        },
-      ],
-    );
+    Alert.alert("Delete Item", "Are you sure you want to delete this item from your stash?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => deleteMutation.mutate(),
+      },
+    ]);
   };
 
   const handlePublishWooCommerce = async (skipThresholdCheck = false) => {
     if (!item) return;
-
+    
     if (!wooConnected) {
       Alert.alert(
         "WooCommerce Not Connected",
         "Connect your WooCommerce store in Settings to publish listings.",
         [
           { text: "Cancel", style: "cancel" },
-          {
-            text: "Go to Settings",
-            onPress: () => navigation.navigate("WooCommerceSettings"),
-          },
-        ],
+          { text: "Go to Settings", onPress: () => navigation.navigate("WooCommerceSettings") },
+        ]
       );
       return;
     }
-
+    
     if (item.publishedToWoocommerce) {
-      Alert.alert(
-        "Already Published",
-        "This item has already been published to WooCommerce.",
-      );
+      Alert.alert("Already Published", "This item has already been published to WooCommerce.");
       return;
     }
-
+    
     setPublishingWoo(true);
     try {
       const settings = await getWooCommerceSettings();
@@ -224,74 +156,59 @@ export default function ItemDetailsScreen() {
         Alert.alert("Error", "Could not retrieve WooCommerce settings.");
         return;
       }
-
-      const result = await publishToWooCommerce(
-        itemId,
-        settings,
-        skipThresholdCheck,
-      );
-
-      if ((result as any).held) {
+      
+      const result = await publishToWooCommerce(itemId, settings, skipThresholdCheck);
+      
+      if (result.held) {
         setApprovalGate({
           visible: true,
           platform: "woocommerce",
-          suggestedPrice: (result as any).suggestedPrice,
-          threshold: (result as any).threshold,
-          message: (result as any).message,
+          suggestedPrice: result.suggestedPrice,
+          threshold: result.threshold,
+          message: result.message,
         });
         queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
         return;
       }
-
+      
       if (result.success) {
         if (Platform.OS !== "web") {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
-        Alert.alert(
-          "Published!",
-          `Your item has been listed on WooCommerce.\n\n${result.productUrl || ""}`,
-        );
+        Alert.alert("Published!", `Your item has been listed on WooCommerce.\n\n${result.productUrl || ""}`);
         queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
         queryClient.invalidateQueries({ queryKey: ["/api/stash"] });
       } else {
-        Alert.alert(
-          "Publishing Failed",
-          result.error || "Unknown error occurred",
-        );
+        Alert.alert("Publishing Failed", result.error || "Unknown error occurred");
       }
-    } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to publish to WooCommerce");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to publish to WooCommerce";
+      Alert.alert("Error", msg);
     } finally {
       setPublishingWoo(false);
     }
   };
-
+  
   const handlePublishEbay = async (skipThresholdCheck = false) => {
     if (!item) return;
-
+    
     if (!ebayConnected) {
       Alert.alert(
         "eBay Not Connected",
         "Connect your eBay seller account in Settings to publish listings.",
         [
           { text: "Cancel", style: "cancel" },
-          {
-            text: "Go to Settings",
-            onPress: () => navigation.navigate("EbaySettings"),
-          },
-        ],
+          { text: "Go to Settings", onPress: () => navigation.navigate("EbaySettings") },
+        ]
       );
       return;
     }
-
+    
     if (item.publishedToEbay) {
-      Alert.alert(
-        "Already Published",
-        "This item has already been published to eBay.",
-      );
+      Alert.alert("Already Published", "This item has already been published to eBay.");
       return;
     }
-
+    
     setPublishingEbay(true);
     try {
       const settings = await getEbaySettings();
@@ -299,39 +216,34 @@ export default function ItemDetailsScreen() {
         Alert.alert("Error", "Could not retrieve eBay settings.");
         return;
       }
-
+      
       const result = await publishToEbay(itemId, settings, skipThresholdCheck);
-
-      if ((result as any).held) {
+      
+      if (result.held) {
         setApprovalGate({
           visible: true,
           platform: "ebay",
-          suggestedPrice: (result as any).suggestedPrice,
-          threshold: (result as any).threshold,
-          message: (result as any).message,
+          suggestedPrice: result.suggestedPrice,
+          threshold: result.threshold,
+          message: result.message,
         });
         queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
         return;
       }
-
+      
       if (result.success) {
         if (Platform.OS !== "web") {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
-        Alert.alert(
-          "Published!",
-          `Your item has been listed on eBay.\n\n${result.listingUrl || ""}`,
-        );
+        Alert.alert("Published!", `Your item has been listed on eBay.\n\n${result.listingUrl || ""}`);
         queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
         queryClient.invalidateQueries({ queryKey: ["/api/stash"] });
       } else {
-        Alert.alert(
-          "Publishing Failed",
-          result.error || "Unknown error occurred",
-        );
+        Alert.alert("Publishing Failed", result.error || "Unknown error occurred");
       }
-    } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to publish to eBay");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to publish to eBay";
+      Alert.alert("Error", msg);
     } finally {
       setPublishingEbay(false);
     }
@@ -339,48 +251,62 @@ export default function ItemDetailsScreen() {
 
   const handleApproveAndPublish = async () => {
     if (!approvalGate.platform) return;
-
+    
     try {
       await apiRequest("POST", `/api/stash/${itemId}/approve-publish`);
       queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
-
-      setApprovalGate({
-        visible: false,
-        platform: null,
-        suggestedPrice: 0,
-        threshold: 500,
-        message: "",
-      });
-
+      
+      setApprovalGate({ visible: false, platform: null, suggestedPrice: 0, threshold: 500, message: "" });
+      
       if (approvalGate.platform === "woocommerce") {
         handlePublishWooCommerce(true);
       } else {
         handlePublishEbay(true);
       }
-    } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to approve item");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to approve item";
+      Alert.alert("Error", msg);
     }
   };
 
   const handleDismissApproval = () => {
-    setApprovalGate({
-      visible: false,
-      platform: null,
-      suggestedPrice: 0,
-      threshold: 500,
-      message: "",
-    });
+    setApprovalGate({ visible: false, platform: null, suggestedPrice: 0, threshold: 500, message: "" });
+  };
+
+  const handleGenerateSEOListing = async () => {
+    if (!item) return;
+
+    setGeneratingSEO(true);
+    try {
+      const response = await apiRequest("POST", "/api/seo/generate", {
+        itemId: item.id,
+        userId: item.userId || "demo-user",
+      });
+      
+      const updatedItem = await response.json();
+      
+      if (updatedItem.id) {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        Alert.alert("Success", "SEO listing generated and updated successfully!");
+        queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
+      } else {
+        Alert.alert("Error", "Failed to generate SEO listing");
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to generate SEO listing";
+      console.error("SEO Generation error:", error);
+      Alert.alert("Error", msg);
+    } finally {
+      setGeneratingSEO(false);
+    }
   };
 
   if (isLoading) {
     return (
       <ThemedView style={styles.container}>
-        <View
-          style={[
-            styles.loadingContainer,
-            { paddingTop: headerHeight + Spacing["4xl"] },
-          ]}
-        >
+        <View style={[styles.loadingContainer, { paddingTop: headerHeight + Spacing["4xl"] }]}>
           <ActivityIndicator size="large" color={Colors.dark.primary} />
         </View>
       </ThemedView>
@@ -390,12 +316,7 @@ export default function ItemDetailsScreen() {
   if (error || !item) {
     return (
       <ThemedView style={styles.container}>
-        <View
-          style={[
-            styles.errorContainer,
-            { paddingTop: headerHeight + Spacing["4xl"] },
-          ]}
-        >
+        <View style={[styles.errorContainer, { paddingTop: headerHeight + Spacing["4xl"] }]}>
           <Feather name="alert-circle" size={48} color={Colors.dark.error} />
           <ThemedText style={styles.errorTitle}>Item Not Found</ThemedText>
           <ThemedText style={styles.errorSubtitle}>
@@ -411,26 +332,15 @@ export default function ItemDetailsScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingTop: headerHeight + Spacing.lg,
-            paddingBottom: insets.bottom + Spacing["2xl"],
-          },
+          { paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing["2xl"] },
         ]}
         showsVerticalScrollIndicator={false}
       >
         {item.fullImageUrl ? (
-          <Image
-            source={{ uri: item.fullImageUrl }}
-            style={styles.mainImage}
-            resizeMode="cover"
-          />
+          <Image source={{ uri: item.fullImageUrl }} style={styles.mainImage} resizeMode="cover" />
         ) : (
           <View style={styles.imagePlaceholder}>
-            <Feather
-              name="package"
-              size={48}
-              color={Colors.dark.textSecondary}
-            />
+            <Feather name="package" size={48} color={Colors.dark.textSecondary} />
           </View>
         )}
 
@@ -439,20 +349,14 @@ export default function ItemDetailsScreen() {
             <ThemedText style={styles.title}>{item.title}</ThemedText>
             <View style={styles.actionsRow}>
               <Pressable
-                style={({ pressed }) => [
-                  styles.actionButton,
-                  pressed && { opacity: 0.7 },
-                ]}
+                style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.7 }]}
                 onPress={handleShare}
                 testID="button-share"
               >
                 <Feather name="share-2" size={20} color={Colors.dark.text} />
               </Pressable>
               <Pressable
-                style={({ pressed }) => [
-                  styles.actionButton,
-                  pressed && { opacity: 0.7 },
-                ]}
+                style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.7 }]}
                 onPress={handleDelete}
                 testID="button-delete"
               >
@@ -463,32 +367,24 @@ export default function ItemDetailsScreen() {
 
           <View style={styles.valueCard}>
             <ThemedText style={styles.valueLabel}>Estimated Value</ThemedText>
-            <ThemedText style={styles.valueAmount}>
-              {item.estimatedValue || "N/A"}
-            </ThemedText>
+            <ThemedText style={styles.valueAmount}>{item.estimatedValue || "N/A"}</ThemedText>
           </View>
 
           <View style={styles.detailsGrid}>
             <View style={styles.detailItem}>
               <ThemedText style={styles.detailLabel}>Category</ThemedText>
-              <ThemedText style={styles.detailValue}>
-                {item.category || "N/A"}
-              </ThemedText>
+              <ThemedText style={styles.detailValue}>{item.category || "N/A"}</ThemedText>
             </View>
             <View style={styles.detailItem}>
               <ThemedText style={styles.detailLabel}>Condition</ThemedText>
-              <ThemedText style={styles.detailValue}>
-                {item.condition || "N/A"}
-              </ThemedText>
+              <ThemedText style={styles.detailValue}>{item.condition || "N/A"}</ThemedText>
             </View>
           </View>
 
           {item.description ? (
             <View style={styles.section}>
               <ThemedText style={styles.sectionLabel}>Description</ThemedText>
-              <ThemedText style={styles.descriptionText}>
-                {item.description}
-              </ThemedText>
+              <ThemedText style={styles.descriptionText}>{item.description}</ThemedText>
             </View>
           ) : null}
 
@@ -508,19 +404,13 @@ export default function ItemDetailsScreen() {
           {/* Authentication Assessment Section */}
           {item.aiAnalysis?.authenticity && (
             <View style={styles.section}>
-              <ThemedText style={styles.sectionLabel}>
-                Authentication Assessment
-              </ThemedText>
+              <ThemedText style={styles.sectionLabel}>Authentication Assessment</ThemedText>
               <View style={styles.authCard}>
                 <View style={styles.authHeader}>
                   <View
                     style={[
                       styles.authBadge,
-                      {
-                        backgroundColor:
-                          AUTHENTICITY_COLORS[item.aiAnalysis.authenticity] ||
-                          Colors.dark.textSecondary,
-                      },
+                      { backgroundColor: AUTHENTICITY_COLORS[item.aiAnalysis.authenticity] || Colors.dark.textSecondary },
                     ]}
                   >
                     <ThemedText style={styles.authBadgeText}>
@@ -540,8 +430,7 @@ export default function ItemDetailsScreen() {
                                   : item.aiAnalysis.confidence === "medium"
                                     ? "60%"
                                     : "30%",
-                              backgroundColor:
-                                CONFIDENCE_COLORS[item.aiAnalysis.confidence],
+                              backgroundColor: CONFIDENCE_COLORS[item.aiAnalysis.confidence],
                             },
                           ]}
                         />
@@ -567,16 +456,12 @@ export default function ItemDetailsScreen() {
           {item.aiAnalysis?.authenticationTips &&
             item.aiAnalysis.authenticationTips.length > 0 && (
               <View style={styles.section}>
-                <ThemedText style={styles.sectionLabel}>
-                  Authentication Tips
-                </ThemedText>
+                <ThemedText style={styles.sectionLabel}>Authentication Tips</ThemedText>
                 <View style={styles.tipsCard}>
                   {item.aiAnalysis.authenticationTips.map((tip, index) => (
                     <View key={index} style={styles.tipItem}>
                       <View style={styles.tipNumber}>
-                        <ThemedText style={styles.tipNumberText}>
-                          {index + 1}
-                        </ThemedText>
+                        <ThemedText style={styles.tipNumberText}>{index + 1}</ThemedText>
                       </View>
                       <ThemedText style={styles.tipText}>{tip}</ThemedText>
                     </View>
@@ -588,22 +473,39 @@ export default function ItemDetailsScreen() {
           {/* Market Value Analysis Section */}
           {item.aiAnalysis?.marketAnalysis && (
             <View style={styles.section}>
-              <ThemedText style={styles.sectionLabel}>
-                Market Value Analysis
-              </ThemedText>
+              <View style={styles.sectionHeaderRow}>
+                <ThemedText style={styles.sectionLabel}>Market Value Analysis</ThemedText>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.generateButton,
+                    pressed && { opacity: 0.7 },
+                    generatingSEO && { opacity: 0.5 },
+                  ]}
+                  onPress={handleGenerateSEOListing}
+                  disabled={generatingSEO}
+                  testID="button-generate-seo"
+                >
+                  {generatingSEO ? (
+                    <ActivityIndicator size="small" color={Colors.dark.primary} />
+                  ) : (
+                    <>
+                      <Feather name="zap" size={14} color={Colors.dark.primary} style={{ marginRight: 4 }} />
+                      <ThemedText style={styles.generateButtonText}>Ask Emma to Generate</ThemedText>
+                    </>
+                  )}
+                </Pressable>
+              </View>
               <View style={styles.marketCard}>
                 <ThemedText style={styles.marketText}>
                   {item.aiAnalysis.marketAnalysis}
                 </ThemedText>
-                {(item.aiAnalysis.estimatedValueLow ||
-                  item.aiAnalysis.estimatedValueHigh) && (
+                {(item.aiAnalysis.estimatedValueLow || item.aiAnalysis.estimatedValueHigh) && (
                   <View style={styles.valueRange}>
-                    <ThemedText style={styles.valueRangeLabel}>
-                      AI Estimated Range
-                    </ThemedText>
+                    <ThemedText style={styles.valueRangeLabel}>AI Estimated Range</ThemedText>
                     <ThemedText style={styles.valueRangeAmount}>
-                      ${item.aiAnalysis.estimatedValueLow || "?"} - $
-                      {item.aiAnalysis.estimatedValueHigh || "?"}
+                      ${item.aiAnalysis.estimatedValueLow || "?"} - ${
+                        item.aiAnalysis.estimatedValueHigh || "?"
+                      }
                     </ThemedText>
                     {item.aiAnalysis.suggestedListPrice && (
                       <ThemedText style={styles.suggestedPrice}>
@@ -619,33 +521,23 @@ export default function ItemDetailsScreen() {
           {/* Listing Details Section */}
           {item.aiAnalysis && (
             <View style={styles.section}>
-              <ThemedText style={styles.sectionLabel}>
-                Listing Details
-              </ThemedText>
+              <ThemedText style={styles.sectionLabel}>Listing Details</ThemedText>
               <View style={styles.listingCard}>
                 {item.aiAnalysis.brand && (
                   <View style={styles.listingRow}>
                     <ThemedText style={styles.listingLabel}>Brand</ThemedText>
-                    <ThemedText style={styles.listingValue}>
-                      {item.aiAnalysis.brand}
-                    </ThemedText>
+                    <ThemedText style={styles.listingValue}>{item.aiAnalysis.brand}</ThemedText>
                   </View>
                 )}
                 {item.aiAnalysis.subtitle && (
                   <View style={styles.listingRow}>
-                    <ThemedText style={styles.listingLabel}>
-                      Subtitle
-                    </ThemedText>
-                    <ThemedText style={styles.listingValue}>
-                      {item.aiAnalysis.subtitle}
-                    </ThemedText>
+                    <ThemedText style={styles.listingLabel}>Subtitle</ThemedText>
+                    <ThemedText style={styles.listingValue}>{item.aiAnalysis.subtitle}</ThemedText>
                   </View>
                 )}
                 {item.aiAnalysis.ebayCategoryId && (
                   <View style={styles.listingRow}>
-                    <ThemedText style={styles.listingLabel}>
-                      eBay Category
-                    </ThemedText>
+                    <ThemedText style={styles.listingLabel}>eBay Category</ThemedText>
                     <ThemedText style={styles.listingValue}>
                       {item.aiAnalysis.ebayCategoryId}
                     </ThemedText>
@@ -653,69 +545,44 @@ export default function ItemDetailsScreen() {
                 )}
                 {item.aiAnalysis.wooCategory && (
                   <View style={styles.listingRow}>
-                    <ThemedText style={styles.listingLabel}>
-                      WooCommerce Category
-                    </ThemedText>
+                    <ThemedText style={styles.listingLabel}>WooCommerce Category</ThemedText>
                     <ThemedText style={styles.listingValue}>
                       {item.aiAnalysis.wooCategory}
                     </ThemedText>
                   </View>
                 )}
-                {item.aiAnalysis.aspects &&
-                  Object.keys(item.aiAnalysis.aspects).length > 0 && (
-                    <View style={styles.aspectsSection}>
-                      <ThemedText style={styles.aspectsTitle}>
-                        Item Specifics
-                      </ThemedText>
-                      {Object.entries(item.aiAnalysis.aspects).map(
-                        ([key, values]) => (
-                          <View key={key} style={styles.aspectRow}>
-                            <ThemedText style={styles.aspectKey}>
-                              {key}
-                            </ThemedText>
-                            <ThemedText style={styles.aspectValue}>
-                              {values.join(", ")}
-                            </ThemedText>
-                          </View>
-                        ),
-                      )}
-                    </View>
-                  )}
+                {item.aiAnalysis.aspects && Object.keys(item.aiAnalysis.aspects).length > 0 && (
+                  <View style={styles.aspectsSection}>
+                    <ThemedText style={styles.aspectsTitle}>Item Specifics</ThemedText>
+                    {Object.entries(item.aiAnalysis.aspects).map(([key, values]) => (
+                      <View key={key} style={styles.aspectRow}>
+                        <ThemedText style={styles.aspectKey}>{key}</ThemedText>
+                        <ThemedText style={styles.aspectValue}>{values.join(", ")}</ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             </View>
           )}
 
           {item.publishStatus === "held_for_review" ? (
             <View style={styles.section}>
-              <ThemedText style={styles.sectionLabel}>
-                Review Required
-              </ThemedText>
+              <ThemedText style={styles.sectionLabel}>Review Required</ThemedText>
               <View style={styles.approvalCard}>
                 <View style={styles.approvalIconRow}>
                   <View style={styles.approvalIconCircle}>
-                    <Feather
-                      name="alert-triangle"
-                      size={24}
-                      color={Colors.dark.warning}
-                    />
+                    <Feather name="alert-triangle" size={24} color={Colors.dark.warning} />
                   </View>
                 </View>
-                <ThemedText style={styles.approvalTitle}>
-                  High-Value Item
-                </ThemedText>
+                <ThemedText style={styles.approvalTitle}>High-Value Item</ThemedText>
                 <ThemedText style={styles.approvalMessage}>
-                  This item has been held for review because its suggested price
-                  exceeds your approval threshold. Please review the details and
-                  confirm before publishing.
+                  This item has been held for review because its suggested price exceeds your approval threshold. Please review the details and confirm before publishing.
                 </ThemedText>
                 {item.aiAnalysis?.suggestedListPrice ? (
                   <View style={styles.approvalPriceRow}>
-                    <ThemedText style={styles.approvalPriceLabel}>
-                      Suggested Price
-                    </ThemedText>
-                    <ThemedText style={styles.approvalPriceValue}>
-                      ${item.aiAnalysis.suggestedListPrice}
-                    </ThemedText>
+                    <ThemedText style={styles.approvalPriceLabel}>Suggested Price</ThemedText>
+                    <ThemedText style={styles.approvalPriceValue}>${item.aiAnalysis.suggestedListPrice}</ThemedText>
                   </View>
                 ) : null}
               </View>
@@ -724,75 +591,62 @@ export default function ItemDetailsScreen() {
 
           {approvalGate.visible ? (
             <View style={styles.section}>
-              <ThemedText style={styles.sectionLabel}>
-                Approval Required
-              </ThemedText>
+              <ThemedText style={styles.sectionLabel}>Approval Required</ThemedText>
               <View style={styles.approvalCard}>
                 <View style={styles.approvalIconRow}>
                   <View style={styles.approvalIconCircle}>
-                    <Feather
-                      name="shield"
-                      size={24}
-                      color={Colors.dark.warning}
-                    />
+                    <Feather name="shield" size={24} color={Colors.dark.warning} />
                   </View>
                 </View>
-                <ThemedText style={styles.approvalTitle}>
-                  Confirm High-Value Publish
-                </ThemedText>
-                <ThemedText style={styles.approvalMessage}>
-                  {approvalGate.message}
-                </ThemedText>
+                <ThemedText style={styles.approvalTitle}>Confirm High-Value Publish</ThemedText>
+                <ThemedText style={styles.approvalMessage}>{approvalGate.message}</ThemedText>
                 <View style={styles.approvalPriceRow}>
-                  <ThemedText style={styles.approvalPriceLabel}>
-                    Suggested Price
-                  </ThemedText>
-                  <ThemedText style={styles.approvalPriceValue}>
-                    ${approvalGate.suggestedPrice}
-                  </ThemedText>
+                  <ThemedText style={styles.approvalPriceLabel}>Suggested Price</ThemedText>
+                  <ThemedText style={styles.approvalPriceValue}>${approvalGate.suggestedPrice}</ThemedText>
                 </View>
                 <View style={styles.approvalPriceRow}>
-                  <ThemedText style={styles.approvalPriceLabel}>
-                    Your Threshold
-                  </ThemedText>
-                  <ThemedText style={styles.approvalThresholdValue}>
-                    ${approvalGate.threshold}
-                  </ThemedText>
+                  <ThemedText style={styles.approvalPriceLabel}>Your Threshold</ThemedText>
+                  <ThemedText style={styles.approvalThresholdValue}>${approvalGate.threshold}</ThemedText>
                 </View>
                 <View style={styles.approvalActions}>
                   <Pressable
-                    style={({ pressed }) => [
-                      styles.approvalCancelButton,
-                      pressed && { opacity: 0.7 },
-                    ]}
+                    style={({ pressed }) => [styles.approvalCancelButton, pressed && { opacity: 0.7 }]}
                     onPress={handleDismissApproval}
                     testID="button-dismiss-approval"
                   >
-                    <ThemedText style={styles.approvalCancelText}>
-                      Cancel
-                    </ThemedText>
+                    <ThemedText style={styles.approvalCancelText}>Cancel</ThemedText>
                   </Pressable>
                   <Pressable
-                    style={({ pressed }) => [
-                      styles.approvalConfirmButton,
-                      pressed && { opacity: 0.7 },
-                    ]}
+                    style={({ pressed }) => [styles.approvalConfirmButton, pressed && { opacity: 0.7 }]}
                     onPress={handleApproveAndPublish}
                     testID="button-approve-publish"
                   >
-                    <Feather
-                      name="check-circle"
-                      size={18}
-                      color={Colors.dark.buttonText}
-                    />
-                    <ThemedText style={styles.approvalConfirmText}>
-                      Approve & Publish
-                    </ThemedText>
+                    <Feather name="check-circle" size={18} color={Colors.dark.buttonText} />
+                    <ThemedText style={styles.approvalConfirmText}>Approve & Publish</ThemedText>
                   </Pressable>
                 </View>
               </View>
             </View>
           ) : null}
+
+          {/* Edit Listing by Platform */}
+          {item.aiAnalysis && (
+            <View style={styles.section}>
+              <Pressable
+                style={({ pressed }) => [styles.editListingButton, pressed && { opacity: 0.8 }]}
+                onPress={() => navigation.navigate("ListingEditor", {
+                  analysisResult: item.aiAnalysis as AnalysisResultParam,
+                  fullImageUri: item.fullImageUrl || undefined,
+                  labelImageUri: item.labelImageUrl || undefined,
+                  itemType: item.itemType || "designer",
+                  stashItemId: item.id,
+                })}
+              >
+                <Feather name="layers" size={18} color={Colors.dark.primary} />
+                <ThemedText style={styles.editListingButtonText}>Edit Listing by Platform</ThemedText>
+              </Pressable>
+            </View>
+          )}
 
           <View style={styles.section}>
             <ThemedText style={styles.sectionLabel}>Publish</ThemedText>
@@ -801,9 +655,7 @@ export default function ItemDetailsScreen() {
                 style={({ pressed }) => [
                   styles.publishButton,
                   item.publishedToWoocommerce && styles.publishButtonActive,
-                  wooConnected &&
-                    !item.publishedToWoocommerce &&
-                    styles.publishButtonConnected,
+                  wooConnected && !item.publishedToWoocommerce && styles.publishButtonConnected,
                   pressed && { opacity: 0.8 },
                   publishingWoo && { opacity: 0.6 },
                 ]}
@@ -817,39 +669,24 @@ export default function ItemDetailsScreen() {
                   <Feather
                     name="shopping-bag"
                     size={24}
-                    color={
-                      item.publishedToWoocommerce
-                        ? Colors.dark.buttonText
-                        : wooConnected
-                          ? Colors.dark.primary
-                          : Colors.dark.textSecondary
-                    }
+                    color={item.publishedToWoocommerce ? Colors.dark.buttonText : wooConnected ? Colors.dark.primary : Colors.dark.textSecondary}
                   />
                 )}
                 <ThemedText
                   style={[
                     styles.publishButtonText,
-                    item.publishedToWoocommerce &&
-                      styles.publishButtonTextActive,
-                    !wooConnected &&
-                      !item.publishedToWoocommerce &&
-                      styles.publishButtonTextDisabled,
+                    item.publishedToWoocommerce && styles.publishButtonTextActive,
+                    !wooConnected && !item.publishedToWoocommerce && styles.publishButtonTextDisabled,
                   ]}
                 >
                   WooCommerce
                 </ThemedText>
                 {item.publishedToWoocommerce ? (
                   <View style={styles.publishedBadge}>
-                    <Feather
-                      name="check"
-                      size={12}
-                      color={Colors.dark.success}
-                    />
+                    <Feather name="check" size={12} color={Colors.dark.success} />
                   </View>
                 ) : !wooConnected ? (
-                  <ThemedText style={styles.notConnectedText}>
-                    Not connected
-                  </ThemedText>
+                  <ThemedText style={styles.notConnectedText}>Not connected</ThemedText>
                 ) : null}
               </Pressable>
 
@@ -857,9 +694,7 @@ export default function ItemDetailsScreen() {
                 style={({ pressed }) => [
                   styles.publishButton,
                   item.publishedToEbay && styles.publishButtonActive,
-                  ebayConnected &&
-                    !item.publishedToEbay &&
-                    styles.publishButtonConnected,
+                  ebayConnected && !item.publishedToEbay && styles.publishButtonConnected,
                   pressed && { opacity: 0.8 },
                   publishingEbay && { opacity: 0.6 },
                 ]}
@@ -873,38 +708,24 @@ export default function ItemDetailsScreen() {
                   <Feather
                     name="tag"
                     size={24}
-                    color={
-                      item.publishedToEbay
-                        ? Colors.dark.buttonText
-                        : ebayConnected
-                          ? Colors.dark.primary
-                          : Colors.dark.textSecondary
-                    }
+                    color={item.publishedToEbay ? Colors.dark.buttonText : ebayConnected ? Colors.dark.primary : Colors.dark.textSecondary}
                   />
                 )}
                 <ThemedText
                   style={[
                     styles.publishButtonText,
                     item.publishedToEbay && styles.publishButtonTextActive,
-                    !ebayConnected &&
-                      !item.publishedToEbay &&
-                      styles.publishButtonTextDisabled,
+                    !ebayConnected && !item.publishedToEbay && styles.publishButtonTextDisabled,
                   ]}
                 >
                   eBay
                 </ThemedText>
                 {item.publishedToEbay ? (
                   <View style={styles.publishedBadge}>
-                    <Feather
-                      name="check"
-                      size={12}
-                      color={Colors.dark.success}
-                    />
+                    <Feather name="check" size={12} color={Colors.dark.success} />
                   </View>
                 ) : !ebayConnected ? (
-                  <ThemedText style={styles.notConnectedText}>
-                    Not connected
-                  </ThemedText>
+                  <ThemedText style={styles.notConnectedText}>Not connected</ThemedText>
                 ) : null}
               </Pressable>
             </View>
@@ -1185,6 +1006,28 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.sm,
+  },
+  generateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+  },
+  generateButtonText: {
+    color: Colors.dark.primary,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
   // Market Analysis Section Styles
   marketCard: {
     backgroundColor: Colors.dark.surface,
@@ -1357,5 +1200,20 @@ const styles = StyleSheet.create({
   approvalConfirmText: {
     ...Typography.button,
     color: Colors.dark.buttonText,
+  },
+  editListingButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.dark.primary + "15",
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
+  editListingButtonText: {
+    ...Typography.button,
+    color: Colors.dark.primary,
   },
 });
