@@ -29,14 +29,23 @@ export default function ArticleScreen() {
   const route = useRoute<ArticleRouteProp>();
   const { articleId } = route.params;
 
-  const { data: article, isLoading, error } = useQuery<Article>({
+  const {
+    data: article,
+    isLoading,
+    error,
+  } = useQuery<Article>({
     queryKey: ["/api/articles", articleId],
   });
 
   if (isLoading) {
     return (
       <ThemedView style={styles.container}>
-        <View style={[styles.loadingContainer, { paddingTop: headerHeight + Spacing["4xl"] }]}>
+        <View
+          style={[
+            styles.loadingContainer,
+            { paddingTop: headerHeight + Spacing["4xl"] },
+          ]}
+        >
           <ActivityIndicator size="large" color={Colors.dark.primary} />
         </View>
       </ThemedView>
@@ -46,7 +55,12 @@ export default function ArticleScreen() {
   if (error || !article) {
     return (
       <ThemedView style={styles.container}>
-        <View style={[styles.errorContainer, { paddingTop: headerHeight + Spacing["4xl"] }]}>
+        <View
+          style={[
+            styles.errorContainer,
+            { paddingTop: headerHeight + Spacing["4xl"] },
+          ]}
+        >
           <Feather name="alert-circle" size={48} color={Colors.dark.error} />
           <ThemedText style={styles.errorTitle}>Article Not Found</ThemedText>
           <ThemedText style={styles.errorSubtitle}>
@@ -62,19 +76,30 @@ export default function ArticleScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing["2xl"] },
+          {
+            paddingTop: headerHeight + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing["2xl"],
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerSection}>
           <View style={styles.categoryBadge}>
-            <ThemedText style={styles.categoryText}>{article.category}</ThemedText>
+            <ThemedText style={styles.categoryText}>
+              {article.category}
+            </ThemedText>
           </View>
           <ThemedText style={styles.title}>{article.title}</ThemedText>
           <View style={styles.metaRow}>
             <View style={styles.metaItem}>
-              <Feather name="clock" size={14} color={Colors.dark.textSecondary} />
-              <ThemedText style={styles.metaText}>{article.readingTime} min read</ThemedText>
+              <Feather
+                name="clock"
+                size={14}
+                color={Colors.dark.textSecondary}
+              />
+              <ThemedText style={styles.metaText}>
+                {article.readingTime} min read
+              </ThemedText>
             </View>
           </View>
         </View>

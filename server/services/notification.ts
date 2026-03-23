@@ -1,5 +1,10 @@
 import { db } from "../db";
-import { pushTokens, notifications, priceTracking, stashItems } from "@shared/schema";
+import {
+  pushTokens,
+  notifications,
+  priceTracking,
+  stashItems,
+} from "@shared/schema";
 import { eq, and, lte, isNotNull } from "drizzle-orm";
 
 // Expo Push API endpoint
@@ -19,10 +24,10 @@ interface PushResponse {
     id?: string;
     status?: string;
   };
-  errors?: Array<{
+  errors?: {
     code: string;
     message: string;
-  }>;
+  }[];
 }
 
 /**
@@ -31,7 +36,7 @@ interface PushResponse {
 export async function registerPushToken(
   userId: string,
   token: string,
-  platform: "ios" | "android" | "web"
+  platform: "ios" | "android" | "web",
 ): Promise<void> {
   // Check if token already exists
   const existing = await db
@@ -60,7 +65,10 @@ export async function registerPushToken(
 /**
  * Unregister a push token
  */
-export async function unregisterPushToken(userId: string, token: string): Promise<void> {
+export async function unregisterPushToken(
+  userId: string,
+  token: string,
+): Promise<void> {
   await db
     .delete(pushTokens)
     .where(and(eq(pushTokens.userId, userId), eq(pushTokens.token, token)));
@@ -73,7 +81,7 @@ export async function sendPushNotification(
   userId: string,
   title: string,
   body: string,
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
 ): Promise<boolean> {
   // Get user's push tokens
   const tokens = await db
@@ -137,7 +145,7 @@ export async function sendPriceAlert(
   itemTitle: string,
   oldPrice: number,
   newPrice: number,
-  percentChange: number
+  percentChange: number,
 ): Promise<boolean> {
   const isIncrease = newPrice > oldPrice;
   const title = isIncrease
@@ -162,7 +170,7 @@ export async function sendPriceAlert(
 export async function enablePriceTracking(
   userId: string,
   stashItemId: number,
-  alertThreshold: number = 10
+  alertThreshold: number = 10,
 ): Promise<void> {
   // Check if tracking already exists
   const existing = await db
@@ -171,8 +179,8 @@ export async function enablePriceTracking(
     .where(
       and(
         eq(priceTracking.userId, userId),
-        eq(priceTracking.stashItemId, stashItemId)
-      )
+        eq(priceTracking.stashItemId, stashItemId),
+      ),
     )
     .limit(1);
 
@@ -227,7 +235,7 @@ export async function enablePriceTracking(
  */
 export async function disablePriceTracking(
   userId: string,
-  stashItemId: number
+  stashItemId: number,
 ): Promise<void> {
   await db
     .update(priceTracking)
@@ -235,8 +243,8 @@ export async function disablePriceTracking(
     .where(
       and(
         eq(priceTracking.userId, userId),
-        eq(priceTracking.stashItemId, stashItemId)
-      )
+        eq(priceTracking.stashItemId, stashItemId),
+      ),
     );
 }
 
@@ -245,7 +253,7 @@ export async function disablePriceTracking(
  */
 export async function getPriceTrackingStatus(
   userId: string,
-  stashItemId: number
+  stashItemId: number,
 ): Promise<{ isActive: boolean; alertThreshold: number } | null> {
   const tracking = await db
     .select()
@@ -253,8 +261,8 @@ export async function getPriceTrackingStatus(
     .where(
       and(
         eq(priceTracking.userId, userId),
-        eq(priceTracking.stashItemId, stashItemId)
-      )
+        eq(priceTracking.stashItemId, stashItemId),
+      ),
     )
     .limit(1);
 
@@ -273,8 +281,8 @@ export async function getPriceTrackingStatus(
  */
 export async function getUserNotifications(
   userId: string,
-  limit: number = 50
-): Promise<typeof notifications.$inferSelect[]> {
+  limit: number = 50,
+): Promise<(typeof notifications.$inferSelect)[]> {
   return await db
     .select()
     .from(notifications)
@@ -288,7 +296,7 @@ export async function getUserNotifications(
  */
 export async function markNotificationAsRead(
   userId: string,
-  notificationId: number
+  notificationId: number,
 ): Promise<void> {
   await db
     .update(notifications)
@@ -296,15 +304,17 @@ export async function markNotificationAsRead(
     .where(
       and(
         eq(notifications.id, notificationId),
-        eq(notifications.userId, userId)
-      )
+        eq(notifications.userId, userId),
+      ),
     );
 }
 
 /**
  * Mark all notifications as read
  */
-export async function markAllNotificationsAsRead(userId: string): Promise<void> {
+export async function markAllNotificationsAsRead(
+  userId: string,
+): Promise<void> {
   await db
     .update(notifications)
     .set({ isRead: true })
@@ -314,12 +324,14 @@ export async function markAllNotificationsAsRead(userId: string): Promise<void> 
 /**
  * Get unread notification count
  */
-export async function getUnreadNotificationCount(userId: string): Promise<number> {
+export async function getUnreadNotificationCount(
+  userId: string,
+): Promise<number> {
   const result = await db
     .select()
     .from(notifications)
     .where(
-      and(eq(notifications.userId, userId), eq(notifications.isRead, false))
+      and(eq(notifications.userId, userId), eq(notifications.isRead, false)),
     );
 
   return result.length;
@@ -344,8 +356,8 @@ export async function processPriceChecks(): Promise<void> {
       and(
         eq(priceTracking.isActive, true),
         isNotNull(priceTracking.nextCheckAt),
-        lte(priceTracking.nextCheckAt, now)
-      )
+        lte(priceTracking.nextCheckAt, now),
+      ),
     );
 
   for (const { tracking, item } of trackingList) {
@@ -389,7 +401,7 @@ export async function processPriceChecks(): Promise<void> {
           item.title,
           tracking.lastPrice,
           currentPrice,
-          percentChange
+          percentChange,
         );
       }
 
@@ -406,7 +418,7 @@ export async function processPriceChecks(): Promise<void> {
     } catch (error) {
       console.error(
         `Error processing price check for item ${tracking.stashItemId}:
-        error`
+        error`,
       );
     }
   }

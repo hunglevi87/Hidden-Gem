@@ -1,5 +1,15 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, FlatList, Pressable, Image, RefreshControl, ActivityIndicator, Dimensions, TextInput } from "react-native";
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  Image,
+  RefreshControl,
+  ActivityIndicator,
+  Dimensions,
+  TextInput,
+} from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -7,12 +17,17 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
+import {
+  Colors,
+  Spacing,
+  BorderRadius,
+  Typography,
+  Shadows,
+} from "@/constants/theme";
 import { Feather } from "@expo/vector-icons";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { apiRequest } from "@/lib/query-client";
 import { useAuthContext } from "@/contexts/AuthContext";
-import { useTheme } from "@/hooks/useTheme";
 import emptyStashImage from "../../assets/images/empty-states/empty-stash.png";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -26,46 +41,58 @@ interface StashItem {
   category: string | null;
   publishedToWoocommerce: boolean;
   publishedToEbay: boolean;
-  itemType: string | null;
 }
 
-function StashItemCard({ item, onPress }: { item: StashItem; onPress: () => void }) {
-  const { theme } = useTheme();
+function StashItemCard({
+  item,
+  onPress,
+}: {
+  item: StashItem;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       style={({ pressed }) => [
         styles.itemCard,
-        { backgroundColor: theme.surface },
-        pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }
+        pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
       ]}
       onPress={onPress}
       testID={`card-item-${item.id}`}
     >
       <View style={styles.itemImageContainer}>
         {item.fullImageUrl ? (
-          <Image source={{ uri: item.fullImageUrl }} style={styles.itemImage} resizeMode="cover" />
+          <Image
+            source={{ uri: item.fullImageUrl }}
+            style={styles.itemImage}
+            resizeMode="cover"
+          />
         ) : (
-          <View style={[styles.itemImagePlaceholder, { backgroundColor: theme.backgroundSecondary }]}>
-            <Feather name="package" size={32} color={theme.textSecondary} />
+          <View style={styles.itemImagePlaceholder}>
+            <Feather
+              name="package"
+              size={32}
+              color={Colors.dark.textSecondary}
+            />
           </View>
         )}
-        {item.itemType === "handmade" ? (
-          <View style={[styles.handmadeBadge, { backgroundColor: "#a78bfa20" }]}>
-            <Feather name="feather" size={10} color="#a78bfa" />
-          </View>
-        ) : null}
         {item.publishedToWoocommerce || item.publishedToEbay ? (
-          <View style={[styles.publishedBadge, { backgroundColor: theme.surface }]}>
-            <Feather name="check-circle" size={12} color={theme.success} />
+          <View style={styles.publishedBadge}>
+            <Feather
+              name="check-circle"
+              size={12}
+              color={Colors.dark.success}
+            />
           </View>
         ) : null}
       </View>
       <View style={styles.itemContent}>
-        <ThemedText style={[styles.itemTitle, { color: theme.text }]} numberOfLines={2}>
+        <ThemedText style={styles.itemTitle} numberOfLines={2}>
           {item.title}
         </ThemedText>
         {item.estimatedValue ? (
-          <ThemedText style={[styles.itemValue, { color: theme.primary }]}>{item.estimatedValue}</ThemedText>
+          <ThemedText style={styles.itemValue}>
+            {item.estimatedValue}
+          </ThemedText>
         ) : null}
       </View>
     </Pressable>
@@ -73,56 +100,72 @@ function StashItemCard({ item, onPress }: { item: StashItem; onPress: () => void
 }
 
 function EmptyState({ onScan }: { onScan: () => void }) {
-  const { theme } = useTheme();
   return (
     <View style={styles.emptyState}>
-      <Image source={emptyStashImage} style={styles.emptyImage} resizeMode="contain" />
-      <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Your stash is empty</ThemedText>
-      <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+      <Image
+        source={emptyStashImage}
+        style={styles.emptyImage}
+        resizeMode="contain"
+      />
+      <ThemedText style={styles.emptyTitle}>Your stash is empty</ThemedText>
+      <ThemedText style={styles.emptySubtitle}>
         Scan your first item to start building your inventory
       </ThemedText>
       <Pressable
-        style={({ pressed }) => [styles.emptyButton, { backgroundColor: theme.primary }, pressed && { opacity: 0.8 }]}
+        style={({ pressed }) => [
+          styles.emptyButton,
+          pressed && { opacity: 0.8 },
+        ]}
         onPress={onScan}
         testID="button-scan-first"
       >
-        <Feather name="camera" size={20} color={theme.buttonText} />
-        <ThemedText style={[styles.emptyButtonText, { color: theme.buttonText }]}>Scan Item</ThemedText>
+        <Feather name="camera" size={20} color={Colors.dark.buttonText} />
+        <ThemedText style={styles.emptyButtonText}>Scan Item</ThemedText>
       </Pressable>
     </View>
   );
 }
 
 function FloatingActionButton({ onPress }: { onPress: () => void }) {
-  const { theme } = useTheme();
   return (
     <Pressable
-      style={({ pressed }) => [styles.fab, { backgroundColor: theme.primary }, pressed && { opacity: 0.9, transform: [{ scale: 0.95 }] }]}
+      style={({ pressed }) => [
+        styles.fab,
+        pressed && { opacity: 0.9, transform: [{ scale: 0.95 }] },
+      ]}
       onPress={onPress}
       testID="button-fab-scan"
     >
-      <Feather name="camera" size={24} color={theme.buttonText} />
+      <Feather name="camera" size={24} color={Colors.dark.buttonText} />
     </Pressable>
   );
 }
 
 export default function StashScreen() {
-  const { theme } = useTheme();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuthContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<StashItem[] | null>(null);
   const [isSearchActive, setIsSearchActive] = useState(false);
 
-  const { data: items, isLoading, refetch, isRefetching } = useQuery<StashItem[]>({
+  const {
+    data: items,
+    isLoading,
+    refetch,
+    isRefetching,
+  } = useQuery<StashItem[]>({
     queryKey: ["/api/stash"],
   });
 
   const searchMutation = useMutation({
     mutationFn: async (query: string) => {
-      const res = await apiRequest("POST", "/api/stash/search", { query, userId: user?.id });
+      const res = await apiRequest("POST", "/api/stash/search", {
+        query,
+        userId: user?.id,
+      });
       return res.json();
     },
     onSuccess: (data) => {
@@ -147,9 +190,12 @@ export default function StashScreen() {
     setIsSearchActive(false);
   }, []);
 
-  const handleItemPress = useCallback((itemId: number) => {
-    navigation.navigate("ItemDetails", { itemId });
-  }, [navigation]);
+  const handleItemPress = useCallback(
+    (itemId: number) => {
+      navigation.navigate("ItemDetails", { itemId });
+    },
+    [navigation],
+  );
 
   const handleScan = useCallback(() => {
     navigation.navigate("Main", { screen: "ScanTab" } as any);
@@ -159,9 +205,14 @@ export default function StashScreen() {
 
   if (isLoading) {
     return (
-      <ThemedView style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.loadingContainer, { paddingTop: headerHeight + Spacing["4xl"] }]}>
-          <ActivityIndicator size="large" color={theme.primary} />
+      <ThemedView style={styles.container}>
+        <View
+          style={[
+            styles.loadingContainer,
+            { paddingTop: headerHeight + Spacing["4xl"] },
+          ]}
+        >
+          <ActivityIndicator size="large" color={Colors.dark.primary} />
         </View>
       </ThemedView>
     );
@@ -169,8 +220,16 @@ export default function StashScreen() {
 
   if (!items || items.length === 0) {
     return (
-      <ThemedView style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.emptyContainer, { paddingTop: headerHeight + Spacing["4xl"], paddingBottom: tabBarHeight + Spacing.xl }]}>
+      <ThemedView style={styles.container}>
+        <View
+          style={[
+            styles.emptyContainer,
+            {
+              paddingTop: headerHeight + Spacing["4xl"],
+              paddingBottom: tabBarHeight + Spacing.xl,
+            },
+          ]}
+        >
           <EmptyState onScan={handleScan} />
         </View>
       </ThemedView>
@@ -178,7 +237,7 @@ export default function StashScreen() {
   }
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+    <ThemedView style={styles.container}>
       <FlatList
         data={displayItems || []}
         keyExtractor={(item) => item.id.toString()}
@@ -199,25 +258,32 @@ export default function StashScreen() {
               handleClearSearch();
               refetch();
             }}
-            tintColor={theme.primary}
+            tintColor={Colors.dark.primary}
           />
         }
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={() => (
           <View>
             <View style={styles.header}>
-              <ThemedText style={[styles.headerTitle, { color: theme.text }]}>Stash</ThemedText>
-              <ThemedText style={[styles.headerCount, { color: theme.textSecondary }]}>
-                {isSearchActive ? `${displayItems?.length || 0} results` : `${items.length} items`}
+              <ThemedText style={styles.headerTitle}>Stash</ThemedText>
+              <ThemedText style={styles.headerCount}>
+                {isSearchActive
+                  ? `${displayItems?.length || 0} results`
+                  : `${items.length} items`}
               </ThemedText>
             </View>
             <View style={styles.searchContainer}>
-              <View style={[styles.searchInputWrapper, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <Feather name="search" size={18} color={theme.textSecondary} style={styles.searchIcon} />
+              <View style={styles.searchInputWrapper}>
+                <Feather
+                  name="search"
+                  size={18}
+                  color={Colors.dark.textSecondary}
+                  style={styles.searchIcon}
+                />
                 <TextInput
-                  style={[styles.searchInput, { color: theme.text }]}
+                  style={styles.searchInput}
                   placeholder='Try "Louis Vuitton bags under $300"'
-                  placeholderTextColor={theme.textSecondary}
+                  placeholderTextColor={Colors.dark.textSecondary}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   onSubmitEditing={handleSearch}
@@ -225,36 +291,70 @@ export default function StashScreen() {
                   testID="input-stash-search"
                 />
                 {searchQuery.length > 0 ? (
-                  <Pressable onPress={handleClearSearch} hitSlop={8} testID="button-clear-search">
-                    <Feather name="x" size={18} color={theme.textSecondary} />
+                  <Pressable
+                    onPress={handleClearSearch}
+                    hitSlop={8}
+                    testID="button-clear-search"
+                  >
+                    <Feather
+                      name="x"
+                      size={18}
+                      color={Colors.dark.textSecondary}
+                    />
                   </Pressable>
                 ) : null}
               </View>
               {searchQuery.trim().length > 0 ? (
                 <Pressable
-                  style={({ pressed }) => [styles.searchButton, { backgroundColor: theme.primary }, pressed && { opacity: 0.8 }]}
+                  style={({ pressed }) => [
+                    styles.searchButton,
+                    pressed && { opacity: 0.8 },
+                  ]}
                   onPress={handleSearch}
                   disabled={searchMutation.isPending}
                   testID="button-search"
                 >
                   {searchMutation.isPending ? (
-                    <ActivityIndicator size="small" color={theme.buttonText} />
+                    <ActivityIndicator
+                      size="small"
+                      color={Colors.dark.buttonText}
+                    />
                   ) : (
-                    <Feather name="arrow-right" size={18} color={theme.buttonText} />
+                    <Feather
+                      name="arrow-right"
+                      size={18}
+                      color={Colors.dark.buttonText}
+                    />
                   )}
                 </Pressable>
               ) : null}
             </View>
             {isSearchActive ? (
-              <Pressable style={styles.clearResultsBanner} onPress={handleClearSearch} testID="button-clear-results">
-                <Feather name="x-circle" size={14} color={theme.primary} />
-                <ThemedText style={[styles.clearResultsText, { color: theme.primary }]}>Clear search results</ThemedText>
+              <Pressable
+                style={styles.clearResultsBanner}
+                onPress={handleClearSearch}
+                testID="button-clear-results"
+              >
+                <Feather
+                  name="x-circle"
+                  size={14}
+                  color={Colors.dark.primary}
+                />
+                <ThemedText style={styles.clearResultsText}>
+                  Clear search results
+                </ThemedText>
               </Pressable>
             ) : null}
             {searchMutation.isError ? (
               <View style={styles.errorBanner}>
-                <Feather name="alert-circle" size={14} color={theme.error} />
-                <ThemedText style={[styles.errorText, { color: theme.error }]}>Search failed. Please try again.</ThemedText>
+                <Feather
+                  name="alert-circle"
+                  size={14}
+                  color={Colors.dark.error}
+                />
+                <ThemedText style={styles.errorText}>
+                  Search failed. Please try again.
+                </ThemedText>
               </View>
             ) : null}
           </View>
@@ -262,9 +362,17 @@ export default function StashScreen() {
         ListEmptyComponent={() =>
           isSearchActive ? (
             <View style={styles.noResults}>
-              <Feather name="search" size={40} color={theme.textSecondary} />
-              <ThemedText style={[styles.noResultsTitle, { color: theme.text }]}>No items found</ThemedText>
-              <ThemedText style={[styles.noResultsSubtitle, { color: theme.textSecondary }]}>Try a different search query</ThemedText>
+              <Feather
+                name="search"
+                size={40}
+                color={Colors.dark.textSecondary}
+              />
+              <ThemedText style={styles.noResultsTitle}>
+                No items found
+              </ThemedText>
+              <ThemedText style={styles.noResultsSubtitle}>
+                Try a different search query
+              </ThemedText>
             </View>
           ) : null
         }
@@ -277,6 +385,7 @@ export default function StashScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.dark.backgroundRoot,
   },
   loadingContainer: {
     flex: 1,
@@ -295,9 +404,11 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...Typography.h3,
+    color: Colors.dark.text,
   },
   headerCount: {
     ...Typography.small,
+    color: Colors.dark.textSecondary,
   },
   searchContainer: {
     flexDirection: "row",
@@ -309,16 +420,19 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: Colors.dark.surface,
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
     height: 44,
     borderWidth: 1,
+    borderColor: Colors.dark.border,
   },
   searchIcon: {
     marginRight: Spacing.sm,
   },
   searchInput: {
     flex: 1,
+    color: Colors.dark.text,
     fontSize: 14,
     height: "100%",
   },
@@ -326,6 +440,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: BorderRadius.md,
+    backgroundColor: Colors.dark.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -338,6 +453,7 @@ const styles = StyleSheet.create({
   },
   clearResultsText: {
     ...Typography.small,
+    color: Colors.dark.primary,
   },
   errorBanner: {
     flexDirection: "row",
@@ -348,6 +464,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...Typography.small,
+    color: Colors.dark.error,
   },
   noResults: {
     alignItems: "center",
@@ -357,9 +474,11 @@ const styles = StyleSheet.create({
   },
   noResultsTitle: {
     ...Typography.h4,
+    color: Colors.dark.text,
   },
   noResultsSubtitle: {
     ...Typography.small,
+    color: Colors.dark.textSecondary,
   },
   row: {
     justifyContent: "space-between",
@@ -367,6 +486,7 @@ const styles = StyleSheet.create({
   },
   itemCard: {
     width: CARD_WIDTH,
+    backgroundColor: Colors.dark.surface,
     borderRadius: BorderRadius.md,
     overflow: "hidden",
   },
@@ -382,20 +502,15 @@ const styles = StyleSheet.create({
   itemImagePlaceholder: {
     width: "100%",
     height: "100%",
+    backgroundColor: Colors.dark.backgroundSecondary,
     alignItems: "center",
     justifyContent: "center",
-  },
-  handmadeBadge: {
-    position: "absolute",
-    top: Spacing.sm,
-    left: Spacing.sm,
-    borderRadius: 10,
-    padding: 4,
   },
   publishedBadge: {
     position: "absolute",
     top: Spacing.sm,
     right: Spacing.sm,
+    backgroundColor: Colors.dark.surface,
     borderRadius: 10,
     padding: 4,
   },
@@ -405,11 +520,13 @@ const styles = StyleSheet.create({
   itemTitle: {
     ...Typography.small,
     fontWeight: "600",
+    color: Colors.dark.text,
     marginBottom: Spacing.xs,
   },
   itemValue: {
     ...Typography.caption,
     fontWeight: "700",
+    color: Colors.dark.primary,
   },
   emptyState: {
     flex: 1,
@@ -424,10 +541,12 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     ...Typography.h3,
+    color: Colors.dark.text,
     marginBottom: Spacing.sm,
   },
   emptySubtitle: {
     ...Typography.body,
+    color: Colors.dark.textSecondary,
     textAlign: "center",
     paddingHorizontal: Spacing["2xl"],
     marginBottom: Spacing["2xl"],
@@ -435,6 +554,7 @@ const styles = StyleSheet.create({
   emptyButton: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: Colors.dark.primary,
     paddingHorizontal: Spacing["2xl"],
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.md,
@@ -442,6 +562,7 @@ const styles = StyleSheet.create({
   },
   emptyButtonText: {
     ...Typography.button,
+    color: Colors.dark.buttonText,
   },
   fab: {
     position: "absolute",
@@ -450,6 +571,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
+    backgroundColor: Colors.dark.primary,
     alignItems: "center",
     justifyContent: "center",
     ...Shadows.floating,

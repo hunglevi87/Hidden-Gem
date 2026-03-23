@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Pressable, TextInput, Alert, Platform, ActivityIndicator, Linking } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  TextInput,
+  Alert,
+  Platform,
+  ActivityIndicator,
+  Linking,
+} from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
@@ -30,7 +39,9 @@ export default function EbaySettingsScreen() {
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [refreshToken, setRefreshToken] = useState("");
-  const [environment, setEnvironment] = useState<"sandbox" | "production">("sandbox");
+  const [environment, setEnvironment] = useState<"sandbox" | "production">(
+    "sandbox",
+  );
   const [showClientSecret, setShowClientSecret] = useState(false);
   const [showRefreshToken, setShowRefreshToken] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -45,11 +56,11 @@ export default function EbaySettingsScreen() {
     try {
       const env = await AsyncStorage.getItem(EBAY_ENVIRONMENT_KEY);
       const status = await AsyncStorage.getItem(EBAY_STATUS_KEY);
-      
+
       if (env === "production" || env === "sandbox") {
         setEnvironment(env);
       }
-      
+
       if (Platform.OS !== "web") {
         const id = await SecureStore.getItemAsync(EBAY_CLIENT_ID_KEY);
         const secret = await SecureStore.getItemAsync(EBAY_CLIENT_SECRET_KEY);
@@ -74,7 +85,10 @@ export default function EbaySettingsScreen() {
 
   const saveSettings = async () => {
     if (!clientId || !clientSecret) {
-      Alert.alert("Missing Information", "Please fill in at least Client ID and Client Secret.");
+      Alert.alert(
+        "Missing Information",
+        "Please fill in at least Client ID and Client Secret.",
+      );
       return;
     }
 
@@ -82,21 +96,30 @@ export default function EbaySettingsScreen() {
     try {
       await AsyncStorage.setItem(EBAY_ENVIRONMENT_KEY, environment);
       await AsyncStorage.setItem(EBAY_STATUS_KEY, "connected");
-      
+
       if (Platform.OS !== "web") {
         await SecureStore.setItemAsync(EBAY_CLIENT_ID_KEY, clientId.trim());
-        await SecureStore.setItemAsync(EBAY_CLIENT_SECRET_KEY, clientSecret.trim());
+        await SecureStore.setItemAsync(
+          EBAY_CLIENT_SECRET_KEY,
+          clientSecret.trim(),
+        );
         if (refreshToken) {
-          await SecureStore.setItemAsync(EBAY_REFRESH_TOKEN_KEY, refreshToken.trim());
+          await SecureStore.setItemAsync(
+            EBAY_REFRESH_TOKEN_KEY,
+            refreshToken.trim(),
+          );
         }
       } else {
         await AsyncStorage.setItem(EBAY_CLIENT_ID_KEY, clientId.trim());
         await AsyncStorage.setItem(EBAY_CLIENT_SECRET_KEY, clientSecret.trim());
         if (refreshToken) {
-          await AsyncStorage.setItem(EBAY_REFRESH_TOKEN_KEY, refreshToken.trim());
+          await AsyncStorage.setItem(
+            EBAY_REFRESH_TOKEN_KEY,
+            refreshToken.trim(),
+          );
         }
       }
-      
+
       setIsConfigured(!!(clientId && clientSecret));
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -111,15 +134,19 @@ export default function EbaySettingsScreen() {
 
   const testConnection = async () => {
     if (!clientId || !clientSecret) {
-      Alert.alert("Missing Information", "Please fill in Client ID and Client Secret before testing.");
+      Alert.alert(
+        "Missing Information",
+        "Please fill in Client ID and Client Secret before testing.",
+      );
       return;
     }
 
     setTesting(true);
     try {
-      const baseUrl = environment === "production"
-        ? "https://api.ebay.com"
-        : "https://api.sandbox.ebay.com";
+      const baseUrl =
+        environment === "production"
+          ? "https://api.ebay.com"
+          : "https://api.sandbox.ebay.com";
 
       const credentials = btoa(`${clientId.trim()}:${clientSecret.trim()}`);
       const response = await fetch(`${baseUrl}/identity/v1/oauth2/token`, {
@@ -137,53 +164,68 @@ export default function EbaySettingsScreen() {
         }
         Alert.alert("Success", `Connected to eBay ${environment} environment!`);
       } else if (response.status === 401) {
-        Alert.alert("Authentication Failed", "Please check your Client ID and Client Secret.");
+        Alert.alert(
+          "Authentication Failed",
+          "Please check your Client ID and Client Secret.",
+        );
       } else {
         const errorData = await response.json().catch(() => ({}));
-        Alert.alert("Connection Failed", errorData.error_description || `Status: ${response.status}`);
+        Alert.alert(
+          "Connection Failed",
+          errorData.error_description || `Status: ${response.status}`,
+        );
       }
     } catch (error: any) {
-      Alert.alert("Connection Error", "Could not connect to eBay. Please check your credentials.");
+      Alert.alert(
+        "Connection Error",
+        "Could not connect to eBay. Please check your credentials.",
+      );
     } finally {
       setTesting(false);
     }
   };
 
   const clearSettings = () => {
-    Alert.alert("Disconnect eBay", "Are you sure you want to remove your eBay connection?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Disconnect",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await AsyncStorage.removeItem(EBAY_ENVIRONMENT_KEY);
-            await AsyncStorage.removeItem(EBAY_STATUS_KEY);
-            
-            if (Platform.OS !== "web") {
-              await SecureStore.deleteItemAsync(EBAY_CLIENT_ID_KEY);
-              await SecureStore.deleteItemAsync(EBAY_CLIENT_SECRET_KEY);
-              await SecureStore.deleteItemAsync(EBAY_REFRESH_TOKEN_KEY);
-            } else {
-              await AsyncStorage.removeItem(EBAY_CLIENT_ID_KEY);
-              await AsyncStorage.removeItem(EBAY_CLIENT_SECRET_KEY);
-              await AsyncStorage.removeItem(EBAY_REFRESH_TOKEN_KEY);
+    Alert.alert(
+      "Disconnect eBay",
+      "Are you sure you want to remove your eBay connection?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Disconnect",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem(EBAY_ENVIRONMENT_KEY);
+              await AsyncStorage.removeItem(EBAY_STATUS_KEY);
+
+              if (Platform.OS !== "web") {
+                await SecureStore.deleteItemAsync(EBAY_CLIENT_ID_KEY);
+                await SecureStore.deleteItemAsync(EBAY_CLIENT_SECRET_KEY);
+                await SecureStore.deleteItemAsync(EBAY_REFRESH_TOKEN_KEY);
+              } else {
+                await AsyncStorage.removeItem(EBAY_CLIENT_ID_KEY);
+                await AsyncStorage.removeItem(EBAY_CLIENT_SECRET_KEY);
+                await AsyncStorage.removeItem(EBAY_REFRESH_TOKEN_KEY);
+              }
+
+              setClientId("");
+              setClientSecret("");
+              setRefreshToken("");
+              setEnvironment("sandbox");
+              setIsConfigured(false);
+              if (Platform.OS !== "web") {
+                Haptics.notificationAsync(
+                  Haptics.NotificationFeedbackType.Success,
+                );
+              }
+            } catch (error) {
+              Alert.alert("Error", "Failed to disconnect.");
             }
-            
-            setClientId("");
-            setClientSecret("");
-            setRefreshToken("");
-            setEnvironment("sandbox");
-            setIsConfigured(false);
-            if (Platform.OS !== "web") {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            }
-          } catch (error) {
-            Alert.alert("Error", "Failed to disconnect.");
-          }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const openEbayDevPortal = () => {
@@ -195,7 +237,10 @@ export default function EbaySettingsScreen() {
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing["2xl"] },
+          {
+            paddingTop: headerHeight + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing["2xl"],
+          },
         ]}
       >
         <View style={styles.headerSection}>
@@ -210,9 +255,14 @@ export default function EbaySettingsScreen() {
 
         {Platform.OS === "web" ? (
           <View style={styles.webWarning}>
-            <Feather name="alert-triangle" size={16} color={Colors.dark.warning} />
+            <Feather
+              name="alert-triangle"
+              size={16}
+              color={Colors.dark.warning}
+            />
             <ThemedText style={styles.webWarningText}>
-              For best security, use the mobile app to store credentials securely.
+              For best security, use the mobile app to store credentials
+              securely.
             </ThemedText>
           </View>
         ) : null}
@@ -224,7 +274,8 @@ export default function EbaySettingsScreen() {
               <ThemedText style={styles.statusText}>Connected</ThemedText>
             </View>
             <ThemedText style={styles.statusUrl}>
-              {environment === "production" ? "Production" : "Sandbox"} Environment
+              {environment === "production" ? "Production" : "Sandbox"}{" "}
+              Environment
             </ThemedText>
           </View>
         ) : null}
@@ -234,18 +285,34 @@ export default function EbaySettingsScreen() {
             <ThemedText style={styles.inputLabel}>Environment</ThemedText>
             <View style={styles.toggleRow}>
               <Pressable
-                style={[styles.toggleButton, environment === "sandbox" && styles.toggleButtonActive]}
+                style={[
+                  styles.toggleButton,
+                  environment === "sandbox" && styles.toggleButtonActive,
+                ]}
                 onPress={() => setEnvironment("sandbox")}
               >
-                <ThemedText style={[styles.toggleText, environment === "sandbox" && styles.toggleTextActive]}>
+                <ThemedText
+                  style={[
+                    styles.toggleText,
+                    environment === "sandbox" && styles.toggleTextActive,
+                  ]}
+                >
                   Sandbox
                 </ThemedText>
               </Pressable>
               <Pressable
-                style={[styles.toggleButton, environment === "production" && styles.toggleButtonActive]}
+                style={[
+                  styles.toggleButton,
+                  environment === "production" && styles.toggleButtonActive,
+                ]}
                 onPress={() => setEnvironment("production")}
               >
-                <ThemedText style={[styles.toggleText, environment === "production" && styles.toggleTextActive]}>
+                <ThemedText
+                  style={[
+                    styles.toggleText,
+                    environment === "production" && styles.toggleTextActive,
+                  ]}
+                >
                   Production
                 </ThemedText>
               </Pressable>
@@ -253,9 +320,16 @@ export default function EbaySettingsScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <ThemedText style={styles.inputLabel}>Client ID (App ID)</ThemedText>
+            <ThemedText style={styles.inputLabel}>
+              Client ID (App ID)
+            </ThemedText>
             <View style={styles.inputContainer}>
-              <Feather name="user" size={18} color={Colors.dark.textSecondary} style={styles.inputIcon} />
+              <Feather
+                name="user"
+                size={18}
+                color={Colors.dark.textSecondary}
+                style={styles.inputIcon}
+              />
               <TextInput
                 value={clientId}
                 onChangeText={setClientId}
@@ -270,9 +344,16 @@ export default function EbaySettingsScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <ThemedText style={styles.inputLabel}>Client Secret (Cert ID)</ThemedText>
+            <ThemedText style={styles.inputLabel}>
+              Client Secret (Cert ID)
+            </ThemedText>
             <View style={styles.inputContainer}>
-              <Feather name="key" size={18} color={Colors.dark.textSecondary} style={styles.inputIcon} />
+              <Feather
+                name="key"
+                size={18}
+                color={Colors.dark.textSecondary}
+                style={styles.inputIcon}
+              />
               <TextInput
                 value={clientSecret}
                 onChangeText={setClientSecret}
@@ -284,16 +365,30 @@ export default function EbaySettingsScreen() {
                 style={[styles.textInput, styles.secretInput]}
                 testID="input-ebay-client-secret"
               />
-              <Pressable onPress={() => setShowClientSecret(!showClientSecret)} style={styles.eyeButton}>
-                <Feather name={showClientSecret ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
+              <Pressable
+                onPress={() => setShowClientSecret(!showClientSecret)}
+                style={styles.eyeButton}
+              >
+                <Feather
+                  name={showClientSecret ? "eye-off" : "eye"}
+                  size={18}
+                  color={Colors.dark.textSecondary}
+                />
               </Pressable>
             </View>
           </View>
 
           <View style={styles.inputGroup}>
-            <ThemedText style={styles.inputLabel}>Refresh Token (Optional)</ThemedText>
+            <ThemedText style={styles.inputLabel}>
+              Refresh Token (Optional)
+            </ThemedText>
             <View style={styles.inputContainer}>
-              <Feather name="refresh-cw" size={18} color={Colors.dark.textSecondary} style={styles.inputIcon} />
+              <Feather
+                name="refresh-cw"
+                size={18}
+                color={Colors.dark.textSecondary}
+                style={styles.inputIcon}
+              />
               <TextInput
                 value={refreshToken}
                 onChangeText={setRefreshToken}
@@ -305,8 +400,15 @@ export default function EbaySettingsScreen() {
                 style={[styles.textInput, styles.secretInput]}
                 testID="input-ebay-refresh-token"
               />
-              <Pressable onPress={() => setShowRefreshToken(!showRefreshToken)} style={styles.eyeButton}>
-                <Feather name={showRefreshToken ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
+              <Pressable
+                onPress={() => setShowRefreshToken(!showRefreshToken)}
+                style={styles.eyeButton}
+              >
+                <Feather
+                  name={showRefreshToken ? "eye-off" : "eye"}
+                  size={18}
+                  color={Colors.dark.textSecondary}
+                />
               </Pressable>
             </View>
             <ThemedText style={styles.inputHint}>
@@ -315,14 +417,24 @@ export default function EbaySettingsScreen() {
           </View>
 
           <Pressable style={styles.helpLink} onPress={openEbayDevPortal}>
-            <Feather name="external-link" size={16} color={Colors.dark.primary} />
-            <ThemedText style={styles.helpLinkText}>Open eBay Developer Portal</ThemedText>
+            <Feather
+              name="external-link"
+              size={16}
+              color={Colors.dark.primary}
+            />
+            <ThemedText style={styles.helpLinkText}>
+              Open eBay Developer Portal
+            </ThemedText>
           </Pressable>
         </View>
 
         <View style={styles.buttonSection}>
           <Pressable
-            style={({ pressed }) => [styles.testButton, pressed && { opacity: 0.8 }, testing && { opacity: 0.6 }]}
+            style={({ pressed }) => [
+              styles.testButton,
+              pressed && { opacity: 0.8 },
+              testing && { opacity: 0.6 },
+            ]}
             onPress={testConnection}
             disabled={testing || saving}
             testID="button-test-ebay"
@@ -332,13 +444,19 @@ export default function EbaySettingsScreen() {
             ) : (
               <>
                 <Feather name="wifi" size={18} color={Colors.dark.text} />
-                <ThemedText style={styles.testButtonText}>Test Connection</ThemedText>
+                <ThemedText style={styles.testButtonText}>
+                  Test Connection
+                </ThemedText>
               </>
             )}
           </Pressable>
 
           <Pressable
-            style={({ pressed }) => [styles.saveButton, pressed && { opacity: 0.8 }, saving && { opacity: 0.6 }]}
+            style={({ pressed }) => [
+              styles.saveButton,
+              pressed && { opacity: 0.8 },
+              saving && { opacity: 0.6 },
+            ]}
             onPress={saveSettings}
             disabled={saving || testing}
             testID="button-save-ebay"
@@ -348,19 +466,26 @@ export default function EbaySettingsScreen() {
             ) : (
               <>
                 <Feather name="save" size={18} color={Colors.dark.buttonText} />
-                <ThemedText style={styles.saveButtonText}>Save Settings</ThemedText>
+                <ThemedText style={styles.saveButtonText}>
+                  Save Settings
+                </ThemedText>
               </>
             )}
           </Pressable>
 
           {isConfigured ? (
             <Pressable
-              style={({ pressed }) => [styles.disconnectButton, pressed && { opacity: 0.8 }]}
+              style={({ pressed }) => [
+                styles.disconnectButton,
+                pressed && { opacity: 0.8 },
+              ]}
               onPress={clearSettings}
               testID="button-disconnect-ebay"
             >
               <Feather name="x-circle" size={18} color={Colors.dark.error} />
-              <ThemedText style={styles.disconnectButtonText}>Disconnect</ThemedText>
+              <ThemedText style={styles.disconnectButtonText}>
+                Disconnect
+              </ThemedText>
             </Pressable>
           ) : null}
         </View>

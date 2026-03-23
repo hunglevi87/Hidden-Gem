@@ -1,5 +1,12 @@
 import React, { useCallback } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Alert, Platform, Switch } from "react-native";
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Alert,
+  Platform,
+} from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,8 +14,6 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { Feather } from "@expo/vector-icons";
 import { useAuthContext } from "@/contexts/AuthContext";
-import { useThemeContext } from "@/contexts/ThemeContext";
-import { useTheme } from "@/hooks/useTheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -21,11 +26,10 @@ interface SettingsSectionProps {
 }
 
 function SettingsSection({ title, children }: SettingsSectionProps) {
-  const { theme } = useTheme();
   return (
     <View style={styles.section}>
-      <ThemedText style={[styles.sectionTitle, { color: theme.textSecondary }]}>{title}</ThemedText>
-      <View style={[styles.sectionContent, { backgroundColor: theme.surface }]}>{children}</View>
+      <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+      <View style={styles.sectionContent}>{children}</View>
     </View>
   );
 }
@@ -38,47 +42,86 @@ interface SettingsRowProps {
   isDestructive?: boolean;
   showChevron?: boolean;
   status?: "connected" | "not_connected";
-  children?: React.ReactNode;
 }
 
-function SettingsRow({ icon, label, value, onPress, isDestructive, showChevron = true, status, children }: SettingsRowProps) {
-  const { theme } = useTheme();
+function SettingsRow({
+  icon,
+  label,
+  value,
+  onPress,
+  isDestructive,
+  showChevron = true,
+  status,
+}: SettingsRowProps) {
   return (
     <Pressable
       style={({ pressed }) => [
         styles.settingsRow,
-        { borderBottomColor: theme.border },
-        pressed && { backgroundColor: theme.backgroundSecondary }
+        pressed && styles.settingsRowPressed,
       ]}
       onPress={onPress}
       disabled={!onPress}
     >
       <View style={styles.settingsRowLeft}>
-        <View style={[
-          styles.iconContainer,
-          { backgroundColor: theme.backgroundSecondary },
-          isDestructive && styles.iconContainerDestructive
-        ]}>
-          <Feather name={icon} size={18} color={isDestructive ? theme.error : theme.primary} />
+        <View
+          style={[
+            styles.iconContainer,
+            isDestructive && styles.iconContainerDestructive,
+          ]}
+        >
+          <Feather
+            name={icon}
+            size={18}
+            color={isDestructive ? Colors.dark.error : Colors.dark.primary}
+          />
         </View>
-        <ThemedText style={[styles.settingsLabel, { color: theme.text }, isDestructive && { color: theme.error }]}>
+        <ThemedText
+          style={[
+            styles.settingsLabel,
+            isDestructive && styles.settingsLabelDestructive,
+          ]}
+        >
           {label}
         </ThemedText>
       </View>
       <View style={styles.settingsRowRight}>
-        {children}
         {status ? (
-          <View style={[styles.statusBadge, status === "connected" ? styles.statusBadgeConnected : styles.statusBadgeDisconnected]}>
-            <View style={[styles.statusDot, status === "connected" ? { backgroundColor: theme.success } : { backgroundColor: theme.textSecondary }]} />
-            <ThemedText style={[styles.statusBadgeText, status === "connected" ? { color: theme.success } : { color: theme.textSecondary }]}>
+          <View
+            style={[
+              styles.statusBadge,
+              status === "connected"
+                ? styles.statusBadgeConnected
+                : styles.statusBadgeDisconnected,
+            ]}
+          >
+            <View
+              style={[
+                styles.statusDot,
+                status === "connected"
+                  ? styles.statusDotConnected
+                  : styles.statusDotDisconnected,
+              ]}
+            />
+            <ThemedText
+              style={[
+                styles.statusBadgeText,
+                status === "connected"
+                  ? styles.statusTextConnected
+                  : styles.statusTextDisconnected,
+              ]}
+            >
               {status === "connected" ? "Connected" : "Not Connected"}
             </ThemedText>
           </View>
         ) : value ? (
-          <ThemedText style={[styles.settingsValue, { color: theme.textSecondary }]}>{value}</ThemedText>
+          <ThemedText style={styles.settingsValue}>{value}</ThemedText>
         ) : null}
         {showChevron && onPress ? (
-          <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+          <Feather
+            name="chevron-right"
+            size={20}
+            color={Colors.dark.textSecondary}
+          />
         ) : null}
       </View>
     </Pressable>
@@ -92,9 +135,8 @@ export default function SettingsScreen() {
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation<NavigationProp>();
   const { user, signOut } = useAuthContext();
-  const { theme: themeMode, toggleTheme } = useThemeContext();
-  const { theme } = useTheme();
-  const [wooCommerceStatus, setWooCommerceStatus] = React.useState("Not configured");
+  const [wooCommerceStatus, setWooCommerceStatus] =
+    React.useState("Not configured");
   const [ebayStatus, setEbayStatus] = React.useState("Not configured");
 
   const loadIntegrationStatus = useCallback(async () => {
@@ -120,7 +162,7 @@ export default function SettingsScreen() {
   useFocusEffect(
     useCallback(() => {
       loadIntegrationStatus();
-    }, [loadIntegrationStatus])
+    }, [loadIntegrationStatus]),
   );
 
   const handleSignOut = () => {
@@ -133,7 +175,9 @@ export default function SettingsScreen() {
           try {
             await signOut();
             if (Platform.OS !== "web") {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
             }
           } catch (error) {
             Alert.alert("Error", "Failed to sign out.");
@@ -144,54 +188,47 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+    <ThemedView style={styles.container}>
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing["2xl"] },
+          {
+            paddingTop: headerHeight + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing["2xl"],
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <SettingsSection title="Appearance">
-          <SettingsRow
-            icon={themeMode === "dark" ? "moon" : "sun"}
-            label="Dark Mode"
-            showChevron={false}
-          >
-            <Switch
-              value={themeMode === "dark"}
-              onValueChange={toggleTheme}
-              trackColor={{ false: theme.backgroundTertiary, true: theme.primary }}
-              thumbColor={Platform.OS === 'ios' ? undefined : theme.backgroundDefault}
-            />
-          </SettingsRow>
-        </SettingsSection>
-
-        <SettingsSection title="Emma (AI Configuration)">
+        <SettingsSection title="AI Configuration">
           <SettingsRow
             icon="cpu"
-            label="Emma's Brain"
+            label="AI Providers"
             onPress={() => navigation.navigate("AIProviders")}
           />
         </SettingsSection>
 
-        <View style={[styles.accountHeader, { backgroundColor: theme.surface }]}>
-          <View style={[styles.avatarContainer, { backgroundColor: theme.primary }]}>
-            <ThemedText style={[styles.avatarText, { color: theme.buttonText }]}>
+        <View style={styles.accountHeader}>
+          <View style={styles.avatarContainer}>
+            <ThemedText style={styles.avatarText}>
               {user?.email?.charAt(0).toUpperCase() || "?"}
             </ThemedText>
           </View>
           <View style={styles.accountInfo}>
-            <ThemedText style={[styles.accountEmail, { color: theme.text }]}>{user?.email || "Unknown"}</ThemedText>
-            <ThemedText style={[styles.accountLabel, { color: theme.textSecondary }]}>Signed in</ThemedText>
+            <ThemedText style={styles.accountEmail}>
+              {user?.email || "Unknown"}
+            </ThemedText>
+            <ThemedText style={styles.accountLabel}>Signed in</ThemedText>
           </View>
           <Pressable
-            style={({ pressed }) => [styles.signOutButton, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.signOutButton,
+              pressed && { opacity: 0.7 },
+            ]}
             onPress={handleSignOut}
             testID="button-sign-out"
           >
-            <Feather name="log-out" size={18} color={theme.error} />
-            <ThemedText style={[styles.signOutText, { color: theme.error }]}>Sign Out</ThemedText>
+            <Feather name="log-out" size={18} color={Colors.dark.error} />
+            <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
           </Pressable>
         </View>
 
@@ -199,7 +236,9 @@ export default function SettingsScreen() {
           <SettingsRow
             icon="shopping-bag"
             label="WooCommerce"
-            status={wooCommerceStatus === "Connected" ? "connected" : "not_connected"}
+            status={
+              wooCommerceStatus === "Connected" ? "connected" : "not_connected"
+            }
             onPress={() => navigation.navigate("WooCommerceSettings")}
           />
           <SettingsRow
@@ -211,9 +250,22 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         <SettingsSection title="App">
-          <SettingsRow icon="info" label="Version" value="1.0.0" showChevron={false} />
-          <SettingsRow icon="file-text" label="Terms of Service" onPress={() => navigation.navigate("TermsOfService")} />
-          <SettingsRow icon="shield" label="Privacy Policy" onPress={() => navigation.navigate("PrivacyPolicy")} />
+          <SettingsRow
+            icon="info"
+            label="Version"
+            value="1.0.0"
+            showChevron={false}
+          />
+          <SettingsRow
+            icon="file-text"
+            label="Terms of Service"
+            onPress={() => navigation.navigate("TermsOfService")}
+          />
+          <SettingsRow
+            icon="shield"
+            label="Privacy Policy"
+            onPress={() => navigation.navigate("PrivacyPolicy")}
+          />
         </SettingsSection>
       </ScrollView>
     </ThemedView>
@@ -223,6 +275,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.dark.backgroundRoot,
   },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
@@ -232,12 +285,14 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...Typography.small,
+    color: Colors.dark.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: Spacing.md,
     marginLeft: Spacing.xs,
   },
   sectionContent: {
+    backgroundColor: Colors.dark.surface,
     borderRadius: BorderRadius.md,
     overflow: "hidden",
   },
@@ -248,6 +303,10 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  settingsRowPressed: {
+    backgroundColor: Colors.dark.backgroundSecondary,
   },
   settingsRowLeft: {
     flexDirection: "row",
@@ -263,6 +322,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
+    backgroundColor: Colors.dark.backgroundSecondary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -271,9 +331,14 @@ const styles = StyleSheet.create({
   },
   settingsLabel: {
     ...Typography.body,
+    color: Colors.dark.text,
+  },
+  settingsLabelDestructive: {
+    color: Colors.dark.error,
   },
   settingsValue: {
     ...Typography.small,
+    color: Colors.dark.textSecondary,
   },
   statusBadge: {
     flexDirection: "row",
@@ -294,13 +359,26 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
+  statusDotConnected: {
+    backgroundColor: Colors.dark.success,
+  },
+  statusDotDisconnected: {
+    backgroundColor: Colors.dark.textSecondary,
+  },
   statusBadgeText: {
     ...Typography.caption,
     fontWeight: "500",
   },
+  statusTextConnected: {
+    color: Colors.dark.success,
+  },
+  statusTextDisconnected: {
+    color: Colors.dark.textSecondary,
+  },
   accountHeader: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: Colors.dark.surface,
     borderRadius: BorderRadius.md,
     padding: Spacing.lg,
     marginBottom: Spacing["2xl"],
@@ -309,11 +387,13 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
+    backgroundColor: Colors.dark.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarText: {
     ...Typography.h4,
+    color: Colors.dark.buttonText,
     fontWeight: "700",
   },
   accountInfo: {
@@ -322,10 +402,12 @@ const styles = StyleSheet.create({
   },
   accountEmail: {
     ...Typography.body,
+    color: Colors.dark.text,
     fontWeight: "600",
   },
   accountLabel: {
     ...Typography.caption,
+    color: Colors.dark.textSecondary,
     marginTop: 2,
   },
   signOutButton: {
@@ -339,6 +421,60 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     ...Typography.small,
+    color: Colors.dark.error,
     fontWeight: "600",
+  },
+  apiKeySection: {
+    padding: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  apiKeyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  apiKeyTitle: {
+    ...Typography.body,
+    fontWeight: "600",
+    color: Colors.dark.text,
+  },
+  apiKeyInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.dark.backgroundSecondary,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  apiKeyInput: {
+    flex: 1,
+    ...Typography.small,
+    color: Colors.dark.text,
+    paddingVertical: Spacing.md,
+  },
+  eyeButton: {
+    padding: Spacing.xs,
+  },
+  apiKeyHint: {
+    ...Typography.caption,
+    color: Colors.dark.textSecondary,
+    marginTop: Spacing.sm,
+  },
+  saveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.dark.primary,
+    margin: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.sm,
+  },
+  saveButtonText: {
+    ...Typography.button,
+    color: Colors.dark.buttonText,
   },
 });

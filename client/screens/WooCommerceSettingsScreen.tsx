@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Pressable, TextInput, Alert, Platform, ActivityIndicator, Linking } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  TextInput,
+  Alert,
+  Platform,
+  ActivityIndicator,
+  Linking,
+} from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
@@ -44,12 +53,14 @@ export default function WooCommerceSettingsScreen() {
     try {
       const url = await AsyncStorage.getItem(WOOCOMMERCE_URL_KEY);
       const status = await AsyncStorage.getItem(WOOCOMMERCE_STATUS_KEY);
-      
+
       if (url) setStoreUrl(url);
-      
+
       if (Platform.OS !== "web") {
         const key = await SecureStore.getItemAsync(WOOCOMMERCE_CONSUMER_KEY);
-        const secret = await SecureStore.getItemAsync(WOOCOMMERCE_CONSUMER_SECRET);
+        const secret = await SecureStore.getItemAsync(
+          WOOCOMMERCE_CONSUMER_SECRET,
+        );
         if (key) setConsumerKey(key);
         if (secret) setConsumerSecret(secret);
         setIsConfigured(status === "connected");
@@ -72,7 +83,10 @@ export default function WooCommerceSettingsScreen() {
     }
 
     let formattedUrl = storeUrl.trim();
-    if (!formattedUrl.startsWith("http://") && !formattedUrl.startsWith("https://")) {
+    if (
+      !formattedUrl.startsWith("http://") &&
+      !formattedUrl.startsWith("https://")
+    ) {
       formattedUrl = "https://" + formattedUrl;
     }
     if (formattedUrl.endsWith("/")) {
@@ -83,15 +97,27 @@ export default function WooCommerceSettingsScreen() {
     try {
       await AsyncStorage.setItem(WOOCOMMERCE_URL_KEY, formattedUrl);
       await AsyncStorage.setItem(WOOCOMMERCE_STATUS_KEY, "connected");
-      
+
       if (Platform.OS !== "web") {
-        await SecureStore.setItemAsync(WOOCOMMERCE_CONSUMER_KEY, consumerKey.trim());
-        await SecureStore.setItemAsync(WOOCOMMERCE_CONSUMER_SECRET, consumerSecret.trim());
+        await SecureStore.setItemAsync(
+          WOOCOMMERCE_CONSUMER_KEY,
+          consumerKey.trim(),
+        );
+        await SecureStore.setItemAsync(
+          WOOCOMMERCE_CONSUMER_SECRET,
+          consumerSecret.trim(),
+        );
       } else {
-        await AsyncStorage.setItem(WOOCOMMERCE_CONSUMER_KEY, consumerKey.trim());
-        await AsyncStorage.setItem(WOOCOMMERCE_CONSUMER_SECRET, consumerSecret.trim());
+        await AsyncStorage.setItem(
+          WOOCOMMERCE_CONSUMER_KEY,
+          consumerKey.trim(),
+        );
+        await AsyncStorage.setItem(
+          WOOCOMMERCE_CONSUMER_SECRET,
+          consumerSecret.trim(),
+        );
       }
-      
+
       setStoreUrl(formattedUrl);
       setIsConfigured(true);
       if (Platform.OS !== "web") {
@@ -107,26 +133,37 @@ export default function WooCommerceSettingsScreen() {
 
   const testConnection = async () => {
     if (!storeUrl || !consumerKey || !consumerSecret) {
-      Alert.alert("Missing Information", "Please fill in all fields before testing.");
+      Alert.alert(
+        "Missing Information",
+        "Please fill in all fields before testing.",
+      );
       return;
     }
 
     setTesting(true);
     try {
       let formattedUrl = storeUrl.trim();
-      if (!formattedUrl.startsWith("http://") && !formattedUrl.startsWith("https://")) {
+      if (
+        !formattedUrl.startsWith("http://") &&
+        !formattedUrl.startsWith("https://")
+      ) {
         formattedUrl = "https://" + formattedUrl;
       }
       if (formattedUrl.endsWith("/")) {
         formattedUrl = formattedUrl.slice(0, -1);
       }
 
-      const credentials = btoa(`${consumerKey.trim()}:${consumerSecret.trim()}`);
-      const response = await fetch(`${formattedUrl}/wp-json/wc/v3/system_status`, {
-        headers: {
-          Authorization: `Basic ${credentials}`,
+      const credentials = btoa(
+        `${consumerKey.trim()}:${consumerSecret.trim()}`,
+      );
+      const response = await fetch(
+        `${formattedUrl}/wp-json/wc/v3/system_status`,
+        {
+          headers: {
+            Authorization: `Basic ${credentials}`,
+          },
         },
-      });
+      );
 
       if (response.ok) {
         if (Platform.OS !== "web") {
@@ -134,53 +171,70 @@ export default function WooCommerceSettingsScreen() {
         }
         Alert.alert("Success", "Connection to WooCommerce store verified!");
       } else if (response.status === 401) {
-        Alert.alert("Authentication Failed", "Please check your consumer key and secret.");
+        Alert.alert(
+          "Authentication Failed",
+          "Please check your consumer key and secret.",
+        );
       } else {
-        Alert.alert("Connection Failed", `Status: ${response.status}. Please check your store URL.`);
+        Alert.alert(
+          "Connection Failed",
+          `Status: ${response.status}. Please check your store URL.`,
+        );
       }
     } catch (error: any) {
-      Alert.alert("Connection Error", "Could not connect to store. Please check the URL and ensure WooCommerce REST API is enabled.");
+      Alert.alert(
+        "Connection Error",
+        "Could not connect to store. Please check the URL and ensure WooCommerce REST API is enabled.",
+      );
     } finally {
       setTesting(false);
     }
   };
 
   const clearSettings = () => {
-    Alert.alert("Disconnect WooCommerce", "Are you sure you want to remove your WooCommerce connection?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Disconnect",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await AsyncStorage.removeItem(WOOCOMMERCE_URL_KEY);
-            await AsyncStorage.removeItem(WOOCOMMERCE_STATUS_KEY);
-            
-            if (Platform.OS !== "web") {
-              await SecureStore.deleteItemAsync(WOOCOMMERCE_CONSUMER_KEY);
-              await SecureStore.deleteItemAsync(WOOCOMMERCE_CONSUMER_SECRET);
-            } else {
-              await AsyncStorage.removeItem(WOOCOMMERCE_CONSUMER_KEY);
-              await AsyncStorage.removeItem(WOOCOMMERCE_CONSUMER_SECRET);
+    Alert.alert(
+      "Disconnect WooCommerce",
+      "Are you sure you want to remove your WooCommerce connection?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Disconnect",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem(WOOCOMMERCE_URL_KEY);
+              await AsyncStorage.removeItem(WOOCOMMERCE_STATUS_KEY);
+
+              if (Platform.OS !== "web") {
+                await SecureStore.deleteItemAsync(WOOCOMMERCE_CONSUMER_KEY);
+                await SecureStore.deleteItemAsync(WOOCOMMERCE_CONSUMER_SECRET);
+              } else {
+                await AsyncStorage.removeItem(WOOCOMMERCE_CONSUMER_KEY);
+                await AsyncStorage.removeItem(WOOCOMMERCE_CONSUMER_SECRET);
+              }
+
+              setStoreUrl("");
+              setConsumerKey("");
+              setConsumerSecret("");
+              setIsConfigured(false);
+              if (Platform.OS !== "web") {
+                Haptics.notificationAsync(
+                  Haptics.NotificationFeedbackType.Success,
+                );
+              }
+            } catch (error) {
+              Alert.alert("Error", "Failed to disconnect.");
             }
-            
-            setStoreUrl("");
-            setConsumerKey("");
-            setConsumerSecret("");
-            setIsConfigured(false);
-            if (Platform.OS !== "web") {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            }
-          } catch (error) {
-            Alert.alert("Error", "Failed to disconnect.");
-          }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const openWooCommerceHelp = () => {
-    Linking.openURL("https://woocommerce.github.io/woocommerce-rest-api-docs/#authentication");
+    Linking.openURL(
+      "https://woocommerce.github.io/woocommerce-rest-api-docs/#authentication",
+    );
   };
 
   return (
@@ -188,12 +242,19 @@ export default function WooCommerceSettingsScreen() {
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing["2xl"] },
+          {
+            paddingTop: headerHeight + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing["2xl"],
+          },
         ]}
       >
         <View style={styles.headerSection}>
           <View style={styles.iconCircle}>
-            <Feather name="shopping-bag" size={32} color={Colors.dark.primary} />
+            <Feather
+              name="shopping-bag"
+              size={32}
+              color={Colors.dark.primary}
+            />
           </View>
           <ThemedText style={styles.headerTitle}>WooCommerce</ThemedText>
           <ThemedText style={styles.headerSubtitle}>
@@ -203,9 +264,14 @@ export default function WooCommerceSettingsScreen() {
 
         {Platform.OS === "web" ? (
           <View style={styles.webWarning}>
-            <Feather name="alert-triangle" size={16} color={Colors.dark.warning} />
+            <Feather
+              name="alert-triangle"
+              size={16}
+              color={Colors.dark.warning}
+            />
             <ThemedText style={styles.webWarningText}>
-              For best security, use the mobile app to store credentials securely.
+              For best security, use the mobile app to store credentials
+              securely.
             </ThemedText>
           </View>
         ) : null}
@@ -224,7 +290,12 @@ export default function WooCommerceSettingsScreen() {
           <View style={styles.inputGroup}>
             <ThemedText style={styles.inputLabel}>Store URL</ThemedText>
             <View style={styles.inputContainer}>
-              <Feather name="globe" size={18} color={Colors.dark.textSecondary} style={styles.inputIcon} />
+              <Feather
+                name="globe"
+                size={18}
+                color={Colors.dark.textSecondary}
+                style={styles.inputIcon}
+              />
               <TextInput
                 value={storeUrl}
                 onChangeText={setStoreUrl}
@@ -245,7 +316,12 @@ export default function WooCommerceSettingsScreen() {
           <View style={styles.inputGroup}>
             <ThemedText style={styles.inputLabel}>Consumer Key</ThemedText>
             <View style={styles.inputContainer}>
-              <Feather name="key" size={18} color={Colors.dark.textSecondary} style={styles.inputIcon} />
+              <Feather
+                name="key"
+                size={18}
+                color={Colors.dark.textSecondary}
+                style={styles.inputIcon}
+              />
               <TextInput
                 value={consumerKey}
                 onChangeText={setConsumerKey}
@@ -257,8 +333,15 @@ export default function WooCommerceSettingsScreen() {
                 style={[styles.textInput, styles.secretInput]}
                 testID="input-woo-key"
               />
-              <Pressable onPress={() => setShowConsumerKey(!showConsumerKey)} style={styles.eyeButton}>
-                <Feather name={showConsumerKey ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
+              <Pressable
+                onPress={() => setShowConsumerKey(!showConsumerKey)}
+                style={styles.eyeButton}
+              >
+                <Feather
+                  name={showConsumerKey ? "eye-off" : "eye"}
+                  size={18}
+                  color={Colors.dark.textSecondary}
+                />
               </Pressable>
             </View>
           </View>
@@ -266,7 +349,12 @@ export default function WooCommerceSettingsScreen() {
           <View style={styles.inputGroup}>
             <ThemedText style={styles.inputLabel}>Consumer Secret</ThemedText>
             <View style={styles.inputContainer}>
-              <Feather name="lock" size={18} color={Colors.dark.textSecondary} style={styles.inputIcon} />
+              <Feather
+                name="lock"
+                size={18}
+                color={Colors.dark.textSecondary}
+                style={styles.inputIcon}
+              />
               <TextInput
                 value={consumerSecret}
                 onChangeText={setConsumerSecret}
@@ -278,21 +366,34 @@ export default function WooCommerceSettingsScreen() {
                 style={[styles.textInput, styles.secretInput]}
                 testID="input-woo-secret"
               />
-              <Pressable onPress={() => setShowConsumerSecret(!showConsumerSecret)} style={styles.eyeButton}>
-                <Feather name={showConsumerSecret ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
+              <Pressable
+                onPress={() => setShowConsumerSecret(!showConsumerSecret)}
+                style={styles.eyeButton}
+              >
+                <Feather
+                  name={showConsumerSecret ? "eye-off" : "eye"}
+                  size={18}
+                  color={Colors.dark.textSecondary}
+                />
               </Pressable>
             </View>
           </View>
 
           <Pressable style={styles.helpLink} onPress={openWooCommerceHelp}>
             <Feather name="help-circle" size={16} color={Colors.dark.primary} />
-            <ThemedText style={styles.helpLinkText}>How to get API credentials</ThemedText>
+            <ThemedText style={styles.helpLinkText}>
+              How to get API credentials
+            </ThemedText>
           </Pressable>
         </View>
 
         <View style={styles.buttonSection}>
           <Pressable
-            style={({ pressed }) => [styles.testButton, pressed && { opacity: 0.8 }, testing && { opacity: 0.6 }]}
+            style={({ pressed }) => [
+              styles.testButton,
+              pressed && { opacity: 0.8 },
+              testing && { opacity: 0.6 },
+            ]}
             onPress={testConnection}
             disabled={testing || saving}
             testID="button-test-woo"
@@ -302,13 +403,19 @@ export default function WooCommerceSettingsScreen() {
             ) : (
               <>
                 <Feather name="wifi" size={18} color={Colors.dark.text} />
-                <ThemedText style={styles.testButtonText}>Test Connection</ThemedText>
+                <ThemedText style={styles.testButtonText}>
+                  Test Connection
+                </ThemedText>
               </>
             )}
           </Pressable>
 
           <Pressable
-            style={({ pressed }) => [styles.saveButton, pressed && { opacity: 0.8 }, saving && { opacity: 0.6 }]}
+            style={({ pressed }) => [
+              styles.saveButton,
+              pressed && { opacity: 0.8 },
+              saving && { opacity: 0.6 },
+            ]}
             onPress={saveSettings}
             disabled={saving || testing}
             testID="button-save-woo"
@@ -318,19 +425,26 @@ export default function WooCommerceSettingsScreen() {
             ) : (
               <>
                 <Feather name="save" size={18} color={Colors.dark.buttonText} />
-                <ThemedText style={styles.saveButtonText}>Save Settings</ThemedText>
+                <ThemedText style={styles.saveButtonText}>
+                  Save Settings
+                </ThemedText>
               </>
             )}
           </Pressable>
 
           {isConfigured ? (
             <Pressable
-              style={({ pressed }) => [styles.disconnectButton, pressed && { opacity: 0.8 }]}
+              style={({ pressed }) => [
+                styles.disconnectButton,
+                pressed && { opacity: 0.8 },
+              ]}
               onPress={clearSettings}
               testID="button-disconnect-woo"
             >
               <Feather name="x-circle" size={18} color={Colors.dark.error} />
-              <ThemedText style={styles.disconnectButtonText}>Disconnect</ThemedText>
+              <ThemedText style={styles.disconnectButtonText}>
+                Disconnect
+              </ThemedText>
             </Pressable>
           ) : null}
         </View>

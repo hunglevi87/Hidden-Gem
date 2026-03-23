@@ -137,3 +137,5 @@ Emma is the name of HiddenGem's AI system, presented to customers across the app
 - 2026-03-08: Added human-in-the-loop approval gate for high-value item publishing
 - 2026-03-08: Added OpenFang configuration UI in AI Providers settings
 - 2026-02-06: Added Terms of Service and Privacy Policy screens
+- 2026-02-06: Added environment setup documentation (ENVIRONMENT.md)
+- 2026-02-06: Added E2E testing infrastructure with Maestro

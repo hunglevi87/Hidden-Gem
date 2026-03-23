@@ -19,7 +19,9 @@ let supabaseInstance: SupabaseClient | null = null;
 
 const createSupabaseClient = (): SupabaseClient | null => {
   if (!isSupabaseConfigured) {
-    console.warn("Supabase credentials not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY environment variables.");
+    console.warn(
+      "Supabase credentials not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY environment variables.",
+    );
     return null;
   }
 

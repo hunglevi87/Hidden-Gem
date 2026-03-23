@@ -20,7 +20,7 @@ async function run() {
     `SELECT table_name FROM information_schema.tables
      WHERE table_schema = 'public'
      AND table_name IN ('sellers','products','listings','integrations','ai_generations','sync_queue')
-     ORDER BY table_name`
+     ORDER BY table_name`,
   );
   console.log("Created tables:", res.rows.map((r) => r.table_name).join(", "));
 
