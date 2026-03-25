@@ -152,7 +152,7 @@ async function processJob(job: SyncQueueItem): Promise<void> {
   const result = await handler(ctx);
 
   if (result.success) {
-    await onSuccess(job, product, result);
+    await onSuccess(job, product, integration, result);
   } else {
     await onFailure(job, product, result);
   }
@@ -195,6 +195,7 @@ async function resolveIntegration(
 async function onSuccess(
   job: SyncQueueItem,
   product: Product,
+  integration: Integration,
   result: ActionResult,
 ): Promise<void> {
   console.log(
@@ -235,7 +236,7 @@ async function onSuccess(
   // Update product sync status
   await updateProductSyncStatus(product, job.marketplace, "synced");
 
-  // Update integration sync count
+  // Update integration sync count — use integration.id to avoid marketplace name mismatch
   await db
     .update(integrations)
     .set({
@@ -243,12 +244,7 @@ async function onSuccess(
       syncCount: sql`${integrations.syncCount} + 1`,
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        eq(integrations.sellerId, job.sellerId),
-        eq(integrations.service, job.marketplace),
-      ),
-    );
+    .where(eq(integrations.id, integration.id));
 }
 
 async function onFailure(
