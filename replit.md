@@ -5,7 +5,7 @@
 HiddenGem is a professional inventory management mobile application for a designer/luxury resale and handmade artisan goods shop. The app enables users to scan items, leverage Emma AI for instant appraisals and pricing, and generate SEO-optimized listings saved to Supabase. The storefront reads directly from Supabase — no publish action needed.
 
 **Item Types:**
-- **Designer/Luxury Items**: Two-photo scan ritual (full item + label close-up) — Emma authenticates and appraises
+- **Designer/Luxury Items**: Three-photo scan ritual (2 full item photos + 1 label close-up photo) — Emma authenticates and appraises
 - **Handmade Goods**: Single photo + details form (product name, ingredients, scent/texture, size/volume, COG) — Emma prices using artisan market formula (COG × 3-5×)
 
 **CRITICAL**: Never use "vintage," "antique," or "collectible" language. This is a designer resale + handmade artisan goods shop only.
