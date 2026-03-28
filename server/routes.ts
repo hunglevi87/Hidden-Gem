@@ -1043,7 +1043,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // --- Sync queue inspection (read-only for now) ---
+  // --- Sync queue endpoints ---
 
   app.get("/api/sync-queue", async (req: Request, res: Response) => {
     try {

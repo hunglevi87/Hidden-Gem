@@ -120,12 +120,16 @@ Emma is the name of HiddenGem's AI system, presented to customers across the app
 - Discover tab: Curated articles with featured card layout
 - Backend API: Express.js with PostgreSQL/Drizzle, marketplace proxy endpoints
 - P0 item 3.3 Shared Auth Contract + API Auth Middleware: Added `server/middleware/auth.ts` and applied auth middleware across API routes in `server/routes.ts`
+- P0 item 3.1 Sync Queue Worker: Production-ready queue processor for `sync_queue` table with status transitions (pending→processing→completed/failed/retry), exponential backoff retries, eBay token lifecycle management, and listing/product sync status updates. Supports actions: `ebay_create_listing`, `ebay_update_listing`, `ebay_delete_listing`, `ebay_value_check` (P2 stub), `woo_create_listing`, `woo_update_listing`, `woo_delete_listing`. New files: `server/services/sync-worker.ts`, `server/services/sync-actions.ts`. New API endpoints: `POST /api/sync-queue` (enqueue), `GET /api/sync-queue/:id`, `POST /api/sync-queue/:id/retry`, `POST /api/sync-queue/:id/cancel`. Worker starts on server boot (15s poll interval) with graceful shutdown.
 - FlipAgent backend: Seller profiles, product inventory, marketplace listings, AI audit trail, sync queue
 
 ### Not Yet Implemented
 - Advanced publish status tracking across marketplaces (eBay/WooCommerce sync state)
 
 ## Recent Changes
+- 2026-03-13: Completed P0 item 3.1 (Sync Queue Worker); added `server/services/sync-worker.ts` and `server/services/sync-actions.ts` with full queue processing, retry/backoff, eBay/WooCommerce action handlers, token lifecycle, listing table upserts, and management API endpoints. Worker auto-starts on server boot.
+- 2026-03-13: Completed P0 item 3.3 (Shared Auth Contract + API Auth Middleware); added `server/middleware/auth.ts` and updated `server/routes.ts` to enforce auth middleware across API routes. Run: https://oz.warp.dev/runs/f9b7026d-0bb6-4ac6-ab40-f914216957d6
+- 2026-03-08: Added OpenFang as multi-model AI routing provider (replaces HuggingFace as secondary model)
 - 2026-03-17: Multi-model fallback chain (Gemini → OpenFang → HuggingFace → Gemini) with post-analysis correction pass
 - 2026-03-17: Full AI-powered SEO listing generation via "Generate Listing" button in Item Details
 - 2026-03-17: First-run onboarding carousel (3 steps, AsyncStorage flag, PagerView)
@@ -139,3 +143,6 @@ Emma is the name of HiddenGem's AI system, presented to customers across the app
 - 2026-02-06: Added Terms of Service and Privacy Policy screens
 - 2026-02-06: Added environment setup documentation (ENVIRONMENT.md)
 - 2026-02-06: Added E2E testing infrastructure with Maestro
+
+## Next Unblocked Step
+- P0 item 3.2: stash_items → products Migration Path
