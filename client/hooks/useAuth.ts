@@ -20,15 +20,20 @@ export function useAuth() {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+      });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -92,23 +97,24 @@ export function useAuth() {
           skipBrowserRedirect: true,
         },
       });
-      
+
       if (error) throw error;
       if (!data?.url) throw new Error("Failed to get OAuth URL");
 
       const result = await WebBrowser.openAuthSessionAsync(
         data.url,
-        redirectUrl
+        redirectUrl,
       );
 
       if (result.type === "success") {
         const url = result.url;
         const parsedUrl = new URL(url);
-        
+
         const code = parsedUrl.searchParams.get("code");
-        
+
         if (code) {
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          const { error: exchangeError } =
+            await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
         } else {
           const accessToken = parsedUrl.searchParams.get("access_token");
@@ -123,7 +129,7 @@ export function useAuth() {
             const hashParams = new URLSearchParams(parsedUrl.hash.slice(1));
             const hashAccessToken = hashParams.get("access_token");
             const hashRefreshToken = hashParams.get("refresh_token");
-            
+
             if (hashAccessToken && hashRefreshToken) {
               await supabase.auth.setSession({
                 access_token: hashAccessToken,

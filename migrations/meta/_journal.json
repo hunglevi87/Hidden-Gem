@@ -8,6 +8,20 @@
       "when": 1772495598665,
       "tag": "0000_sticky_night_thrasher",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1742680000000,
+      "tag": "0005_gift_sets",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1742681000000,
+      "tag": "0006_platform_versions",
+      "breakpoints": true
     }
   ]
 }

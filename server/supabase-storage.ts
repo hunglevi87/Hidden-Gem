@@ -20,9 +20,7 @@ let supabaseClient: SupabaseClient | null = null;
 function getSupabase(): SupabaseClient {
   if (!supabaseClient) {
     const url =
-      process.env.EXPO_PUBLIC_SUPABASE_URL ||
-      process.env.SUPABASE_URL ||
-      "";
+      process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
     const key =
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
@@ -84,9 +82,7 @@ export async function uploadProductImage(
  */
 export async function deleteProductImage(path: string): Promise<void> {
   const supabase = getSupabase();
-  const { error } = await supabase.storage
-    .from(BUCKET_NAME)
-    .remove([path]);
+  const { error } = await supabase.storage.from(BUCKET_NAME).remove([path]);
 
   if (error) throw new Error(`Delete failed: ${error.message}`);
 }

@@ -11,6 +11,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Modal,
+  Linking,
 } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -26,6 +27,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
+import type { HandmadeDetails } from "@shared/types";
 
 type AnalysisRouteProp = RouteProp<RootStackParamList, "Analysis">;
 
@@ -44,6 +46,20 @@ const OPENFANG_MODEL_KEY = "openfang_model";
 const CUSTOM_ENDPOINT_KEY = "custom_ai_endpoint";
 const CUSTOM_API_KEY = "custom_ai_api_key";
 const CUSTOM_MODEL_KEY = "custom_ai_model_name";
+
+interface PlatformListing {
+  title: string;
+  description: string;
+  tags: string[];
+  suggestedPrice: number;
+}
+
+interface MarketMatch {
+  source: string;
+  title: string;
+  price: number;
+  url: string;
+}
 
 interface AnalysisResult {
   // Legacy fields
@@ -73,6 +89,15 @@ interface AnalysisResult {
   aspects: Record<string, string[]>;
   ebayCategoryId: string;
   wooCategory: string;
+  // Multi-platform listing versions
+  platformVersions?: {
+    ebay: PlatformListing;
+    poshmark: PlatformListing;
+    depop: PlatformListing;
+    stripe: PlatformListing;
+  };
+  // Market comparable sold listings
+  marketMatches?: MarketMatch[];
 }
 
 async function secureGet(key: string): Promise<string | null> {
@@ -87,7 +112,7 @@ async function getAnalysisProviderPayload(): Promise<Record<string, string>> {
   const provider: AIProvider =
     active === "gemini" || active === "openai" || active === "anthropic" || active === "openfang" || active === "custom"
       ? active
-      : "openfang";
+      : "gemini";
 
   const payload: Record<string, string> = { provider };
 
@@ -153,7 +178,7 @@ export default function AnalysisScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<AnalysisRouteProp>();
   const queryClient = useQueryClient();
-  const { fullImageUri, labelImageUri } = route.params;
+  const { fullImageUri, labelImageUri, itemType, handmadeDetails } = route.params;
 
   const [state, setState] = useState<AppraisalState>("appraising");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
@@ -188,7 +213,11 @@ export default function AnalysisScreen() {
     try {
       const formData = new FormData();
       formData.append("fullImage", { uri: fullImageUri, type: "image/jpeg", name: "full.jpg" } as any);
-      formData.append("labelImage", { uri: labelImageUri, type: "image/jpeg", name: "label.jpg" } as any);
+      if (labelImageUri) {
+        formData.append("labelImage", { uri: labelImageUri, type: "image/jpeg", name: "label.jpg" } as any);
+      }
+      if (itemType) formData.append("itemType", itemType);
+      if (handmadeDetails) formData.append("handmadeDetails", JSON.stringify(handmadeDetails));
       const providerPayload = await getAnalysisProviderPayload();
       for (const [key, value] of Object.entries(providerPayload)) {
         formData.append(key, value);
@@ -268,6 +297,8 @@ export default function AnalysisScreen() {
       fullImageUrl: fullImageUri,
       labelImageUrl: labelImageUri,
       aiAnalysis: dataToSave,
+      itemType: itemType || "designer",
+      handmadeDetails: handmadeDetails || null,
     });
   };
 
@@ -322,8 +353,8 @@ export default function AnalysisScreen() {
           <View style={styles.loadingAnimation}>
             <Feather name="star" size={48} color={Colors.dark.primary} />
           </View>
-          <ThemedText style={styles.loadingTitle}>Analyzing Item...</ThemedText>
-          <ThemedText style={styles.loadingSubtitle}>Our AI is identifying and appraising your find</ThemedText>
+          <ThemedText style={styles.loadingTitle}>Emma is Looking...</ThemedText>
+          <ThemedText style={styles.loadingSubtitle}>Emma is identifying and appraising your find</ThemedText>
           <ActivityIndicator size="large" color={Colors.dark.primary} style={{ marginTop: Spacing["2xl"] }} />
         </View>
       </ThemedView>
@@ -370,19 +401,21 @@ export default function AnalysisScreen() {
       <ThemedView style={styles.container}>
         <KeyboardAwareScrollViewCompat contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
           <View style={styles.imagesRow}>
-            <View style={styles.imageContainer}>
+            <View style={[styles.imageContainer, !labelImageUri && { flex: undefined, width: 140 }]}>
               <Image source={{ uri: fullImageUri }} style={styles.previewImage} resizeMode="cover" />
-              <ThemedText style={styles.imageLabel}>Full Item</ThemedText>
+              <ThemedText style={styles.imageLabel}>{itemType === "handmade" ? "Product" : "Full Item"}</ThemedText>
             </View>
-            <View style={styles.imageContainer}>
-              <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
-              <ThemedText style={styles.imageLabel}>Label</ThemedText>
-            </View>
+            {labelImageUri ? (
+              <View style={styles.imageContainer}>
+                <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
+                <ThemedText style={styles.imageLabel}>Label</ThemedText>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.card}>
-            <ThemedText style={styles.cardTitle}>Tell AI What to Fix</ThemedText>
-            <ThemedText style={styles.cardSubtitle}>Describe what the AI missed or got wrong</ThemedText>
+            <ThemedText style={styles.cardTitle}>Tell Emma What to Fix</ThemedText>
+            <ThemedText style={styles.cardSubtitle}>Describe what Emma missed or got wrong</ThemedText>
             
             <TextInput
               style={styles.feedbackInput}
@@ -404,7 +437,7 @@ export default function AnalysisScreen() {
                 disabled={!retryFeedback.trim()}
               >
                 <Feather name="refresh-cw" size={18} color={Colors.dark.buttonText} />
-                <ThemedText style={styles.primaryButtonText}>Re-Analyze</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>Re-Appraise with Emma</ThemedText>
               </Pressable>
             </View>
           </View>
@@ -591,14 +624,16 @@ export default function AnalysisScreen() {
       <ThemedView style={styles.container}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
           <View style={styles.imagesRow}>
-            <View style={styles.imageContainer}>
+            <View style={[styles.imageContainer, !labelImageUri && { flex: undefined, width: 140 }]}>
               <Image source={{ uri: fullImageUri }} style={styles.previewImage} resizeMode="cover" />
-              <ThemedText style={styles.imageLabel}>Full Item</ThemedText>
+              <ThemedText style={styles.imageLabel}>{itemType === "handmade" ? "Product" : "Full Item"}</ThemedText>
             </View>
-            <View style={styles.imageContainer}>
-              <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
-              <ThemedText style={styles.imageLabel}>Label</ThemedText>
-            </View>
+            {labelImageUri ? (
+              <View style={styles.imageContainer}>
+                <Image source={{ uri: labelImageUri }} style={styles.previewImage} resizeMode="cover" />
+                <ThemedText style={styles.imageLabel}>Label</ThemedText>
+              </View>
+            ) : null}
           </View>
 
           {/* Header */}
@@ -607,6 +642,12 @@ export default function AnalysisScreen() {
               <View style={styles.brandBadge}>
                 <ThemedText style={styles.brandText}>{result.brand || "Unknown Brand"}</ThemedText>
               </View>
+              {itemType === "handmade" && (
+                <View style={styles.handmadeBadge}>
+                  <Feather name="feather" size={12} color="#a78bfa" />
+                  <ThemedText style={styles.handmadeBadgeText}>Handmade</ThemedText>
+                </View>
+              )}
               <View style={[styles.confidenceBadge, { backgroundColor: CONFIDENCE_COLORS[result.confidence] + "20" }]}>
                 <View style={[styles.confidenceDot, { backgroundColor: CONFIDENCE_COLORS[result.confidence] }]} />
                 <ThemedText style={[styles.confidenceText, { color: CONFIDENCE_COLORS[result.confidence] }]}>
@@ -689,17 +730,48 @@ export default function AnalysisScreen() {
             </View>
           </View>
 
+          {/* Market Matches */}
+          {result.marketMatches && result.marketMatches.length > 0 && (
+            <View style={styles.card}>
+              <ThemedText style={styles.cardTitle}>Comparable Sales</ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.marketMatchesScroll}>
+                {result.marketMatches.map((match, i) => (
+                  <Pressable
+                    key={i}
+                    style={styles.marketMatchCard}
+                    onPress={() => { if (match.url) Linking.openURL(match.url).catch(() => {}); }}
+                  >
+                    <View style={styles.marketMatchSource}>
+                      <ThemedText style={styles.marketMatchSourceText}>{match.source}</ThemedText>
+                    </View>
+                    <ThemedText style={styles.marketMatchPrice}>${match.price}</ThemedText>
+                    <ThemedText style={styles.marketMatchTitle} numberOfLines={2}>{match.title}</ThemedText>
+                    <Feather name="external-link" size={12} color={Colors.dark.textSecondary} style={{ marginTop: 4 }} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <Pressable style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.8 }]} onPress={handleSave}>
               <Feather name="check" size={20} color={Colors.dark.buttonText} />
               <ThemedText style={styles.primaryButtonText}>Looks Good — Save</ThemedText>
             </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [styles.editListingButton, pressed && { opacity: 0.8 }]}
+              onPress={() => navigation.navigate("ListingEditor", { analysisResult: result, fullImageUri, labelImageUri, itemType })}
+            >
+              <Feather name="layers" size={18} color={Colors.dark.primary} />
+              <ThemedText style={styles.editListingButtonText}>Edit Listing by Platform</ThemedText>
+            </Pressable>
             
             <View style={styles.secondaryButtons}>
               <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleEdit}>
                 <Feather name="edit-2" size={18} color={Colors.dark.text} />
-                <ThemedText style={styles.secondaryButtonText}>Edit</ThemedText>
+                <ThemedText style={styles.secondaryButtonText}>Quick Edit</ThemedText>
               </Pressable>
               
               <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.8 }]} onPress={handleRetry}>
@@ -754,6 +826,8 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.md },
   brandBadge: { backgroundColor: Colors.dark.primary + "20", paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
   brandText: { ...Typography.small, color: Colors.dark.primary, fontWeight: "600" },
+  handmadeBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#a78bfa20", paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
+  handmadeBadgeText: { fontSize: 11, fontWeight: "600", color: "#a78bfa" },
   confidenceBadge: { flexDirection: "row", alignItems: "center", gap: Spacing.xs, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
   confidenceDot: { width: 8, height: 8, borderRadius: 4 },
   confidenceText: { ...Typography.caption, fontWeight: "500" },
@@ -820,4 +894,16 @@ const styles = StyleSheet.create({
   
   // Retry
   feedbackInput: { backgroundColor: Colors.dark.backgroundSecondary, borderRadius: BorderRadius.sm, padding: Spacing.md, color: Colors.dark.text, ...Typography.body, minHeight: 100, textAlignVertical: "top", borderWidth: 1, borderColor: Colors.dark.border },
+
+  // Market Matches
+  marketMatchesScroll: { marginTop: Spacing.sm },
+  marketMatchCard: { width: 140, backgroundColor: Colors.dark.backgroundSecondary, borderRadius: BorderRadius.md, padding: Spacing.md, marginRight: Spacing.md, borderWidth: 1, borderColor: Colors.dark.border },
+  marketMatchSource: { backgroundColor: Colors.dark.primary + "20", paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: BorderRadius.sm, marginBottom: Spacing.xs, alignSelf: "flex-start" },
+  marketMatchSourceText: { fontSize: 10, color: Colors.dark.primary, fontWeight: "600" },
+  marketMatchPrice: { ...Typography.h4, color: Colors.dark.success, fontWeight: "700", marginBottom: Spacing.xs },
+  marketMatchTitle: { ...Typography.caption, color: Colors.dark.text, lineHeight: 16 },
+
+  // Edit Listing Button
+  editListingButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: Colors.dark.primary + "15", borderWidth: 1, borderColor: Colors.dark.primary, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, gap: Spacing.sm },
+  editListingButtonText: { ...Typography.button, color: Colors.dark.primary },
 });

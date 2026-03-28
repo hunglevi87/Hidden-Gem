@@ -41,7 +41,9 @@ function getWebUrl(environment: string): string {
 
 export async function getAccessToken(creds: EbayCredentials): Promise<string> {
   const baseUrl = getBaseUrl(creds.environment);
-  const credentials = Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString("base64");
+  const credentials = Buffer.from(
+    `${creds.clientId}:${creds.clientSecret}`,
+  ).toString("base64");
 
   const response = await fetch(`${baseUrl}/identity/v1/oauth2/token`, {
     method: "POST",
@@ -54,7 +56,9 @@ export async function getAccessToken(creds: EbayCredentials): Promise<string> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error_description || "Failed to authenticate with eBay");
+    throw new Error(
+      error.error_description || "Failed to authenticate with eBay",
+    );
   }
 
   const data = await response.json();
@@ -64,7 +68,7 @@ export async function getAccessToken(creds: EbayCredentials): Promise<string> {
 export async function getActiveListings(
   creds: EbayCredentials,
   limit = 50,
-  offset = 0
+  offset = 0,
 ): Promise<{ listings: EbayListingSummary[]; total: number }> {
   const accessToken = await getAccessToken(creds);
   const baseUrl = getBaseUrl(creds.environment);
@@ -77,7 +81,7 @@ export async function getActiveListings(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-    }
+    },
   );
 
   if (!response.ok) {
@@ -85,7 +89,10 @@ export async function getActiveListings(
       return { listings: [], total: 0 };
     }
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.errors?.[0]?.message || `Failed to fetch listings: ${response.status}`);
+    throw new Error(
+      error.errors?.[0]?.message ||
+        `Failed to fetch listings: ${response.status}`,
+    );
   }
 
   const data = await response.json();
@@ -99,9 +106,7 @@ export async function getActiveListings(
     quantity: offer.availableQuantity || 0,
     quantitySold: offer.quantitySold || 0,
     status: offer.status || "UNKNOWN",
-    listingUrl: offer.listingId
-      ? `${webUrl}/itm/${offer.listingId}`
-      : "",
+    listingUrl: offer.listingId ? `${webUrl}/itm/${offer.listingId}` : "",
     sku: offer.sku,
   }));
 
@@ -111,7 +116,7 @@ export async function getActiveListings(
 export async function getInventoryItems(
   creds: EbayCredentials,
   limit = 50,
-  offset = 0
+  offset = 0,
 ): Promise<{ items: EbayInventoryItem[]; total: number }> {
   const accessToken = await getAccessToken(creds);
   const baseUrl = getBaseUrl(creds.environment);
@@ -123,7 +128,7 @@ export async function getInventoryItems(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-    }
+    },
   );
 
   if (!response.ok) {
@@ -131,7 +136,10 @@ export async function getInventoryItems(
       return { items: [], total: 0 };
     }
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.errors?.[0]?.message || `Failed to fetch inventory: ${response.status}`);
+    throw new Error(
+      error.errors?.[0]?.message ||
+        `Failed to fetch inventory: ${response.status}`,
+    );
   }
 
   const data = await response.json();
@@ -151,7 +159,7 @@ export async function getInventoryItems(
 
 export async function endListing(
   creds: EbayCredentials,
-  offerId: string
+  offerId: string,
 ): Promise<{ success: boolean; message: string }> {
   const accessToken = await getAccessToken(creds);
   const baseUrl = getBaseUrl(creds.environment);
@@ -163,7 +171,7 @@ export async function endListing(
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
-    }
+    },
   );
 
   if (response.ok || response.status === 204) {
@@ -171,14 +179,16 @@ export async function endListing(
   }
 
   const error = await response.json().catch(() => ({}));
-  throw new Error(error.errors?.[0]?.message || `Failed to end listing: ${response.status}`);
+  throw new Error(
+    error.errors?.[0]?.message || `Failed to end listing: ${response.status}`,
+  );
 }
 
 export async function updateListingPrice(
   creds: EbayCredentials,
   offerId: string,
   price: string,
-  currency = "USD"
+  currency = "USD",
 ): Promise<{ success: boolean; message: string }> {
   const accessToken = await getAccessToken(creds);
   const baseUrl = getBaseUrl(creds.environment);
@@ -190,7 +200,7 @@ export async function updateListingPrice(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-    }
+    },
   );
 
   if (!getResponse.ok) {
@@ -212,7 +222,7 @@ export async function updateListingPrice(
         "Content-Language": "en-US",
       },
       body: JSON.stringify(offerData),
-    }
+    },
   );
 
   if (updateResponse.ok || updateResponse.status === 204) {
@@ -220,13 +230,16 @@ export async function updateListingPrice(
   }
 
   const error = await updateResponse.json().catch(() => ({}));
-  throw new Error(error.errors?.[0]?.message || `Failed to update price: ${updateResponse.status}`);
+  throw new Error(
+    error.errors?.[0]?.message ||
+      `Failed to update price: ${updateResponse.status}`,
+  );
 }
 
 export async function updateListingQuantity(
   creds: EbayCredentials,
   sku: string,
-  quantity: number
+  quantity: number,
 ): Promise<{ success: boolean; message: string }> {
   const accessToken = await getAccessToken(creds);
   const baseUrl = getBaseUrl(creds.environment);
@@ -238,7 +251,7 @@ export async function updateListingQuantity(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-    }
+    },
   );
 
   if (!getResponse.ok) {
@@ -260,7 +273,7 @@ export async function updateListingQuantity(
         "Content-Language": "en-US",
       },
       body: JSON.stringify(itemData),
-    }
+    },
   );
 
   if (updateResponse.ok || updateResponse.status === 204) {
@@ -268,30 +281,33 @@ export async function updateListingQuantity(
   }
 
   const error = await updateResponse.json().catch(() => ({}));
-  throw new Error(error.errors?.[0]?.message || `Failed to update quantity: ${updateResponse.status}`);
+  throw new Error(
+    error.errors?.[0]?.message ||
+      `Failed to update quantity: ${updateResponse.status}`,
+  );
 }
 
 export const EBAY_CATEGORY_MAP: Record<string, string> = {
-  "Handbag": "169291",
-  "Watch": "31387",
-  "Clothing": "11450",
-  "Shoes": "93427",
-  "Jewelry": "281",
-  "Electronics": "293",
-  "Collectible": "1",
-  "Art": "550",
-  "Antique": "20081",
-  "Vintage": "156955",
-  "Toy": "220",
-  "Book": "267",
-  "Sports": "888",
-  "Music": "11233",
-  "Coin": "11116",
-  "Stamp": "260",
-  "Pottery": "870",
-  "Glass": "870",
-  "Furniture": "3197",
-  "Rug": "20571",
+  Handbag: "169291",
+  Watch: "31387",
+  Clothing: "11450",
+  Shoes: "93427",
+  Jewelry: "281",
+  Electronics: "293",
+  Collectible: "1",
+  Art: "550",
+  Antique: "20081",
+  Vintage: "156955",
+  Toy: "220",
+  Book: "267",
+  Sports: "888",
+  Music: "11233",
+  Coin: "11116",
+  Stamp: "260",
+  Pottery: "870",
+  Glass: "870",
+  Furniture: "3197",
+  Rug: "20571",
 };
 
 export function mapCategoryToEbay(appCategory: string | null): string {
@@ -304,7 +320,10 @@ export function mapCategoryToEbay(appCategory: string | null): string {
 
   const lowerCategory = normalized.toLowerCase();
   for (const [key, value] of Object.entries(EBAY_CATEGORY_MAP)) {
-    if (lowerCategory.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerCategory)) {
+    if (
+      lowerCategory.includes(key.toLowerCase()) ||
+      key.toLowerCase().includes(lowerCategory)
+    ) {
       return value;
     }
   }
@@ -346,7 +365,8 @@ export async function refreshEbayAccessToken(
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(
-      error.error_description || `eBay token refresh failed: ${response.statusText}`,
+      error.error_description ||
+        `eBay token refresh failed: ${response.statusText}`,
     );
   }
 
@@ -409,8 +429,7 @@ export async function updateEbayListing(
     if (!response.ok && response.status !== 204) {
       const error = await response.json().catch(() => ({}));
       throw new Error(
-        error.errors?.[0]?.message ||
-          `eBay API error: ${response.statusText}`,
+        error.errors?.[0]?.message || `eBay API error: ${response.statusText}`,
       );
     }
 
@@ -453,8 +472,7 @@ export async function deleteEbayListing(
     if (!response.ok && response.status !== 204) {
       const error = await response.json().catch(() => ({}));
       throw new Error(
-        error.errors?.[0]?.message ||
-          `eBay API error: ${response.statusText}`,
+        error.errors?.[0]?.message || `eBay API error: ${response.statusText}`,
       );
     }
 
@@ -470,4 +488,190 @@ export async function deleteEbayListing(
       message: error instanceof Error ? error.message : "Unknown error",
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// MCP Actions — createInventoryItem, createOffer, publishOffer, makeOffer
+// ---------------------------------------------------------------------------
+
+export interface EbayCreateInventoryItemInput {
+  sku: string
+  title: string
+  description: string
+  condition: "NEW" | "LIKE_NEW" | "GOOD" | "ACCEPTABLE"
+  quantity: number
+  price: number
+  currency?: string
+  imageUrls?: string[]
+  categoryId?: string
+}
+
+export interface EbayCreateOfferInput {
+  sku: string
+  marketplaceId: string
+  categoryId: string
+  price: number
+  currency?: string
+  quantity: number
+  contentLanguage?: string
+  listingDescription?: string
+}
+
+export async function createInventoryItem(
+  creds: EbayCredentials,
+  input: EbayCreateInventoryItemInput,
+): Promise<{ success: boolean; sku: string }> {
+  const accessToken = await getAccessToken(creds)
+  const baseUrl = getBaseUrl(creds.environment)
+
+  const body = {
+    availability: {
+      shipToLocationAvailability: { quantity: input.quantity },
+    },
+    condition: input.condition ?? "GOOD",
+    product: {
+      title: input.title,
+      description: input.description,
+      imageUrls: input.imageUrls ?? [],
+      aspects: {},
+    },
+  }
+
+  const response = await fetch(
+    `${baseUrl}/sell/inventory/v1/inventory_item/${encodeURIComponent(input.sku)}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "Content-Language": "en-US",
+      },
+      body: JSON.stringify(body),
+    },
+  )
+
+  if (!response.ok && response.status !== 204) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(
+      (error as any)?.errors?.[0]?.message ?? `createInventoryItem failed: ${response.status}`,
+    )
+  }
+
+  return { success: true, sku: input.sku }
+}
+
+export interface EbayCreateOfferResponse {
+  offerId: string
+}
+
+export async function createOffer(
+  creds: EbayCredentials,
+  input: EbayCreateOfferInput,
+): Promise<EbayCreateOfferResponse> {
+  const accessToken = await getAccessToken(creds)
+  const baseUrl = getBaseUrl(creds.environment)
+
+  const body = {
+    sku: input.sku,
+    marketplaceId: input.marketplaceId,
+    format: "FIXED_PRICE",
+    availableQuantity: input.quantity,
+    categoryId: input.categoryId,
+    listingDescription: input.listingDescription ?? "",
+    pricingSummary: {
+      price: {
+        currency: input.currency ?? "USD",
+        value: String(input.price),
+      },
+    },
+    merchantLocationKey: "default",
+  }
+
+  const response = await fetch(`${baseUrl}/sell/inventory/v1/offer`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "Content-Language": input.contentLanguage ?? "en-US",
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(
+      (error as any)?.errors?.[0]?.message ?? `createOffer failed: ${response.status}`,
+    )
+  }
+
+  const data = await response.json()
+  return { offerId: data.offerId }
+}
+
+export async function publishOffer(
+  creds: EbayCredentials,
+  offerId: string,
+): Promise<{ listingId: string }> {
+  const accessToken = await getAccessToken(creds)
+  const baseUrl = getBaseUrl(creds.environment)
+
+  const response = await fetch(
+    `${baseUrl}/sell/inventory/v1/offer/${offerId}/publish`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    },
+  )
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(
+      (error as any)?.errors?.[0]?.message ?? `publishOffer failed: ${response.status}`,
+    )
+  }
+
+  const data = await response.json()
+  return { listingId: data.listingId }
+}
+
+export async function makeOffer(
+  creds: EbayCredentials,
+  listingId: string,
+  offerAmount: number,
+  currency = "USD",
+  message?: string,
+): Promise<{ success: boolean; offerId?: string }> {
+  const accessToken = await getAccessToken(creds)
+  const baseUrl = getBaseUrl(creds.environment)
+
+  const body: Record<string, unknown> = {
+    offerPrice: { currency, value: String(offerAmount) },
+    message,
+  }
+
+  const response = await fetch(
+    `${baseUrl}/buy/offer/v1_beta/offer?item_id=${encodeURIComponent(listingId)}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-EBAY-C-MARKETPLACE-ID": creds.environment === "production" ? "EBAY_US" : "EBAY_US",
+      },
+      body: JSON.stringify(body),
+    },
+  )
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(
+      (error as any)?.errors?.[0]?.message ?? `makeOffer failed: ${response.status}`,
+    )
+  }
+
+  const data = await response.json().catch(() => ({}))
+  return { success: true, offerId: (data as any)?.offerId }
 }

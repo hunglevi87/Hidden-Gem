@@ -1,15 +1,18 @@
 # Hidden\-Gem → TRS Integration Plan
-Emma is the AI system; OpenFang is the multi-model execution hand and Gemini is the backup path\. Hidden\-Gem is inventory source of truth on shared Supabase; TRS is storefront/admin consumer and orchestration surface\.
+Emma is the AI system; Gemini is the baseline identification hand and OpenFang is optional multi-model routing\. Hidden\-Gem is inventory source of truth on shared Supabase; TRS is storefront/admin consumer and orchestration surface\.
+## 0\.1 Execution Status \(2026-03-13\)
+* **Completed:** P0 item 3.3 Shared Auth Contract + API Auth Middleware \(run: https://oz.warp.dev/runs/f9b7026d-0bb6-4ac6-ab40-f914216957d6\)\.
+* **In Progress:** P0 item 3.1 Sync Queue Worker dispatched to cloud worker \(run: https://oz.warp.dev/runs/e71ae5fe-cbfc-4774-99b9-9420bc958a3f\)\.
 # 1 — Architecture Map
 ## 1\.1 Inventory \(source of truth\)
 Two parallel inventory models coexist on the same Postgres/Supabase instance:
 * **Legacy `stash_items`** — serial PK, simple text fields, `userId` varchar FK\. Used by the mobile app \(Scan → Analysis → Stash\)\. Fields: title, description, category, estimatedValue \(text\), condition, tags\[\], fullImageUrl, labelImageUrl, aiAnalysis \(jsonb\), SEO fields, publishStatus, publishedToWoocommerce/Ebay flags, marketplace IDs\.
 * **FlipAgent `products`** — UUID PK, `sellerId` UUID FK → `sellers`\. Richer model: SKU, brand, styleName, price/cost/estimatedProfit \(numeric\), images \(jsonb\), attributes \(jsonb\), tags\[\], listings \(jsonb\), syncStatus \(jsonb\)\. Related tables: `listings` \(per\-marketplace\), `integrations` \(per\-seller OAuth\), `sync_queue`, `ai_generations`\.
 Key observation: **There is no foreign key or sync path between `stash_items` and `products`\.** These are two separate worlds\. TRS must decide which model to consume \(recommendation: `products` \+ `listings`\)\.
-## 1\.2 OpenFang Hand Execution
+## 1\.2 Gemini-First + OpenFang Execution
 `server/ai-providers.ts` — the `analyzeWithOpenFang()` function sends image\+prompt to a configurable OpenFang endpoint \(`OPENFANG_BASE_URL` / user `openfangBaseUrl`\)\. Uses OpenAI\-compatible `/v1/chat/completions` with routing hints \(`prefer: ["vision"]`, `fallback: ["gpt-4o", "gemini-2.5-flash", "claude-sonnet-4-20250514"]`\)\. Returns full `AnalysisResult` with brand, authenticity, market analysis, SEO, aspects, eBay categoryId\.
 OpenFang credentials stored in `user_settings` table: `openfang_api_key`, `openfang_base_url`, `preferred_openfang_model`\.
-This is the pathway where **Emma** \(AI system\) executes — through the `POST /api/analyze` and `POST /api/analyze/retry` routes\.
+Gemini remains the default provider for `POST /api/analyze` and `POST /api/analyze/retry`; OpenFang is selected explicitly through provider settings/payload and can be used as an optional path\.
 The same flow should support a second-step valuation handoff: once Emma identifies an item, user can trigger **\"Emma check eBay for identified product\"** to run an eBay MCP comp lookup and refresh suggested value\.
 ## 1\.3 Jobs / Sync Queue
 `sync_queue` table: `sellerId`, `productId`, `marketplace`, `action`, `payload`, `status` \(pending/…\), `errorMessage`, `retryCount`, `maxRetries`, `scheduledAt`, `completedAt`\.
@@ -99,11 +102,40 @@ Both paths call eBay MCP comps/sold lookup, then update suggested value fields a
 3.6 (OF Config) ────┘
 ```
 ## 5 — Cloud Run Tonight Readiness
-Final checks before tonight’s cloud run:
-1. Confirm OpenFang is default provider and Gemini fallback is enabled for analyze/retry routes\.
-2. Validate eBay MCP credentials in `integrations` for target seller scope \(token refresh path tested\)\.
+**Validation Run Results (Local - March 13, 2026):**
+
+| Project | Check | Status | Details |
+|---------|-------|--------|---------|
+| TRS | `pnpm lint` | ✅ Passed | 6 warnings (vue/require-default-prop) |
+| TRS | `pnpm typecheck` | ✅ Passed | Warnings only (shadcn component collisions) |
+| TRS | `smoke:sync-queue` | ⚠️ **BLOCKED** | Supabase connection works, TRS tables missing |
+| Hidden-Gem | `npm run lint` | ✅ Passed | 8 errors (unescaped entities), 37 warnings |
+| Hidden-Gem | `npm run check:types` | ⚠️ **8 errors** | Navigation types + missing assets + pRetry |
+
+**Database Schema Gap Identified:**
+- Hidden-Gem tables exist: `users`, `stash_items`, `sync_queue`
+- TRS FlipAgent tables **MISSING**: `sellers`, `products`, `listings`, `integrations`, `ai_generations`
+- **Root Cause**: TRS Supabase migrations (`supabase/migrations/20260308*.sql`) not applied to shared database
+
+**Environment Status:**
+- ✅ Supabase credentials verified (URL + Service Role Key)
+- ✅ eBay credentials present (Client ID, Secret, Refresh Token)
+- ⚠️ OpenFang/Emma orchestration vars empty
+
+**Resume Path:**
+1. Apply TRS Supabase migrations via Supabase dashboard SQL Editor
+2. Verify tables: `sellers`, `products`, `listings`, `integrations`, `ai_generations`
+3. Populate OpenFang/Emma orchestration secrets
+4. Re-run `pnpm validate:orchestration`
+5. Execute final cloud run and capture run IDs
+
+---
+
+**Original Acceptance Scenarios (pending schema fix):**
+1. Confirm Gemini is default provider and OpenFang remains available as optional provider/fallback path for analyze/retry routes.
+2. Validate eBay MCP credentials in `integrations` for target seller scope (token refresh path tested).
 3. Run two acceptance scenarios end-to-end:
-   * **Scenario A**: New scan → identification → command \"Emma check eBay for identified product\" → updated suggested value returned\.
-   * **Scenario B**: Existing stashed item → command \"check eBay now\" → updated suggested value + `lastValuationAt` persisted\.
-4. Ensure queue worker can process `ebay_value_check` actions if sync mode is enabled\.
-5. Capture run artifacts: request/response samples, latency, comp count, and fallback events for post-run review\.
+   * **Scenario A**: New scan → identification → command "Emma check eBay for identified product" → updated suggested value returned.
+   * **Scenario B**: Existing stashed item → command "check eBay now" → updated suggested value + `lastValuationAt` persisted.
+4. Ensure queue worker can process `ebay_value_check` actions if sync mode is enabled.
+5. Capture run artifacts: request/response samples, latency, comp count, and fallback events for post-run review.

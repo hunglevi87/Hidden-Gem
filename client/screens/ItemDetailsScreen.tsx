@@ -10,40 +10,13 @@ import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { apiRequest } from "@/lib/query-client";
-import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import type { RootStackParamList, AnalysisResultParam } from "@/navigation/RootStackNavigator";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { getWooCommerceSettings, getEbaySettings, publishToWooCommerce, publishToEbay } from "@/lib/marketplace";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type ItemDetailsRouteProp = RouteProp<RootStackParamList, "ItemDetails">;
 
-interface AIAnalysis {
-  title: string;
-  description: string;
-  category: string;
-  estimatedValue: string;
-  estimatedValueLow?: number;
-  estimatedValueHigh?: number;
-  suggestedListPrice?: number;
-  condition: string;
-  brand?: string;
-  subtitle?: string;
-  shortDescription?: string;
-  fullDescription?: string;
-  seoTitle: string;
-  seoDescription: string;
-  seoKeywords: string[];
-  tags: string[];
-  confidence?: "high" | "medium" | "low";
-  authenticity?: "Authentic" | "Likely Authentic" | "Uncertain" | "Likely Counterfeit" | "Counterfeit";
-  authenticityConfidence?: number;
-  authenticityDetails?: string;
-  authenticationTips?: string[];
-  marketAnalysis?: string;
-  aspects?: Record<string, string[]>;
-  ebayCategoryId?: string;
-  wooCategory?: string;
-}
 
 interface StashItem {
   id: number;
@@ -63,7 +36,9 @@ interface StashItem {
   publishedToEbay: boolean;
   woocommerceUrl: string | null;
   ebayUrl: string | null;
-  aiAnalysis: AIAnalysis | null;
+  aiAnalysis: AnalysisResultParam | null;
+  itemType: string | null;
+  userId: string;
   createdAt: string;
 }
 
@@ -95,6 +70,7 @@ export default function ItemDetailsScreen() {
   const [ebayConnected, setEbayConnected] = useState(false);
   const [publishingWoo, setPublishingWoo] = useState(false);
   const [publishingEbay, setPublishingEbay] = useState(false);
+  const [generatingSEO, setGeneratingSEO] = useState(false);
   const [approvalGate, setApprovalGate] = useState<{
     visible: boolean;
     platform: "woocommerce" | "ebay" | null;
@@ -183,13 +159,13 @@ export default function ItemDetailsScreen() {
       
       const result = await publishToWooCommerce(itemId, settings, skipThresholdCheck);
       
-      if ((result as any).held) {
+      if (result.held) {
         setApprovalGate({
           visible: true,
           platform: "woocommerce",
-          suggestedPrice: (result as any).suggestedPrice,
-          threshold: (result as any).threshold,
-          message: (result as any).message,
+          suggestedPrice: result.suggestedPrice,
+          threshold: result.threshold,
+          message: result.message,
         });
         queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
         return;
@@ -205,8 +181,9 @@ export default function ItemDetailsScreen() {
       } else {
         Alert.alert("Publishing Failed", result.error || "Unknown error occurred");
       }
-    } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to publish to WooCommerce");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to publish to WooCommerce";
+      Alert.alert("Error", msg);
     } finally {
       setPublishingWoo(false);
     }
@@ -242,13 +219,13 @@ export default function ItemDetailsScreen() {
       
       const result = await publishToEbay(itemId, settings, skipThresholdCheck);
       
-      if ((result as any).held) {
+      if (result.held) {
         setApprovalGate({
           visible: true,
           platform: "ebay",
-          suggestedPrice: (result as any).suggestedPrice,
-          threshold: (result as any).threshold,
-          message: (result as any).message,
+          suggestedPrice: result.suggestedPrice,
+          threshold: result.threshold,
+          message: result.message,
         });
         queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
         return;
@@ -264,8 +241,9 @@ export default function ItemDetailsScreen() {
       } else {
         Alert.alert("Publishing Failed", result.error || "Unknown error occurred");
       }
-    } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to publish to eBay");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to publish to eBay";
+      Alert.alert("Error", msg);
     } finally {
       setPublishingEbay(false);
     }
@@ -285,13 +263,44 @@ export default function ItemDetailsScreen() {
       } else {
         handlePublishEbay(true);
       }
-    } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to approve item");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to approve item";
+      Alert.alert("Error", msg);
     }
   };
 
   const handleDismissApproval = () => {
     setApprovalGate({ visible: false, platform: null, suggestedPrice: 0, threshold: 500, message: "" });
+  };
+
+  const handleGenerateSEOListing = async () => {
+    if (!item) return;
+
+    setGeneratingSEO(true);
+    try {
+      const response = await apiRequest("POST", "/api/seo/generate", {
+        itemId: item.id,
+        userId: item.userId || "demo-user",
+      });
+      
+      const updatedItem = await response.json();
+      
+      if (updatedItem.id) {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        Alert.alert("Success", "SEO listing generated and updated successfully!");
+        queryClient.invalidateQueries({ queryKey: ["/api/stash", itemId] });
+      } else {
+        Alert.alert("Error", "Failed to generate SEO listing");
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to generate SEO listing";
+      console.error("SEO Generation error:", error);
+      Alert.alert("Error", msg);
+    } finally {
+      setGeneratingSEO(false);
+    }
   };
 
   if (isLoading) {
@@ -464,7 +473,28 @@ export default function ItemDetailsScreen() {
           {/* Market Value Analysis Section */}
           {item.aiAnalysis?.marketAnalysis && (
             <View style={styles.section}>
-              <ThemedText style={styles.sectionLabel}>Market Value Analysis</ThemedText>
+              <View style={styles.sectionHeaderRow}>
+                <ThemedText style={styles.sectionLabel}>Market Value Analysis</ThemedText>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.generateButton,
+                    pressed && { opacity: 0.7 },
+                    generatingSEO && { opacity: 0.5 },
+                  ]}
+                  onPress={handleGenerateSEOListing}
+                  disabled={generatingSEO}
+                  testID="button-generate-seo"
+                >
+                  {generatingSEO ? (
+                    <ActivityIndicator size="small" color={Colors.dark.primary} />
+                  ) : (
+                    <>
+                      <Feather name="zap" size={14} color={Colors.dark.primary} style={{ marginRight: 4 }} />
+                      <ThemedText style={styles.generateButtonText}>Ask Emma to Generate</ThemedText>
+                    </>
+                  )}
+                </Pressable>
+              </View>
               <View style={styles.marketCard}>
                 <ThemedText style={styles.marketText}>
                   {item.aiAnalysis.marketAnalysis}
@@ -598,6 +628,25 @@ export default function ItemDetailsScreen() {
               </View>
             </View>
           ) : null}
+
+          {/* Edit Listing by Platform */}
+          {item.aiAnalysis && (
+            <View style={styles.section}>
+              <Pressable
+                style={({ pressed }) => [styles.editListingButton, pressed && { opacity: 0.8 }]}
+                onPress={() => navigation.navigate("ListingEditor", {
+                  analysisResult: item.aiAnalysis as AnalysisResultParam,
+                  fullImageUri: item.fullImageUrl || undefined,
+                  labelImageUri: item.labelImageUrl || undefined,
+                  itemType: item.itemType || "designer",
+                  stashItemId: item.id,
+                })}
+              >
+                <Feather name="layers" size={18} color={Colors.dark.primary} />
+                <ThemedText style={styles.editListingButtonText}>Edit Listing by Platform</ThemedText>
+              </Pressable>
+            </View>
+          )}
 
           <View style={styles.section}>
             <ThemedText style={styles.sectionLabel}>Publish</ThemedText>
@@ -957,6 +1006,28 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.sm,
+  },
+  generateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+  },
+  generateButtonText: {
+    color: Colors.dark.primary,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
   // Market Analysis Section Styles
   marketCard: {
     backgroundColor: Colors.dark.surface,
@@ -1129,5 +1200,20 @@ const styles = StyleSheet.create({
   approvalConfirmText: {
     ...Typography.button,
     color: Colors.dark.buttonText,
+  },
+  editListingButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.dark.primary + "15",
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
+  editListingButtonText: {
+    ...Typography.button,
+    color: Colors.dark.primary,
   },
 });

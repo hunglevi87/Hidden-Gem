@@ -9,8 +9,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { Colors, Spacing } from "@/constants/theme";
 import DiscoverScreen from "@/screens/DiscoverScreen";
-import ScanScreen from "@/screens/ScanScreen";
+import ItemTypeSelectorScreen from "@/screens/ItemTypeSelectorScreen";
 import StashScreen from "@/screens/StashScreen";
+import CraftScreen from "@/screens/CraftScreen";
 import { ThemedText } from "@/components/ThemedText";
 import { useAuthContext } from "@/contexts/AuthContext";
 import type { RootStackParamList } from "./RootStackNavigator";
@@ -19,6 +20,7 @@ export type MainTabParamList = {
   DiscoverTab: undefined;
   ScanTab: undefined;
   StashTab: undefined;
+  CraftTab: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -26,7 +28,7 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 function HeaderLeft() {
   const { user } = useAuthContext();
   const displayName = user?.email?.split("@")[0] || "Hunter";
-  
+
   return (
     <View style={styles.headerLeft}>
       <ThemedText style={styles.userName}>{displayName}</ThemedText>
@@ -36,23 +38,27 @@ function HeaderLeft() {
 }
 
 function HeaderRight() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
   const { data: countData } = useQuery<{ count: number }>({
     queryKey: ["/api/stash/count"],
   });
-  
+
   const scanCount = countData?.count ?? 0;
-  
+
   return (
     <View style={styles.headerRight}>
       <View style={styles.scanBadge}>
         <Feather name="zap" size={14} color={Colors.dark.primary} />
         <ThemedText style={styles.scanCount}>{scanCount}</ThemedText>
       </View>
-      <Pressable 
+      <Pressable
         onPress={() => navigation.navigate("Settings")}
-        style={({ pressed }) => [styles.settingsButton, pressed && { opacity: 0.7 }]}
+        style={({ pressed }) => [
+          styles.settingsButton,
+          pressed && { opacity: 0.7 },
+        ]}
         testID="button-settings"
       >
         <Feather name="settings" size={22} color={Colors.dark.text} />
@@ -114,16 +120,26 @@ export default function MainTabNavigator() {
       />
       <Tab.Screen
         name="ScanTab"
-        component={ScanScreen}
+        component={ItemTypeSelectorScreen}
         options={{
           title: "Scan",
           headerShown: false,
           tabBarIcon: ({ color, size, focused }) => (
-            <View style={[
-              styles.scanButton,
-              { backgroundColor: focused ? Colors.dark.primary : Colors.dark.surface }
-            ]}>
-              <Feather name="camera" size={24} color={focused ? Colors.dark.buttonText : color} />
+            <View
+              style={[
+                styles.scanButton,
+                {
+                  backgroundColor: focused
+                    ? Colors.dark.primary
+                    : Colors.dark.surface,
+                },
+              ]}
+            >
+              <Feather
+                name="camera"
+                size={24}
+                color={focused ? Colors.dark.buttonText : color}
+              />
             </View>
           ),
         }}
@@ -136,6 +152,17 @@ export default function MainTabNavigator() {
           headerTitle: "",
           tabBarIcon: ({ color, size }) => (
             <Feather name="grid" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="CraftTab"
+        component={CraftScreen}
+        options={{
+          title: "Craft",
+          headerTitle: "",
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="gift" size={size} color={color} />
           ),
         }}
       />

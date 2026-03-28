@@ -50,6 +50,10 @@ export const stashItems = pgTable("stash_items", {
   publishedToEbay: boolean("published_to_ebay").default(false),
   woocommerceProductId: text("woocommerce_product_id"),
   ebayListingId: text("ebay_listing_id"),
+  itemType: text("item_type").default("designer"),
+  handmadeDetails: jsonb("handmade_details"),
+  platformVersions: jsonb("platform_versions"),
+  marketMatches: jsonb("market_matches"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -259,6 +263,29 @@ export const insertIntegrationSchema = createInsertSchema(integrations).omit({
   createdAt: true,
   updatedAt: true,
 });
+
+// Gift Sets — bundled item collections for the storefront
+export const giftSets = pgTable("gift_sets", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  tier: text("tier").notNull(), // Budget | Starter | Core | Premium | Ultimate
+  description: text("description"),
+  marketingHook: text("marketing_hook"),
+  itemIds: integer("item_ids").array().notNull().default(sql`ARRAY[]::INTEGER[]`),
+  itemsSnapshot: jsonb("items_snapshot"), // Cached item titles/images for display
+  totalValue: numeric("total_value", { precision: 10, scale: 2 }),
+  sellingPrice: numeric("selling_price", { precision: 10, scale: 2 }),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertGiftSetSchema = createInsertSchema(giftSets).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type GiftSet = typeof giftSets.$inferSelect;
+export type InsertGiftSet = z.infer<typeof insertGiftSetSchema>;
 
 // Push tokens for notifications
 export const pushTokens = pgTable("push_tokens", {

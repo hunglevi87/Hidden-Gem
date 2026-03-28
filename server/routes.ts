@@ -4,12 +4,29 @@ import multer from "multer";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { db } from "./db";
-import { articles, stashItems, userSettings, products, sellers, listingsTable, syncQueue } from "@shared/schema";
-import { eq, desc, count, and, ilike, lte, gte, or, SQL } from "drizzle-orm";
+import { articles, stashItems, userSettings, products, sellers, listingsTable, syncQueue, giftSets } from "@shared/schema";
+import { eq, desc, count, and, ilike, lte, gte, or, SQL, sql } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
-import { testProviderConnection, AIProviderConfig, analyzeItem, analyzeItemWithRetry, AnalysisResult } from "./ai-providers";
+import { 
+  testProviderConnection, 
+  AIProviderConfig, 
+  analyzeItemWithRetry, 
+  AnalysisResult,
+  analyzeWithFallback,
+  correctAnalysis,
+  AIProviderType,
+  buildHandmadePrompt,
+  HandmadeDetails,
+  generateGiftSets,
+  analyzeShopStrategy,
+  AIAnalysisSnapshot,
+  emmaChatStream,
+  type ChatMessage,
+  type StashItemSummary,
+} from "./ai-providers";
 import { generateSEOTitle, generateDescription, generateTags, createAIRecord } from "./ai-seo";
 import { uploadProductImage, deleteProductImage } from "./supabase-storage";
+import { requireAuth } from "./auth-middleware";
 import {
   updateEbayListing,
   deleteEbayListing,
@@ -275,6 +292,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           seoTitle: itemData.seoTitle,
           seoDescription: itemData.seoDescription,
           seoKeywords: itemData.seoKeywords,
+          platformVersions: itemData.platformVersions || null,
+          marketMatches: itemData.marketMatches || null,
         })
         .returning();
       
@@ -302,51 +321,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ]), async (req: Request, res: Response) => {
     try {
       const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      const userId = req.body.userId || "anonymous";
       
       const fullImageFile = files?.fullImage?.[0];
       const labelImageFile = files?.labelImage?.[0];
-      const { provider, apiKey, endpoint, model } = req.body;
 
-      const images: { mimeType: string; data: string }[] = [];
-      if (fullImageFile) {
-        images.push({ mimeType: fullImageFile.mimetype, data: fullImageFile.buffer.toString("base64") });
-      }
-      if (labelImageFile) {
-        images.push({ mimeType: labelImageFile.mimetype, data: labelImageFile.buffer.toString("base64") });
+      if (!fullImageFile) {
+        return res.status(400).json({ error: "Full image is required" });
       }
 
-      if (images.length === 0) {
-        return res.status(400).json({ error: "At least one image is required" });
-      }
-
-      const requestedProvider = typeof provider === "string" && provider.trim() ? provider.trim() : undefined;
-      const primaryConfig: AIProviderConfig = {
-        provider: (requestedProvider || "openfang") as AIProviderConfig["provider"],
-        apiKey,
-        endpoint,
-        model,
+      // 1. Get user configuration
+      const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+      
+      const provider = (req.body.provider as AIProviderType) || (settings?.openfangApiKey ? "openfang" : "gemini");
+      const config: AIProviderConfig = {
+        provider,
+        apiKey: (req.body.apiKey as string | undefined) || (provider === "openfang" ? settings?.openfangApiKey || undefined : settings?.geminiApiKey || undefined),
+        endpoint: (req.body.endpoint as string | undefined) || (provider === "openfang" ? settings?.openfangBaseUrl || undefined : undefined),
+        model: (req.body.model as string | undefined) || (provider === "openfang" ? settings?.preferredOpenfangModel || undefined : settings?.preferredGeminiModel || undefined),
+        secondaryProvider: settings?.huggingfaceApiKey ? "custom" : undefined,
+        secondaryApiKey: settings?.huggingfaceApiKey || undefined,
+        secondaryEndpoint: settings?.huggingfaceApiKey ? process.env.HUGGINGFACE_CUSTOM_ENDPOINT : undefined,
       };
 
-      try {
-        const result = await analyzeItem(primaryConfig, images);
-        return res.json(result);
-      } catch (primaryError) {
-        const canFallbackToGemini = !requestedProvider || requestedProvider === "openfang";
-        if (!canFallbackToGemini) {
-          throw primaryError;
-        }
+      // 2. Prepare images
+      const images: { mimeType: string; data: string }[] = [];
+      images.push({
+        mimeType: fullImageFile.mimetype,
+        data: fullImageFile.buffer.toString("base64"),
+      });
 
-        const fallbackConfig: AIProviderConfig = {
-          provider: "gemini",
-          model: "gemini-2.5-flash",
-        };
-
-        const fallbackResult = await analyzeItem(fallbackConfig, images);
-        return res.json(fallbackResult);
+      if (labelImageFile) {
+        images.push({
+          mimeType: labelImageFile.mimetype,
+          data: labelImageFile.buffer.toString("base64"),
+        });
       }
-    } catch (error) {
+
+      // 3. Build prompt (handmade vs designer)
+      const itemType = req.body.itemType as string | undefined;
+      let prompt: string | undefined;
+      if (itemType === "handmade" && req.body.handmadeDetails) {
+        try {
+          const details: HandmadeDetails = typeof req.body.handmadeDetails === "string"
+            ? JSON.parse(req.body.handmadeDetails)
+            : req.body.handmadeDetails;
+          prompt = buildHandmadePrompt(details);
+          console.log("Using handmade prompt for analysis");
+        } catch (e) {
+          console.warn("Failed to parse handmadeDetails, using default prompt");
+        }
+      }
+
+      // 4. Analyze with fallback
+      console.log(`Starting analysis for user ${userId} with primary provider ${config.provider}`);
+      let result = await analyzeWithFallback(images, config, prompt);
+
+      // 5. Run correction pass if secondary provider is configured
+      if (config.secondaryProvider || process.env.OPENFANG_API_KEY) {
+        console.log("Running correction pass...");
+        result = await correctAnalysis(result, config);
+      }
+      
+      res.json(result);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to analyze item";
       console.error("Error analyzing item:", error);
-      res.status(500).json({ error: "Failed to analyze item" });
+      res.status(500).json({ error: message });
     }
   });
 
@@ -438,7 +479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!skipThresholdCheck) {
-        const aiAnalysis = item.aiAnalysis as any;
+        const aiAnalysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
         const suggestedPrice = aiAnalysis?.suggestedListPrice;
         if (suggestedPrice) {
           const userId = (req.body.userId as string) || item.userId;
@@ -536,7 +577,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!skipThresholdCheck) {
-        const aiAnalysis = item.aiAnalysis as any;
+        const aiAnalysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
         const suggestedPrice = aiAnalysis?.suggestedListPrice;
         if (suggestedPrice) {
           const userId = (req.body.userId as string) || item.userId;
@@ -684,7 +725,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const offerError = await offerResponse.json().catch(() => ({}));
         console.error("eBay offer error:", offerError);
         
-        const requiresPolicies = offerError.errors?.some((e: any) => 
+        const requiresPolicies = offerError.errors?.some((e: { message?: string; errorId?: number }) => 
           e.message?.includes("policy") || e.errorId === 25002
         );
         
@@ -742,9 +783,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const result = await testProviderConnection(config);
       res.json(result);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Test failed";
       console.error("AI provider test error:", error);
-      res.status(500).json({ success: false, message: error.message || "Test failed" });
+      res.status(500).json({ success: false, message });
     }
   });
 
@@ -787,7 +829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const result = await analyzeItemWithRetry(primaryConfig, images, parsedPrevious, feedback);
         return res.json(result);
       } catch (primaryError) {
-        const canFallbackToGemini = !requestedProvider || requestedProvider === "openfang";
+        const canFallbackToGemini = requestedProvider === "openfang";
         if (!canFallbackToGemini) {
           throw primaryError;
         }
@@ -1019,122 +1061,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/sync-queue/:id", async (req: Request, res: Response) => {
+  app.post("/api/seo/generate", async (req: Request, res: Response) => {
     try {
-      const [job] = await db
-        .select()
-        .from(syncQueue)
-        .where(eq(syncQueue.id, req.params.id));
-      if (!job) return res.status(404).json({ error: "Sync job not found" });
-      res.json(job);
-    } catch (error) {
-      console.error("Error fetching sync job:", error);
-      res.status(500).json({ error: "Failed to fetch sync job" });
-    }
-  });
-
-  app.post("/api/sync-queue", async (req: Request, res: Response) => {
-    try {
-      const { sellerId, productId, marketplace, action, payload, scheduledAt, maxRetries } = req.body;
-      if (!sellerId || !productId || !marketplace || !action) {
-        return res.status(400).json({
-          error: "sellerId, productId, marketplace, and action are required",
-        });
+      const { itemId, userId } = req.body;
+      if (!itemId) {
+        return res.status(400).json({ error: "Item ID is required" });
       }
 
-      const validActions = [
-        "ebay_create_listing", "ebay_update_listing", "ebay_delete_listing", "ebay_value_check",
-        "woo_create_listing", "woo_update_listing", "woo_delete_listing",
-      ];
-      if (!validActions.includes(action)) {
-        return res.status(400).json({
-          error: `Invalid action. Must be one of: ${validActions.join(", ")}`,
-        });
+      // 1. Get the item and its current analysis
+      const [item] = await db.select().from(stashItems).where(eq(stashItems.id, parseInt(itemId)));
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
       }
 
-      const [job] = await db
-        .insert(syncQueue)
-        .values({
-          sellerId,
-          productId,
-          marketplace,
-          action,
-          payload: payload || {},
-          status: "pending",
-          retryCount: 0,
-          maxRetries: maxRetries ?? 3,
-          scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
-        })
-        .returning();
-
-      res.status(201).json(job);
-    } catch (error) {
-      console.error("Error enqueuing sync job:", error);
-      res.status(500).json({ error: "Failed to enqueue sync job" });
-    }
-  });
-
-  app.post("/api/sync-queue/:id/retry", async (req: Request, res: Response) => {
-    try {
-      const [job] = await db
-        .select()
-        .from(syncQueue)
-        .where(eq(syncQueue.id, req.params.id));
-      if (!job) return res.status(404).json({ error: "Sync job not found" });
-
-      if (job.status !== "failed" && job.status !== "retry") {
-        return res.status(400).json({
-          error: `Cannot retry job with status "${job.status}". Only failed or retry jobs can be retried.`,
-        });
+      if (!item.aiAnalysis) {
+        return res.status(400).json({ error: "Item has no AI analysis to optimize" });
       }
 
-      const [updated] = await db
-        .update(syncQueue)
+      // 2. Get user configuration for AI
+      const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId || item.userId));
+      
+      const provider = (settings?.openfangApiKey ? "openfang" : "gemini");
+      const config: AIProviderConfig = {
+        provider: provider as AIProviderType,
+        apiKey: provider === "openfang" ? settings?.openfangApiKey || undefined : settings?.geminiApiKey || undefined,
+        endpoint: provider === "openfang" ? settings?.openfangBaseUrl || undefined : undefined,
+        model: provider === "openfang" ? settings?.preferredOpenfangModel || undefined : settings?.preferredGeminiModel || undefined,
+        secondaryProvider: settings?.openfangApiKey && settings?.geminiApiKey ? "gemini" : undefined,
+      };
+
+      // 3. Generate SEO Listing
+      const { generateSEOListing } = await import("./ai-providers");
+      const optimizedResult = await generateSEOListing(item.aiAnalysis as AnalysisResult, config);
+
+      // 4. Update the item in the database
+      const [updatedItem] = await db.update(stashItems)
         .set({
-          status: "pending",
-          retryCount: 0,
-          errorMessage: null,
-          completedAt: null,
-          scheduledAt: new Date(),
+          title: optimizedResult.title,
+          seoTitle: optimizedResult.seoTitle || optimizedResult.title,
+          seoDescription: optimizedResult.seoDescription || optimizedResult.description,
+          seoKeywords: optimizedResult.seoKeywords || [],
+          aiAnalysis: optimizedResult,
+          updatedAt: new Date()
         })
-        .where(eq(syncQueue.id, req.params.id))
+        .where(eq(stashItems.id, parseInt(itemId)))
         .returning();
 
-      res.json(updated);
-    } catch (error) {
-      console.error("Error retrying sync job:", error);
-      res.status(500).json({ error: "Failed to retry sync job" });
-    }
-  });
-
-  app.post("/api/sync-queue/:id/cancel", async (req: Request, res: Response) => {
-    try {
-      const [job] = await db
-        .select()
-        .from(syncQueue)
-        .where(eq(syncQueue.id, req.params.id));
-      if (!job) return res.status(404).json({ error: "Sync job not found" });
-
-      if (job.status !== "pending" && job.status !== "retry") {
-        return res.status(400).json({
-          error: `Cannot cancel job with status "${job.status}". Only pending or retry jobs can be cancelled.`,
-        });
-      }
-
-      const [updated] = await db
-        .update(syncQueue)
-        .set({
-          status: "cancelled",
-          completedAt: new Date(),
-          errorMessage: "Cancelled by user",
-        })
-        .where(eq(syncQueue.id, req.params.id))
-        .returning();
-
-      res.json(updated);
-    } catch (error) {
-      console.error("Error cancelling sync job:", error);
-      res.status(500).json({ error: "Failed to cancel sync job" });
+      res.json(updatedItem);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to generate SEO listing";
+      console.error("Error generating SEO listing:", error);
+      res.status(500).json({ error: message });
     }
   });
 
@@ -1164,7 +1141,16 @@ Extract the following filters (use null for any filter not mentioned):
 Respond ONLY with valid JSON. Example:
 {"brand":"Louis Vuitton","maxPrice":300,"minPrice":null,"category":"Handbag","condition":null,"publishStatus":null,"keywords":["bags"]}`;
 
-      let filters: any = {};
+      interface StashSearchFilters {
+        brand?: string;
+        category?: string;
+        condition?: string;
+        publishStatus?: string;
+        maxPrice?: number;
+        minPrice?: number;
+        keywords?: string[];
+      }
+      let filters: StashSearchFilters = {};
       try {
         const parseResponse = await ai.models.generateContent({
           model: "gemini-2.5-flash",
@@ -1244,6 +1230,316 @@ Respond ONLY with valid JSON. Example:
     } catch (error) {
       console.error("Stash search error:", error);
       res.status(500).json({ error: "Failed to search stash" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Craft & Strategy Studio Routes
+  // ---------------------------------------------------------------------------
+
+  // Helper: build stash summaries from DB items without unsafe any casts
+  function buildStashSummaries(items: (typeof stashItems.$inferSelect)[]) {
+    return items.map((item) => {
+      const analysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
+      return {
+        id: item.id,
+        title: item.title,
+        category: item.category,
+        estimatedValue: item.estimatedValue,
+        estimatedValueHigh: typeof analysis.estimatedValueHigh === "number" ? analysis.estimatedValueHigh : undefined,
+        suggestedListPrice: typeof analysis.suggestedListPrice === "number" ? analysis.suggestedListPrice : undefined,
+        fullImageUrl: item.fullImageUrl,
+        itemType: item.itemType,
+        brand: typeof analysis.brand === "string" ? analysis.brand : undefined,
+        condition: item.condition ?? undefined,
+      };
+    });
+  }
+
+  // GET /api/craft/gift-sets — list saved gift sets for a user
+  app.get("/api/craft/gift-sets", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = res.locals.userId as string;
+      const sets = await db
+        .select()
+        .from(giftSets)
+        .where(eq(giftSets.userId, userId))
+        .orderBy(desc(giftSets.createdAt));
+      res.json(sets);
+    } catch (error) {
+      console.error("Error fetching gift sets:", error);
+      res.status(500).json({ error: "Failed to fetch gift sets" });
+    }
+  });
+
+  // POST /api/craft/gift-sets — canonical generate endpoint per task spec
+  // (also registered as /generate below for backward compat)
+  app.post("/api/craft/gift-sets", requireAuth, async (req: Request, res: Response) => {
+    if (req.body?.action === "save") {
+      // Route to save handler if explicitly requested via this path
+      return res.status(400).json({ error: "Use POST /api/craft/gift-sets/save to persist a set" });
+    }
+    try {
+      const userId = res.locals.userId as string;
+
+      const items = await db
+        .select()
+        .from(stashItems)
+        .where(eq(stashItems.userId, userId))
+        .orderBy(desc(stashItems.createdAt));
+
+      if (items.length === 0) {
+        return res.status(400).json({ error: "No items in your stash to bundle" });
+      }
+
+      const summaries = buildStashSummaries(items);
+      const generatedSets = await generateGiftSets(summaries);
+      const itemMap = new Map(items.map((i) => [i.id, i]));
+      const setsWithSnapshots = generatedSets.map((set) => ({
+        ...set,
+        itemsSnapshot: set.itemIds
+          .map((id) => itemMap.get(id))
+          .filter((i): i is NonNullable<typeof i> => i !== undefined)
+          .map((i) => ({
+            id: i.id,
+            title: i.title,
+            fullImageUrl: i.fullImageUrl,
+            estimatedValue: i.estimatedValue,
+            category: i.category,
+          })),
+      }));
+
+      res.json(setsWithSnapshots);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to generate gift sets";
+      console.error("Error generating gift sets:", error);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // POST /api/craft/gift-sets/generate — generate new bundles from stash
+  app.post("/api/craft/gift-sets/generate", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = res.locals.userId as string;
+
+      const items = await db
+        .select()
+        .from(stashItems)
+        .where(eq(stashItems.userId, userId))
+        .orderBy(desc(stashItems.createdAt));
+
+      if (items.length === 0) {
+        return res.status(400).json({ error: "No items in your stash to bundle" });
+      }
+
+      const summaries = buildStashSummaries(items);
+      const generatedSets = await generateGiftSets(summaries);
+
+      // Attach item snapshots for client display (no extra round-trips needed)
+      const itemMap = new Map(items.map((i) => [i.id, i]));
+      const setsWithSnapshots = generatedSets.map((set) => ({
+        ...set,
+        itemsSnapshot: set.itemIds
+          .map((id) => itemMap.get(id))
+          .filter((i): i is NonNullable<typeof i> => i !== undefined)
+          .map((i) => ({
+            id: i.id,
+            title: i.title,
+            fullImageUrl: i.fullImageUrl,
+            estimatedValue: i.estimatedValue,
+            category: i.category,
+          })),
+      }));
+
+      res.json(setsWithSnapshots);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to generate gift sets";
+      console.error("Error generating gift sets:", error);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // POST /api/craft/gift-sets/save — persist a generated gift set (owned by userId)
+  app.post("/api/craft/gift-sets/save", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = res.locals.userId as string;
+      const { tier, title, description, marketingHook, itemIds, itemsSnapshot, totalValue, sellingPrice } = req.body as {
+        tier: string;
+        title: string;
+        description?: string;
+        marketingHook?: string;
+        itemIds?: number[];
+        itemsSnapshot?: unknown;
+        totalValue?: number;
+        sellingPrice?: number;
+      };
+      if (!tier || !title) {
+        return res.status(400).json({ error: "tier and title are required" });
+      }
+
+      const [saved] = await db
+        .insert(giftSets)
+        .values({
+          userId,
+          tier,
+          title,
+          description: description ?? null,
+          marketingHook: marketingHook ?? null,
+          itemIds: Array.isArray(itemIds) ? itemIds : [],
+          itemsSnapshot: itemsSnapshot ?? null,
+          totalValue: totalValue != null ? String(totalValue) : null,
+          sellingPrice: sellingPrice != null ? String(sellingPrice) : null,
+        })
+        .returning();
+
+      res.status(201).json(saved);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to save gift set";
+      console.error("Error saving gift set:", error);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // DELETE /api/craft/gift-sets/:id — remove a saved gift set (ownership enforced)
+  app.delete("/api/craft/gift-sets/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const userId = res.locals.userId as string;
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Valid id is required" });
+      }
+      // Scope deletion to owner — prevents cross-user deletion (IDOR)
+      const result = await db
+        .delete(giftSets)
+        .where(and(eq(giftSets.id, id), eq(giftSets.userId, userId)))
+        .returning({ id: giftSets.id });
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Gift set not found or not owned by you" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting gift set:", error);
+      res.status(500).json({ error: "Failed to delete gift set" });
+    }
+  });
+
+  // POST /api/craft/strategy — ask Emma a strategy question (SSE streaming response)
+  app.post("/api/craft/strategy", requireAuth, async (req: Request, res: Response) => {
+    const userId = res.locals.userId as string;
+    const { question } = req.body as { question: string };
+    if (!question?.trim()) {
+      return res.status(400).json({ error: "question is required" });
+    }
+
+    // Set SSE headers before streaming begins
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    try {
+      const items = await db
+        .select()
+        .from(stashItems)
+        .where(eq(stashItems.userId, userId))
+        .orderBy(desc(stashItems.createdAt));
+
+      const summaries = buildStashSummaries(items);
+      await analyzeShopStrategy(summaries, question.trim(), (chunk) => {
+        res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+      });
+
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to analyze shop strategy";
+      console.error("Error in shop strategy:", error);
+      res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+      res.end();
+    }
+  });
+
+  // Helper: build full stash context for the authenticated user
+  async function buildUserStashContext(userId: string): Promise<{ itemCount: number; totalEstimatedValue: number; topItems: StashItemSummary[] }> {
+    const [stats] = await db
+      .select({
+        itemCount: count(),
+        totalValue: sql<string>`COALESCE(SUM((${stashItems.aiAnalysis}->>'suggestedListPrice')::numeric), 0)`,
+      })
+      .from(stashItems)
+      .where(eq(stashItems.userId, userId));
+
+    const topRows = await db
+      .select()
+      .from(stashItems)
+      .where(eq(stashItems.userId, userId))
+      .orderBy(desc(stashItems.createdAt))
+      .limit(8);
+
+    const topItems: StashItemSummary[] = topRows.map((item) => {
+      const analysis = (item.aiAnalysis ?? {}) as AIAnalysisSnapshot;
+      return {
+        id: item.id,
+        title: item.title,
+        category: item.category,
+        estimatedValue: item.estimatedValue,
+        estimatedValueHigh: analysis?.estimatedValueHigh,
+        suggestedListPrice: analysis?.suggestedListPrice,
+        fullImageUrl: item.fullImageUrl,
+        itemType: item.itemType,
+        brand: analysis?.brand,
+        condition: item.condition ?? undefined,
+      };
+    });
+
+    return {
+      itemCount: stats?.itemCount ?? 0,
+      totalEstimatedValue: parseFloat(stats?.totalValue ?? "0"),
+      topItems,
+    };
+  }
+
+  // GET /api/chat/context — fetch stash context at panel open time
+  app.get("/api/chat/context", requireAuth, async (req: Request, res: Response) => {
+    const userId = res.locals.userId as string;
+    try {
+      const ctx = await buildUserStashContext(userId);
+      return res.json({ itemCount: ctx.itemCount, totalEstimatedValue: ctx.totalEstimatedValue });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch stash context";
+      console.error("Error fetching chat context:", error);
+      return res.status(500).json({ error: message });
+    }
+  });
+
+  // POST /api/chat — Emma floating chat assistant (SSE streaming)
+  app.post("/api/chat", requireAuth, async (req: Request, res: Response) => {
+    const userId = res.locals.userId as string;
+    const { messages } = req.body as { messages: ChatMessage[] };
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "messages array is required" });
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    try {
+      const stashContext = await buildUserStashContext(userId);
+
+      await emmaChatStream(messages, stashContext, (chunk) => {
+        res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+      });
+
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Emma couldn't respond";
+      console.error("Error in Emma chat:", error);
+      res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+      res.end();
     }
   });
 

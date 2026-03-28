@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet } from "react-native";
-import { NavigationContainer, DarkTheme } from "@react-navigation/native";
+import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -12,34 +12,42 @@ import { queryClient } from "@/lib/query-client";
 import RootStackNavigator from "@/navigation/RootStackNavigator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuthContext } from "@/contexts/AuthContext";
+import { ThemeProvider, useThemeContext } from "@/contexts/ThemeContext";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Colors } from "@/constants/theme";
-
-const HiddenGemTheme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    primary: Colors.dark.primary,
-    background: Colors.dark.backgroundRoot,
-    card: Colors.dark.backgroundDefault,
-    text: Colors.dark.text,
-    border: Colors.dark.border,
-    notification: Colors.dark.primary,
-  },
-};
+import EmmaChat from "@/components/EmmaChat";
 
 function AppInner() {
   const { isAuthenticated } = useAuthContext();
+  const { theme } = useThemeContext();
   useNotifications(isAuthenticated);
+
+  const isDark = theme === "dark";
+  const baseTheme = isDark ? DarkTheme : DefaultTheme;
+  const themeColors = Colors[theme];
+
+  const HiddenGemTheme = {
+    ...baseTheme,
+    colors: {
+      ...baseTheme.colors,
+      primary: themeColors.primary,
+      background: themeColors.backgroundRoot,
+      card: themeColors.backgroundDefault,
+      text: themeColors.text,
+      border: themeColors.border,
+      notification: themeColors.primary,
+    },
+  };
 
   return (
     <SafeAreaProvider>
-      <GestureHandlerRootView style={styles.root}>
+      <GestureHandlerRootView style={[styles.root, { backgroundColor: themeColors.backgroundRoot }]}>
         <KeyboardProvider>
           <NavigationContainer theme={HiddenGemTheme}>
             <RootStackNavigator />
           </NavigationContainer>
-          <StatusBar style="light" />
+          <EmmaChat />
+          <StatusBar style={isDark ? "light" : "dark"} />
         </KeyboardProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
@@ -50,9 +58,11 @@ export default function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <AppInner />
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppInner />
+          </AuthProvider>
+        </ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );
@@ -61,6 +71,5 @@ export default function App() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.dark.backgroundRoot,
   },
 });

@@ -68,7 +68,10 @@ export function useNotifications(isAuthenticated: boolean) {
 
   const unregisterToken = useCallback(async (token: string) => {
     try {
-      await apiRequest("DELETE", "/api/push-token", { userId: "anonymous", token });
+      await apiRequest("DELETE", "/api/push-token", {
+        userId: "anonymous",
+        token,
+      });
     } catch (e) {
       // Silently fail
     }
@@ -88,7 +91,8 @@ export function useNotifications(isAuthenticated: boolean) {
       await loadNotificationsModule();
       if (!Notifications) return;
 
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      const { status: existingStatus } =
+        await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
 
       if (existingStatus !== "granted") {
@@ -110,8 +114,10 @@ export function useNotifications(isAuthenticated: boolean) {
         await registerToken(token);
       }
 
-      notificationListener.current = Notifications.addNotificationReceivedListener(() => {});
-      responseListener.current = Notifications.addNotificationResponseReceivedListener(() => {});
+      notificationListener.current =
+        Notifications.addNotificationReceivedListener(() => {});
+      responseListener.current =
+        Notifications.addNotificationResponseReceivedListener(() => {});
     }
 
     setup();

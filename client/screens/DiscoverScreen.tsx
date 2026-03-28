@@ -1,5 +1,13 @@
 import React, { useCallback } from "react";
-import { View, StyleSheet, FlatList, Pressable, Image, RefreshControl, ActivityIndicator } from "react-native";
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  Image,
+  RefreshControl,
+  ActivityIndicator,
+} from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -22,11 +30,22 @@ interface Article {
   featured: boolean;
 }
 
-function ArticleCard({ article, onPress, featured }: { article: Article; onPress: () => void; featured?: boolean }) {
+function ArticleCard({
+  article,
+  onPress,
+  featured,
+}: {
+  article: Article;
+  onPress: () => void;
+  featured?: boolean;
+}) {
   if (featured) {
     return (
       <Pressable
-        style={({ pressed }) => [styles.featuredCard, pressed && { opacity: 0.9 }]}
+        style={({ pressed }) => [
+          styles.featuredCard,
+          pressed && { opacity: 0.9 },
+        ]}
         onPress={onPress}
         testID={`card-article-${article.id}`}
       >
@@ -35,12 +54,16 @@ function ArticleCard({ article, onPress, featured }: { article: Article; onPress
         </View>
         <View style={styles.featuredOverlay}>
           <View style={styles.categoryBadge}>
-            <ThemedText style={styles.categoryText}>{article.category}</ThemedText>
+            <ThemedText style={styles.categoryText}>
+              {article.category}
+            </ThemedText>
           </View>
           <ThemedText style={styles.featuredTitle}>{article.title}</ThemedText>
           <View style={styles.readingTimeRow}>
             <Feather name="clock" size={12} color={Colors.dark.textSecondary} />
-            <ThemedText style={styles.readingTime}>{article.readingTime} min read</ThemedText>
+            <ThemedText style={styles.readingTime}>
+              {article.readingTime} min read
+            </ThemedText>
           </View>
         </View>
       </Pressable>
@@ -58,17 +81,25 @@ function ArticleCard({ article, onPress, featured }: { article: Article; onPress
       </View>
       <View style={styles.articleContent}>
         <View style={styles.categoryBadgeSmall}>
-          <ThemedText style={styles.categoryTextSmall}>{article.category}</ThemedText>
+          <ThemedText style={styles.categoryTextSmall}>
+            {article.category}
+          </ThemedText>
         </View>
         <ThemedText style={styles.articleTitle} numberOfLines={2}>
           {article.title}
         </ThemedText>
         <View style={styles.readingTimeRow}>
           <Feather name="clock" size={10} color={Colors.dark.textSecondary} />
-          <ThemedText style={styles.readingTimeSmall}>{article.readingTime} min</ThemedText>
+          <ThemedText style={styles.readingTimeSmall}>
+            {article.readingTime} min
+          </ThemedText>
         </View>
       </View>
-      <Feather name="chevron-right" size={20} color={Colors.dark.textSecondary} />
+      <Feather
+        name="chevron-right"
+        size={20}
+        color={Colors.dark.textSecondary}
+      />
     </Pressable>
   );
 }
@@ -76,7 +107,11 @@ function ArticleCard({ article, onPress, featured }: { article: Article; onPress
 function EmptyState() {
   return (
     <View style={styles.emptyState}>
-      <Image source={emptyArticlesImage} style={styles.emptyImage} resizeMode="contain" />
+      <Image
+        source={emptyArticlesImage}
+        style={styles.emptyImage}
+        resizeMode="contain"
+      />
       <ThemedText style={styles.emptyTitle}>No articles yet</ThemedText>
       <ThemedText style={styles.emptySubtitle}>
         Check back soon for reselling tips and authentication guides
@@ -88,18 +123,27 @@ function EmptyState() {
 export default function DiscoverScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  const { data: articles, isLoading, refetch, isRefetching } = useQuery<Article[]>({
+  const {
+    data: articles,
+    isLoading,
+    refetch,
+    isRefetching,
+  } = useQuery<Article[]>({
     queryKey: ["/api/articles"],
   });
 
   const featuredArticles = articles?.filter((a) => a.featured) || [];
   const regularArticles = articles?.filter((a) => !a.featured) || [];
 
-  const handleArticlePress = useCallback((articleId: number) => {
-    navigation.navigate("Article", { articleId });
-  }, [navigation]);
+  const handleArticlePress = useCallback(
+    (articleId: number) => {
+      navigation.navigate("Article", { articleId });
+    },
+    [navigation],
+  );
 
   const renderHeader = () => (
     <View style={styles.sectionHeader}>
@@ -113,7 +157,12 @@ export default function DiscoverScreen() {
   if (isLoading) {
     return (
       <ThemedView style={styles.container}>
-        <View style={[styles.loadingContainer, { paddingTop: headerHeight + Spacing["4xl"] }]}>
+        <View
+          style={[
+            styles.loadingContainer,
+            { paddingTop: headerHeight + Spacing["4xl"] },
+          ]}
+        >
           <ActivityIndicator size="large" color={Colors.dark.primary} />
         </View>
       </ThemedView>
@@ -123,7 +172,15 @@ export default function DiscoverScreen() {
   if (!articles || articles.length === 0) {
     return (
       <ThemedView style={styles.container}>
-        <View style={[styles.emptyContainer, { paddingTop: headerHeight + Spacing["4xl"], paddingBottom: tabBarHeight + Spacing.xl }]}>
+        <View
+          style={[
+            styles.emptyContainer,
+            {
+              paddingTop: headerHeight + Spacing["4xl"],
+              paddingBottom: tabBarHeight + Spacing.xl,
+            },
+          ]}
+        >
           <EmptyState />
         </View>
       </ThemedView>
@@ -135,7 +192,10 @@ export default function DiscoverScreen() {
       <FlatList
         data={regularArticles}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={{ paddingTop: headerHeight + Spacing.lg, paddingBottom: tabBarHeight + Spacing.xl }}
+        contentContainerStyle={{
+          paddingTop: headerHeight + Spacing.lg,
+          paddingBottom: tabBarHeight + Spacing.xl,
+        }}
         ListHeaderComponent={() => (
           <>
             {renderHeader()}
@@ -159,7 +219,10 @@ export default function DiscoverScreen() {
           </>
         )}
         renderItem={({ item }) => (
-          <ArticleCard article={item} onPress={() => handleArticlePress(item.id)} />
+          <ArticleCard
+            article={item}
+            onPress={() => handleArticlePress(item.id)}
+          />
         )}
         refreshControl={
           <RefreshControl

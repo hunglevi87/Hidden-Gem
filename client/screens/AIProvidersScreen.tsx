@@ -1,5 +1,14 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, Pressable, TextInput, Alert, Platform, ActivityIndicator, Linking } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  TextInput,
+  Alert,
+  Platform,
+  ActivityIndicator,
+  Linking,
+} from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
@@ -28,7 +37,11 @@ const CUSTOM_MODEL_KEY = "custom_ai_model_name";
 type AIProvider = "gemini" | "openai" | "anthropic" | "openfang" | "custom";
 
 const OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"];
-const ANTHROPIC_MODELS = ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"];
+const ANTHROPIC_MODELS = [
+  "claude-sonnet-4-20250514",
+  "claude-3-5-sonnet-20241022",
+  "claude-3-haiku-20240307",
+];
 
 interface ProviderSectionProps {
   title: string;
@@ -39,7 +52,14 @@ interface ProviderSectionProps {
   children: React.ReactNode;
 }
 
-function ProviderSection({ title, icon, isActive, isConfigured, onSetActive, children }: ProviderSectionProps) {
+function ProviderSection({
+  title,
+  icon,
+  isActive,
+  isConfigured,
+  onSetActive,
+  children,
+}: ProviderSectionProps) {
   return (
     <View style={styles.providerCard}>
       <View style={styles.providerHeader}>
@@ -53,12 +73,16 @@ function ProviderSection({ title, icon, isActive, isConfigured, onSetActive, chi
               {isConfigured ? (
                 <View style={styles.statusBadgeConnected}>
                   <View style={styles.statusDotConnected} />
-                  <ThemedText style={styles.statusTextConnected}>Configured</ThemedText>
+                  <ThemedText style={styles.statusTextConnected}>
+                    Configured
+                  </ThemedText>
                 </View>
               ) : (
                 <View style={styles.statusBadgeDisconnected}>
                   <View style={styles.statusDotDisconnected} />
-                  <ThemedText style={styles.statusTextDisconnected}>Not Configured</ThemedText>
+                  <ThemedText style={styles.statusTextDisconnected}>
+                    Not Configured
+                  </ThemedText>
                 </View>
               )}
             </View>
@@ -70,9 +94,17 @@ function ProviderSection({ title, icon, isActive, isConfigured, onSetActive, chi
           disabled={!isConfigured && title !== "Gemini"}
         >
           {isActive ? (
-            <Feather name="check-circle" size={20} color={Colors.dark.primary} />
+            <Feather
+              name="check-circle"
+              size={20}
+              color={Colors.dark.primary}
+            />
           ) : (
-            <Feather name="circle" size={20} color={Colors.dark.textSecondary} />
+            <Feather
+              name="circle"
+              size={20}
+              color={Colors.dark.textSecondary}
+            />
           )}
         </Pressable>
       </View>
@@ -108,7 +140,7 @@ export default function AIProvidersScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
 
-  const [activeProvider, setActiveProvider] = useState<AIProvider>("openfang");
+  const [activeProvider, setActiveProvider] = useState<AIProvider>("gemini");
   const [geminiKey, setGeminiKey] = useState("");
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [openaiKey, setOpenaiKey] = useState("");
@@ -116,7 +148,9 @@ export default function AIProvidersScreen() {
   const [openaiModel, setOpenaiModel] = useState("gpt-4o");
   const [anthropicKey, setAnthropicKey] = useState("");
   const [showAnthropicKey, setShowAnthropicKey] = useState(false);
-  const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4-20250514");
+  const [anthropicModel, setAnthropicModel] = useState(
+    "claude-sonnet-4-20250514",
+  );
   const [openfangKey, setOpenfangKey] = useState("");
   const [showOpenfangKey, setShowOpenfangKey] = useState(false);
   const [openfangBaseUrl, setOpenfangBaseUrl] = useState("");
@@ -126,7 +160,9 @@ export default function AIProvidersScreen() {
   const [showCustomKey, setShowCustomKey] = useState(false);
   const [customModel, setCustomModel] = useState("");
   const [saving, setSaving] = useState(false);
-  const [testingProvider, setTestingProvider] = useState<AIProvider | null>(null);
+  const [testingProvider, setTestingProvider] = useState<AIProvider | null>(
+    null,
+  );
 
   useEffect(() => {
     loadSettings();
@@ -135,7 +171,13 @@ export default function AIProvidersScreen() {
   const loadSettings = async () => {
     try {
       const active = await AsyncStorage.getItem(ACTIVE_PROVIDER_KEY);
-      if (active === "gemini" || active === "openai" || active === "anthropic" || active === "openfang" || active === "custom") {
+      if (
+        active === "gemini" ||
+        active === "openai" ||
+        active === "anthropic" ||
+        active === "openfang" ||
+        active === "custom"
+      ) {
         setActiveProvider(active);
       }
 
@@ -201,7 +243,10 @@ export default function AIProvidersScreen() {
         await secureDelete(OPENFANG_API_KEY);
       }
       if (openfangBaseUrl) {
-        await AsyncStorage.setItem(OPENFANG_BASE_URL_KEY, openfangBaseUrl.trim());
+        await AsyncStorage.setItem(
+          OPENFANG_BASE_URL_KEY,
+          openfangBaseUrl.trim(),
+        );
       } else {
         await AsyncStorage.removeItem(OPENFANG_BASE_URL_KEY);
       }
@@ -245,21 +290,30 @@ export default function AIProvidersScreen() {
 
       if (provider === "openai") {
         if (!openaiKey) {
-          Alert.alert("Missing API Key", "Please enter your OpenAI API key first.");
+          Alert.alert(
+            "Missing API Key",
+            "Please enter your OpenAI API key first.",
+          );
           return;
         }
         body.apiKey = openaiKey.trim();
         body.model = openaiModel;
       } else if (provider === "anthropic") {
         if (!anthropicKey) {
-          Alert.alert("Missing API Key", "Please enter your Anthropic API key first.");
+          Alert.alert(
+            "Missing API Key",
+            "Please enter your Anthropic API key first.",
+          );
           return;
         }
         body.apiKey = anthropicKey.trim();
         body.model = anthropicModel;
       } else if (provider === "openfang") {
         if (!openfangKey) {
-          Alert.alert("Missing API Key", "Please enter your OpenFang API key first.");
+          Alert.alert(
+            "Missing API Key",
+            "Please enter your OpenFang API key first.",
+          );
           return;
         }
         body.apiKey = openfangKey.trim();
@@ -267,7 +321,10 @@ export default function AIProvidersScreen() {
         if (openfangModel) body.model = openfangModel.trim();
       } else if (provider === "custom") {
         if (!customEndpoint) {
-          Alert.alert("Missing Endpoint", "Please enter your custom endpoint URL first.");
+          Alert.alert(
+            "Missing Endpoint",
+            "Please enter your custom endpoint URL first.",
+          );
           return;
         }
         body.endpoint = customEndpoint.trim();
@@ -289,12 +346,21 @@ export default function AIProvidersScreen() {
         if (Platform.OS !== "web") {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
-        Alert.alert("Success", result.message || `Connected to ${provider} successfully!`);
+        Alert.alert(
+          "Success",
+          result.message || `Connected to ${provider} successfully!`,
+        );
       } else {
-        Alert.alert("Connection Failed", result.message || `Could not connect to ${provider}.`);
+        Alert.alert(
+          "Connection Failed",
+          result.message || `Could not connect to ${provider}.`,
+        );
       }
     } catch (error: any) {
-      Alert.alert("Connection Error", error.message || "Could not reach the server.");
+      Alert.alert(
+        "Connection Error",
+        error.message || "Could not reach the server.",
+      );
     } finally {
       setTestingProvider(null);
     }
@@ -315,11 +381,16 @@ export default function AIProvidersScreen() {
 
   const providerLabel = (p: AIProvider) => {
     switch (p) {
-      case "gemini": return "Gemini";
-      case "openai": return "OpenAI";
-      case "anthropic": return "Anthropic";
-      case "openfang": return "OpenFang";
-      case "custom": return "Custom / Local";
+      case "gemini":
+        return "Gemini";
+      case "openai":
+        return "OpenAI";
+      case "anthropic":
+        return "Anthropic";
+      case "openfang":
+        return "OpenFang";
+      case "custom":
+        return "Custom / Local";
     }
   };
 
@@ -328,16 +399,19 @@ export default function AIProvidersScreen() {
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing["2xl"] },
+          {
+            paddingTop: headerHeight + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing["2xl"],
+          },
         ]}
       >
         <View style={styles.headerSection}>
           <View style={styles.iconCircle}>
             <Feather name="cpu" size={32} color={Colors.dark.primary} />
           </View>
-          <ThemedText style={styles.headerTitle}>AI Providers</ThemedText>
+          <ThemedText style={styles.headerTitle}>Emma's Brain</ThemedText>
           <ThemedText style={styles.headerSubtitle}>
-            Configure and choose which AI model to use for item analysis
+            Configure which AI models power Emma's appraisals and listing generation
           </ThemedText>
         </View>
 
@@ -357,11 +431,19 @@ export default function AIProvidersScreen() {
         >
           <View style={styles.providerBody}>
             <View style={styles.infoRow}>
-              <Feather name="check-circle" size={14} color={Colors.dark.success} />
-              <ThemedText style={styles.infoText}>Available via Replit AI integrations</ThemedText>
+              <Feather
+                name="check-circle"
+                size={14}
+                color={Colors.dark.success}
+              />
+              <ThemedText style={styles.infoText}>
+                Available via Replit AI integrations
+              </ThemedText>
             </View>
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.inputLabel}>Custom API Key (Optional)</ThemedText>
+              <ThemedText style={styles.inputLabel}>
+                Custom API Key (Optional)
+              </ThemedText>
               <View style={styles.inputContainer}>
                 <TextInput
                   value={geminiKey}
@@ -374,14 +456,26 @@ export default function AIProvidersScreen() {
                   style={styles.textInput}
                   testID="input-gemini-key"
                 />
-                <Pressable onPress={() => setShowGeminiKey(!showGeminiKey)} style={styles.eyeButton}>
-                  <Feather name={showGeminiKey ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
+                <Pressable
+                  onPress={() => setShowGeminiKey(!showGeminiKey)}
+                  style={styles.eyeButton}
+                >
+                  <Feather
+                    name={showGeminiKey ? "eye-off" : "eye"}
+                    size={18}
+                    color={Colors.dark.textSecondary}
+                  />
                 </Pressable>
               </View>
-              <ThemedText style={styles.inputHint}>Leave blank to use Replit integration</ThemedText>
+              <ThemedText style={styles.inputHint}>
+                Leave blank to use Replit integration
+              </ThemedText>
             </View>
             <Pressable
-              style={({ pressed }) => [styles.testButton, pressed && { opacity: 0.8 }]}
+              style={({ pressed }) => [
+                styles.testButton,
+                pressed && { opacity: 0.8 },
+              ]}
               onPress={() => testConnection("gemini")}
               disabled={testingProvider !== null}
               testID="button-test-gemini"
@@ -420,8 +514,15 @@ export default function AIProvidersScreen() {
                   style={styles.textInput}
                   testID="input-openai-key"
                 />
-                <Pressable onPress={() => setShowOpenaiKey(!showOpenaiKey)} style={styles.eyeButton}>
-                  <Feather name={showOpenaiKey ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
+                <Pressable
+                  onPress={() => setShowOpenaiKey(!showOpenaiKey)}
+                  style={styles.eyeButton}
+                >
+                  <Feather
+                    name={showOpenaiKey ? "eye-off" : "eye"}
+                    size={18}
+                    color={Colors.dark.textSecondary}
+                  />
                 </Pressable>
               </View>
             </View>
@@ -431,10 +532,18 @@ export default function AIProvidersScreen() {
                 {OPENAI_MODELS.map((m) => (
                   <Pressable
                     key={m}
-                    style={[styles.modelChip, openaiModel === m && styles.modelChipActive]}
+                    style={[
+                      styles.modelChip,
+                      openaiModel === m && styles.modelChipActive,
+                    ]}
                     onPress={() => setOpenaiModel(m)}
                   >
-                    <ThemedText style={[styles.modelChipText, openaiModel === m && styles.modelChipTextActive]}>
+                    <ThemedText
+                      style={[
+                        styles.modelChipText,
+                        openaiModel === m && styles.modelChipTextActive,
+                      ]}
+                    >
                       {m}
                     </ThemedText>
                   </Pressable>
@@ -442,7 +551,10 @@ export default function AIProvidersScreen() {
               </View>
             </View>
             <Pressable
-              style={({ pressed }) => [styles.testButton, pressed && { opacity: 0.8 }]}
+              style={({ pressed }) => [
+                styles.testButton,
+                pressed && { opacity: 0.8 },
+              ]}
               onPress={() => testConnection("openai")}
               disabled={testingProvider !== null}
               testID="button-test-openai"
@@ -481,8 +593,15 @@ export default function AIProvidersScreen() {
                   style={styles.textInput}
                   testID="input-anthropic-key"
                 />
-                <Pressable onPress={() => setShowAnthropicKey(!showAnthropicKey)} style={styles.eyeButton}>
-                  <Feather name={showAnthropicKey ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
+                <Pressable
+                  onPress={() => setShowAnthropicKey(!showAnthropicKey)}
+                  style={styles.eyeButton}
+                >
+                  <Feather
+                    name={showAnthropicKey ? "eye-off" : "eye"}
+                    size={18}
+                    color={Colors.dark.textSecondary}
+                  />
                 </Pressable>
               </View>
             </View>
@@ -492,18 +611,33 @@ export default function AIProvidersScreen() {
                 {ANTHROPIC_MODELS.map((m) => (
                   <Pressable
                     key={m}
-                    style={[styles.modelChip, anthropicModel === m && styles.modelChipActive]}
+                    style={[
+                      styles.modelChip,
+                      anthropicModel === m && styles.modelChipActive,
+                    ]}
                     onPress={() => setAnthropicModel(m)}
                   >
-                    <ThemedText style={[styles.modelChipText, anthropicModel === m && styles.modelChipTextActive]}>
-                      {m.replace("claude-", "").replace("-20250514", "").replace("-20241022", "").replace("-20240307", "")}
+                    <ThemedText
+                      style={[
+                        styles.modelChipText,
+                        anthropicModel === m && styles.modelChipTextActive,
+                      ]}
+                    >
+                      {m
+                        .replace("claude-", "")
+                        .replace("-20250514", "")
+                        .replace("-20241022", "")
+                        .replace("-20240307", "")}
                     </ThemedText>
                   </Pressable>
                 ))}
               </View>
             </View>
             <Pressable
-              style={({ pressed }) => [styles.testButton, pressed && { opacity: 0.8 }]}
+              style={({ pressed }) => [
+                styles.testButton,
+                pressed && { opacity: 0.8 },
+              ]}
               onPress={() => testConnection("anthropic")}
               disabled={testingProvider !== null}
               testID="button-test-anthropic"
@@ -529,8 +663,14 @@ export default function AIProvidersScreen() {
         >
           <View style={styles.providerBody}>
             <View style={styles.infoRow}>
-              <Feather name="info" size={14} color={Colors.dark.textSecondary} />
-              <ThemedText style={styles.infoText}>Multi-model AI routing with automatic vision model selection</ThemedText>
+              <Feather
+                name="info"
+                size={14}
+                color={Colors.dark.textSecondary}
+              />
+              <ThemedText style={styles.infoText}>
+                Multi-model AI routing with automatic vision model selection
+              </ThemedText>
             </View>
             <View style={styles.inputGroup}>
               <ThemedText style={styles.inputLabel}>API Key</ThemedText>
@@ -546,15 +686,29 @@ export default function AIProvidersScreen() {
                   style={styles.textInput}
                   testID="input-openfang-key"
                 />
-                <Pressable onPress={() => setShowOpenfangKey(!showOpenfangKey)} style={styles.eyeButton}>
-                  <Feather name={showOpenfangKey ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
+                <Pressable
+                  onPress={() => setShowOpenfangKey(!showOpenfangKey)}
+                  style={styles.eyeButton}
+                >
+                  <Feather
+                    name={showOpenfangKey ? "eye-off" : "eye"}
+                    size={18}
+                    color={Colors.dark.textSecondary}
+                  />
                 </Pressable>
               </View>
             </View>
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.inputLabel}>Base URL (Optional)</ThemedText>
+              <ThemedText style={styles.inputLabel}>
+                Base URL (Optional)
+              </ThemedText>
               <View style={styles.inputContainer}>
-                <Feather name="globe" size={18} color={Colors.dark.textSecondary} style={styles.inputIcon} />
+                <Feather
+                  name="globe"
+                  size={18}
+                  color={Colors.dark.textSecondary}
+                  style={styles.inputIcon}
+                />
                 <TextInput
                   value={openfangBaseUrl}
                   onChangeText={setOpenfangBaseUrl}
@@ -567,10 +721,14 @@ export default function AIProvidersScreen() {
                   testID="input-openfang-base-url"
                 />
               </View>
-              <ThemedText style={styles.inputHint}>Leave blank to use env default or OPENFANG_BASE_URL</ThemedText>
+              <ThemedText style={styles.inputHint}>
+                Leave blank to use env default or OPENFANG_BASE_URL
+              </ThemedText>
             </View>
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.inputLabel}>Model (Optional)</ThemedText>
+              <ThemedText style={styles.inputLabel}>
+                Model (Optional)
+              </ThemedText>
               <View style={styles.inputContainer}>
                 <TextInput
                   value={openfangModel}
@@ -583,10 +741,15 @@ export default function AIProvidersScreen() {
                   testID="input-openfang-model"
                 />
               </View>
-              <ThemedText style={styles.inputHint}>Leave blank for automatic model routing</ThemedText>
+              <ThemedText style={styles.inputHint}>
+                Leave blank for automatic model routing
+              </ThemedText>
             </View>
             <Pressable
-              style={({ pressed }) => [styles.testButton, pressed && { opacity: 0.8 }]}
+              style={({ pressed }) => [
+                styles.testButton,
+                pressed && { opacity: 0.8 },
+              ]}
               onPress={() => testConnection("openfang")}
               disabled={testingProvider !== null}
               testID="button-test-openfang"
@@ -612,13 +775,24 @@ export default function AIProvidersScreen() {
         >
           <View style={styles.providerBody}>
             <View style={styles.infoRow}>
-              <Feather name="info" size={14} color={Colors.dark.textSecondary} />
-              <ThemedText style={styles.infoText}>Ollama, LM Studio, or any OpenAI-compatible API</ThemedText>
+              <Feather
+                name="info"
+                size={14}
+                color={Colors.dark.textSecondary}
+              />
+              <ThemedText style={styles.infoText}>
+                Ollama, LM Studio, or any OpenAI-compatible API
+              </ThemedText>
             </View>
             <View style={styles.inputGroup}>
               <ThemedText style={styles.inputLabel}>Endpoint URL</ThemedText>
               <View style={styles.inputContainer}>
-                <Feather name="globe" size={18} color={Colors.dark.textSecondary} style={styles.inputIcon} />
+                <Feather
+                  name="globe"
+                  size={18}
+                  color={Colors.dark.textSecondary}
+                  style={styles.inputIcon}
+                />
                 <TextInput
                   value={customEndpoint}
                   onChangeText={setCustomEndpoint}
@@ -631,10 +805,14 @@ export default function AIProvidersScreen() {
                   testID="input-custom-endpoint"
                 />
               </View>
-              <ThemedText style={styles.inputHint}>Base URL of the OpenAI-compatible API</ThemedText>
+              <ThemedText style={styles.inputHint}>
+                Base URL of the OpenAI-compatible API
+              </ThemedText>
             </View>
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.inputLabel}>API Key (Optional)</ThemedText>
+              <ThemedText style={styles.inputLabel}>
+                API Key (Optional)
+              </ThemedText>
               <View style={styles.inputContainer}>
                 <TextInput
                   value={customApiKey}
@@ -647,8 +825,15 @@ export default function AIProvidersScreen() {
                   style={styles.textInput}
                   testID="input-custom-api-key"
                 />
-                <Pressable onPress={() => setShowCustomKey(!showCustomKey)} style={styles.eyeButton}>
-                  <Feather name={showCustomKey ? "eye-off" : "eye"} size={18} color={Colors.dark.textSecondary} />
+                <Pressable
+                  onPress={() => setShowCustomKey(!showCustomKey)}
+                  style={styles.eyeButton}
+                >
+                  <Feather
+                    name={showCustomKey ? "eye-off" : "eye"}
+                    size={18}
+                    color={Colors.dark.textSecondary}
+                  />
                 </Pressable>
               </View>
             </View>
@@ -668,7 +853,10 @@ export default function AIProvidersScreen() {
               </View>
             </View>
             <Pressable
-              style={({ pressed }) => [styles.testButton, pressed && { opacity: 0.8 }]}
+              style={({ pressed }) => [
+                styles.testButton,
+                pressed && { opacity: 0.8 },
+              ]}
               onPress={() => testConnection("custom")}
               disabled={testingProvider !== null}
               testID="button-test-custom"
@@ -678,7 +866,9 @@ export default function AIProvidersScreen() {
               ) : (
                 <>
                   <Feather name="wifi" size={16} color={Colors.dark.text} />
-                  <ThemedText style={styles.testButtonText}>Test Connection</ThemedText>
+                  <ThemedText style={styles.testButtonText}>
+                    Test Connection
+                  </ThemedText>
                 </>
               )}
             </Pressable>
@@ -686,7 +876,11 @@ export default function AIProvidersScreen() {
         </ProviderSection>
 
         <Pressable
-          style={({ pressed }) => [styles.saveButton, pressed && { opacity: 0.8 }, saving && { opacity: 0.6 }]}
+          style={({ pressed }) => [
+            styles.saveButton,
+            pressed && { opacity: 0.8 },
+            saving && { opacity: 0.6 },
+          ]}
           onPress={saveAll}
           disabled={saving}
           testID="button-save-ai-providers"
@@ -696,7 +890,9 @@ export default function AIProvidersScreen() {
           ) : (
             <>
               <Feather name="save" size={18} color={Colors.dark.buttonText} />
-              <ThemedText style={styles.saveButtonText}>Save All Settings</ThemedText>
+              <ThemedText style={styles.saveButtonText}>
+                Save All Settings
+              </ThemedText>
             </>
           )}
         </Pressable>
