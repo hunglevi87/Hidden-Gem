@@ -23,6 +23,8 @@
 - Enhanced fallback logic to use Gemini as fallback when OpenFang is requested but unavailable
 - Modified default provider selection in retry endpoint to maintain OpenFang preference
 - Updated intelligent fallback mechanism documentation
+- Enhanced AnalysisResult schema with comprehensive new fields
+- Added support for new AI provider types and improved error handling
 
 ## Table of Contents
 1. [Introduction](#introduction)

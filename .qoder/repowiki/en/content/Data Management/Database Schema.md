@@ -10,6 +10,8 @@
 - [migrations/0002_rls_policies.sql](file://migrations/0002_rls_policies.sql)
 - [migrations/0003_high_value_approval.sql](file://migrations/0003_high_value_approval.sql)
 - [migrations/0004_openfang_settings.sql](file://migrations/0004_openfang_settings.sql)
+- [migrations/0005_gift_sets.sql](file://migrations/0005_gift_sets.sql)
+- [migrations/0006_platform_versions.sql](file://migrations/0006_platform_versions.sql)
 - [migrations/meta/0000_snapshot.json](file://migrations/meta/0000_snapshot.json)
 - [server/services/notification.ts](file://server/services/notification.ts)
 - [shared/types.ts](file://shared/types.ts)
@@ -21,12 +23,11 @@
 
 ## Update Summary
 **Changes Made**
-- Updated userSettings table documentation to include new OpenFang-specific columns (openfang_api_key, openfang_base_url, preferred_openfang_model)
-- Added high_value_threshold column documentation in userSettings table
-- Updated stashItems table documentation to include publish_status column
-- Enhanced AI provider configuration section to reflect OpenFang integration
-- Updated architecture overview to show new high-value approval tracking capabilities
-- Added comprehensive documentation for OpenFang AI provider implementation and high-value approval workflows
+- Enhanced stashItems table with new platform_versions and market_matches JSONB columns for multi-platform listing capabilities and market match comparisons
+- Added gift_sets table for craft functionality and bundled item collections
+- Updated architecture overview to reflect new multi-platform listing and craft features
+- Expanded AI provider configuration section to include new platform versioning capabilities
+- Updated troubleshooting guide with new column usage patterns and craft functionality
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -43,7 +44,7 @@
 ## Introduction
 This document provides comprehensive data model documentation for Hidden-Gem's PostgreSQL database schema. It covers all entities, including core tables (users, userSettings, stashItems, articles, notifications), marketplace tables (sellers, products, listings, integrations), and auxiliary tables (conversations, messages, pushTokens, priceTracking). For each table, we document fields, data types, primary and foreign keys, indexes, constraints, and referential integrity. We explain the purpose and relationships among tables, focusing on how user data connects to marketplace operations. Business constraints, validation rules, unique indexes, and cascading delete behaviors are included. Composite keys and UUID usage rationale are explained, along with data lifecycle considerations.
 
-**Updated** Added documentation for new high-value approval tracking and OpenFang AI provider integration features. The schema now supports enterprise-grade AI providers with configurable endpoints and enhanced approval workflows for high-value items.
+**Updated** Enhanced with new platform_versions and market_matches JSONB columns in stash_items for multi-platform listing capabilities, and gift_sets table for craft functionality. The schema now supports advanced marketplace operations with platform versioning and bundled item collections.
 
 ## Project Structure
 Hidden-Gem uses Drizzle ORM with a PostgreSQL dialect. The schema is defined in a single TypeScript module and migrated via Drizzle Kit. The server connects to the database using a Node-PG pool and exposes CRUD operations through API routes.
@@ -83,35 +84,38 @@ TS --> D
 This section summarizes the core relational entities and their roles in the system.
 
 - users: Authentication and identity backbone. UUID primary key; username unique.
-- userSettings: Per-user preferences and third-party API keys. Cascades on user deletion. **Updated** Now includes OpenFang AI provider configuration and high-value approval threshold settings.
-- stashItems: Personal collection items with AI analysis, SEO metadata, and marketplace publishing flags. Cascades on user deletion. **Updated** Now includes publish_status field for high-value item approval workflows.
+- userSettings: Per-user preferences and third-party API keys. Cascades on user deletion. **Updated** Now includes OpenFang AI provider configuration, high-value approval threshold settings, and enhanced AI provider management.
+- stashItems: Personal collection items with AI analysis, SEO metadata, marketplace publishing flags, and new platform versioning capabilities. Cascades on user deletion. **Updated** Now includes publish_status field, platform_versions and market_matches JSONB columns for multi-platform listing support.
 - articles: Content hub for educational and informational posts.
 - conversations and messages: Chat/history for support or internal use. Cascades on conversation deletion.
 - notifications: Audit trail and user-visible alerts. Cascades on user deletion; optional stash item linkage.
 - pushTokens: Device push notification registration per user. Cascades on user deletion.
+- **New** giftSets: Craft functionality for bundled item collections with tier-based pricing and item snapshots.
 
 Relationship highlights:
 - users → userSettings, stashItems, notifications, pushTokens via user_id FKs with cascade deletes.
 - conversations → messages via conversation_id FK with cascade deletes.
 - notifications optionally link to stashItems.
+- **New** giftSets link to users and contain arrays of stash item IDs with cached item snapshots.
 
-**Updated** Enhanced userSettings and stashItems tables now support advanced AI provider configuration and high-value item approval workflows with OpenFang integration.
+**Updated** Enhanced userSettings and stashItems tables now support advanced AI provider configuration, high-value item approval workflows, multi-platform listing capabilities, and craft functionality.
 
 **Section sources**
 - [shared/schema.ts:6-12](file://shared/schema.ts#L6-L12)
 - [shared/schema.ts:14-31](file://shared/schema.ts#L14-L31)
-- [shared/schema.ts:33-55](file://shared/schema.ts#L33-L55)
+- [shared/schema.ts:33-59](file://shared/schema.ts#L33-L59)
 - [shared/schema.ts:57-67](file://shared/schema.ts#L57-L67)
 - [shared/schema.ts:69-81](file://shared/schema.ts#L69-L81)
-- [shared/schema.ts:264-271](file://shared/schema.ts#L264-L271)
-- [shared/schema.ts:273-298](file://shared/schema.ts#L273-L298)
+- [shared/schema.ts:268-288](file://shared/schema.ts#L268-L288)
+- [shared/schema.ts:290-325](file://shared/schema.ts#L290-L325)
 
 ## Architecture Overview
 The schema supports two major domains:
 - Core user domain: identity, settings, personal stash, articles, messaging, and notifications.
 - Marketplace domain (FlipAgent): seller profiles, product catalog, marketplace listings, integrations, AI generation logs, and async sync queue.
+- **New** Enhanced stashItems with multi-platform listing capabilities and craft functionality.
 
-**Updated** Enhanced with high-value approval tracking and OpenFang AI provider integration capabilities, supporting enterprise-grade AI workflows.
+**Updated** Enhanced with high-value approval tracking, OpenFang AI provider integration, multi-platform listing support, and craft functionality for bundled item collections.
 
 ```mermaid
 erDiagram
@@ -161,6 +165,10 @@ boolean published_to_woocommerce
 boolean published_to_ebay
 text woocommerce_product_id
 text ebay_listing_id
+text item_type
+jsonb handmade_details
+jsonb platform_versions
+jsonb market_matches
 timestamp created_at
 timestamp updated_at
 }
@@ -303,10 +311,24 @@ timestamp created_at
 timestamp scheduled_at
 timestamp completed_at
 }
+GIFT_SETS {
+serial id PK
+varchar user_id FK
+text title
+text tier
+text description
+text marketing_hook
+integer[] item_ids
+jsonb items_snapshot
+decimal total_value
+decimal selling_price
+timestamp created_at
+}
 USERS ||--o{ USER_SETTINGS : "has"
 USERS ||--o{ STASH_ITEMS : "owns"
 USERS ||--o{ PUSH_TOKENS : "registered"
 USERS ||--o{ NOTIFICATIONS : "receives"
+USERS ||--o{ GIFT_SETS : "creates"
 CONVERSATIONS ||--o{ MESSAGES : "contains"
 STASH_ITEMS ||--o{ NOTIFICATIONS : "linked to"
 USERS ||--|| SELLERS : "profile"
@@ -323,11 +345,10 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
 **Diagram sources**
 - [shared/schema.ts:6-12](file://shared/schema.ts#L6-L12)
 - [shared/schema.ts:14-31](file://shared/schema.ts#L14-L31)
-- [shared/schema.ts:33-55](file://shared/schema.ts#L33-L55)
+- [shared/schema.ts:33-59](file://shared/schema.ts#L33-L59)
 - [shared/schema.ts:57-67](file://shared/schema.ts#L57-L67)
 - [shared/schema.ts:69-81](file://shared/schema.ts#L69-L81)
-- [shared/schema.ts:264-271](file://shared/schema.ts#L264-L271)
-- [shared/schema.ts:273-298](file://shared/schema.ts#L273-L298)
+- [shared/schema.ts:268-288](file://shared/schema.ts#L268-L288)
 - [shared/schema.ts:120-131](file://shared/schema.ts#L120-L131)
 - [shared/schema.ts:133-156](file://shared/schema.ts#L133-L156)
 - [shared/schema.ts:158-177](file://shared/schema.ts#L158-L177)
@@ -352,7 +373,7 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
 - [migrations/meta/0000_snapshot.json:471-510](file://migrations/meta/0000_snapshot.json#L471-L510)
 
 ### userSettings
-- Purpose: Stores user-specific configuration and third-party API credentials. **Updated** Now includes OpenFang AI provider settings and high-value approval threshold configuration.
+- Purpose: Stores user-specific configuration and third-party API credentials. **Updated** Now includes OpenFang AI provider settings, high-value approval threshold configuration, and enhanced AI provider management.
 - Fields and types:
   - id: serial, primary key.
   - userId: varchar, not null, references users(id) with cascade delete.
@@ -368,8 +389,9 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
 - Typical usage:
   - Per-user preference overrides and integration credentials.
   - **New** High-value item approval workflows and OpenFang AI provider configuration.
+  - **New** Enhanced AI provider management with platform-specific configurations.
 
-**Updated** Added comprehensive OpenFang AI provider integration and high-value approval tracking capabilities.
+**Updated** Added comprehensive OpenFang AI provider integration, high-value approval tracking capabilities, and enhanced AI provider management features.
 
 **Section sources**
 - [shared/schema.ts:14-31](file://shared/schema.ts#L14-L31)
@@ -378,7 +400,7 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
 - [migrations/meta/0000_snapshot.json:318-448](file://migrations/meta/0000_snapshot.json#L318-L448)
 
 ### stashItems
-- Purpose: Personal collection of items with AI analysis, SEO metadata, and marketplace publishing flags. **Updated** Now includes publish_status field for high-value item approval workflows.
+- Purpose: Personal collection of items with AI analysis, SEO metadata, marketplace publishing flags, and new platform versioning capabilities. **Updated** Now includes publish_status field, platform_versions and market_matches JSONB columns for multi-platform listing support.
 - Fields and types:
   - id: serial, primary key.
   - userId: varchar, not null, references users(id) with cascade delete.
@@ -389,6 +411,10 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
   - SEO fields: seoTitle, seoDescription, seoKeywords array.
   - **New** publishStatus: text field with default 'draft' for high-value item approval tracking.
   - Publishing flags and identifiers for Woocommerce and eBay.
+  - **New** itemType: text field with default 'designer' for categorization.
+  - **New** handmadeDetails: jsonb for craft item specifications.
+  - **New** platformVersions: jsonb for storing platform-specific version information and metadata.
+  - **New** marketMatches: jsonb for storing market comparison data and match analysis.
   - Timestamps: created_at, updated_at.
 - Constraints and indexes:
   - Foreign key to users(id) with cascade delete.
@@ -397,12 +423,15 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
 - Typical usage:
   - Items tracked for resale value and potential marketplace publication.
   - **New** High-value items can be flagged for manual approval before publication.
+  - **New** Multi-platform listing support with version tracking and market match comparisons.
+  - **New** Craft functionality with detailed item specifications and pricing.
 
-**Updated** Enhanced with publish_status field to support high-value approval workflows.
+**Updated** Enhanced with publish_status field for high-value approval workflows, platform_versions and market_matches JSONB columns for multi-platform listing capabilities, and craft functionality support.
 
 **Section sources**
-- [shared/schema.ts:33-55](file://shared/schema.ts#L33-L55)
+- [shared/schema.ts:33-59](file://shared/schema.ts#L33-L59)
 - [migrations/0003_high_value_approval.sql:1-2](file://migrations/0003_high_value_approval.sql#L1-L2)
+- [migrations/0006_platform_versions.sql:1-3](file://migrations/0006_platform_versions.sql#L1-L3)
 - [migrations/meta/0000_snapshot.json:167-295](file://migrations/meta/0000_snapshot.json#L167-L295)
 
 ### articles
@@ -455,7 +484,7 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
   - Not-null on userId, token, platform, and timestamps.
 
 **Section sources**
-- [shared/schema.ts:264-271](file://shared/schema.ts#L264-L271)
+- [shared/schema.ts:290-298](file://shared/schema.ts#L290-L298)
 - [migrations/meta/0000_snapshot.json:259-280](file://migrations/meta/0000_snapshot.json#L259-L280)
 
 ### notifications
@@ -475,7 +504,7 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
   - Not-null on userId, type, title, body, and sentAt.
 
 **Section sources**
-- [shared/schema.ts:288-298](file://shared/schema.ts#L288-L298)
+- [shared/schema.ts:315-325](file://shared/schema.ts#L315-L325)
 - [migrations/meta/0000_snapshot.json:283-293](file://migrations/meta/0000_snapshot.json#L283-L293)
 
 ### priceTracking
@@ -497,7 +526,7 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
   - Controlled by server-side service; scheduled checks update lastPrice and nextCheckAt.
 
 **Section sources**
-- [shared/schema.ts:273-285](file://shared/schema.ts#L273-L285)
+- [shared/schema.ts:300-312](file://shared/schema.ts#L300-L312)
 - [server/services/notification.ts:162-223](file://server/services/notification.ts#L162-L223)
 - [server/services/notification.ts:332-413](file://server/services/notification.ts#L332-L413)
 - [migrations/meta/0000_snapshot.json:269-280](file://migrations/meta/0000_snapshot.json#L269-L280)
@@ -568,7 +597,7 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
   - Not-null on sellerId, productId, marketplace, title, description, and timestamps.
 
 **Section sources**
-- [shared/schema.ts:158-177](file://shared/schema.ts#L158-L177)
+- [shared/schema.ts:162-181](file://shared/schema.ts#L162-L181)
 - [migrations/0001_flipagent_tables.sql:42-61](file://migrations/0001_flipagent_tables.sql#L42-L61)
 - [migrations/meta/0000_snapshot.json:153-172](file://migrations/meta/0000_snapshot.json#L153-L172)
 
@@ -594,7 +623,7 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
   - Ensures one integration per service per seller.
 
 **Section sources**
-- [shared/schema.ts:210-225](file://shared/schema.ts#L210-L225)
+- [shared/schema.ts:214-229](file://shared/schema.ts#L214-L229)
 - [migrations/0001_flipagent_tables.sql:63-77](file://migrations/0001_flipagent_tables.sql#L63-L77)
 - [migrations/0001_flipagent_tables.sql:116-116](file://migrations/0001_flipagent_tables.sql#L116-L116)
 - [migrations/meta/0000_snapshot.json:205-220](file://migrations/meta/0000_snapshot.json#L205-L220)
@@ -613,7 +642,7 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
   - Not-null on sellerId, modelUsed, outputListing, and created_at.
 
 **Section sources**
-- [shared/schema.ts:179-192](file://shared/schema.ts#L179-L192)
+- [shared/schema.ts:183-196](file://shared/schema.ts#L183-L196)
 - [migrations/0001_flipagent_tables.sql:79-92](file://migrations/0001_flipagent_tables.sql#L79-L92)
 - [migrations/meta/0000_snapshot.json:174-187](file://migrations/meta/0000_snapshot.json#L174-L187)
 
@@ -636,9 +665,39 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
   - Not-null on sellerId, productId, marketplace, action, and timestamps.
 
 **Section sources**
-- [shared/schema.ts:194-208](file://shared/schema.ts#L194-L208)
+- [shared/schema.ts:198-212](file://shared/schema.ts#L198-L212)
 - [migrations/0001_flipagent_tables.sql:94-108](file://migrations/0001_flipagent_tables.sql#L94-L108)
 - [migrations/meta/0000_snapshot.json:189-203](file://migrations/meta/0000_snapshot.json#L189-L203)
+
+### giftSets
+- Purpose: Craft functionality for bundled item collections with tier-based pricing and item snapshots. **New** This table enables creating curated gift packages from individual stash items.
+- Fields and types:
+  - id: serial, primary key.
+  - userId: varchar, not null, references users(id) with cascade delete.
+  - title: text, not null.
+  - tier: text, not null ('Budget' | 'Starter' | 'Core' | 'Premium' | 'Ultimate').
+  - description: text.
+  - marketingHook: text.
+  - itemIds: integer array, not null, default empty array.
+  - itemsSnapshot: jsonb for cached item titles and images.
+  - totalValue: decimal(10,2) for calculated item value.
+  - sellingPrice: decimal(10,2) for package pricing.
+  - createdAt: timestamp, default current timestamp.
+- Constraints and indexes:
+  - Foreign key to users(id) with cascade delete.
+- Validation rules:
+  - Not-null on userId, title, tier, and itemIds.
+- Typical usage:
+  - Create curated gift packages from individual stash items.
+  - Store item snapshots for display without linking to live items.
+  - Calculate total value and set selling price for packages.
+
+**New** Added comprehensive gift sets functionality for craft and bundling operations.
+
+**Section sources**
+- [shared/schema.ts:268-288](file://shared/schema.ts#L268-L288)
+- [migrations/0005_gift_sets.sql:1-14](file://migrations/0005_gift_sets.sql#L1-L14)
+- [migrations/meta/0000_snapshot.json:380-420](file://migrations/meta/0000_snapshot.json#L380-L420)
 
 ## Dependency Analysis
 - Drizzle configuration and runtime:
@@ -649,11 +708,13 @@ PRODUCTS ||--o{ SYNC_QUEUE : "queued for"
   - FlipAgent tables (sellers, products, listings, integrations, aiGenerations, syncQueue) were added in a subsequent migration.
   - **New** High-value approval tracking was added in migration 0003.
   - **New** OpenFang AI provider settings were added in migration 0004.
+  - **New** Gift sets functionality was added in migration 0005.
+  - **New** Platform versions and market matches support was added in migration 0006.
   - Row-Level Security (RLS) policies were applied to FlipAgent tables in a third migration.
   - Snapshot metadata:
   - migrations/meta/0000_snapshot.json captures the initial schema state, including columns, foreign keys, unique constraints, and default values.
 
-**Updated** Added documentation for new migration files that introduced high-value approval tracking and OpenFang AI provider integration.
+**Updated** Added documentation for new migration files that introduced high-value approval tracking, OpenFang AI provider integration, gift sets functionality, and platform versioning capabilities.
 
 ```mermaid
 graph LR
@@ -665,11 +726,15 @@ SCHEMA --> MIG1["0001_flipagent_tables.sql"]
 SCHEMA --> MIG2["0002_rls_policies.sql"]
 SCHEMA --> MIG3["0003_high_value_approval.sql"]
 SCHEMA --> MIG4["0004_openfang_settings.sql"]
+SCHEMA --> MIG5["0005_gift_sets.sql"]
+SCHEMA --> MIG6["0006_platform_versions.sql"]
 MIG0 -.-> SNAP["meta/0000_snapshot.json"]
 MIG1 -.-> SNAP
 MIG2 -.-> SNAP
 MIG3 -.-> SNAP
 MIG4 -.-> SNAP
+MIG5 -.-> SNAP
+MIG6 -.-> SNAP
 ```
 
 **Diagram sources**
@@ -681,6 +746,8 @@ MIG4 -.-> SNAP
 - [migrations/0002_rls_policies.sql:1-66](file://migrations/0002_rls_policies.sql#L1-L66)
 - [migrations/0003_high_value_approval.sql:1-3](file://migrations/0003_high_value_approval.sql#L1-L3)
 - [migrations/0004_openfang_settings.sql:1-4](file://migrations/0004_openfang_settings.sql#L1-L4)
+- [migrations/0005_gift_sets.sql:1-14](file://migrations/0005_gift_sets.sql#L1-L14)
+- [migrations/0006_platform_versions.sql:1-3](file://migrations/0006_platform_versions.sql#L1-L3)
 - [migrations/meta/0000_snapshot.json:1-523](file://migrations/meta/0000_snapshot.json#L1-L523)
 
 **Section sources**
@@ -691,6 +758,8 @@ MIG4 -.-> SNAP
 - [migrations/0002_rls_policies.sql:1-66](file://migrations/0002_rls_policies.sql#L1-L66)
 - [migrations/0003_high_value_approval.sql:1-3](file://migrations/0003_high_value_approval.sql#L1-L3)
 - [migrations/0004_openfang_settings.sql:1-4](file://migrations/0004_openfang_settings.sql#L1-L4)
+- [migrations/0005_gift_sets.sql:1-14](file://migrations/0005_gift_sets.sql#L1-L14)
+- [migrations/0006_platform_versions.sql:1-3](file://migrations/0006_platform_versions.sql#L1-L3)
 - [migrations/meta/0000_snapshot.json:1-523](file://migrations/meta/0000_snapshot.json#L1-L523)
 
 ## Performance Considerations
@@ -700,8 +769,10 @@ MIG4 -.-> SNAP
   - integrations: seller_id.
   - sync_queue: status, scheduled_at.
   - ai_generations: seller_id, created_at desc.
+  - **New** stash_items: platform_versions and market_matches JSONB columns for efficient querying.
 - Recommendations:
   - Add selective indexes on frequently filtered columns (e.g., products.category, listings.status, priceTracking fields).
+  - **New** Consider adding GIN indexes on platform_versions and market_matches JSONB columns for complex queries.
   - Monitor slow queries and adjust indexes accordingly.
   - Use connection pooling and consider read replicas for reporting-heavy workloads.
 
@@ -717,13 +788,16 @@ MIG4 -.-> SNAP
     - integrations (sellerId, service) is unique.
   - **New** High-value approval tracking: Items with value above high_value_threshold require manual approval before publication.
   - **New** OpenFang AI provider: Ensure proper API key configuration and base URL settings for OpenFang integration.
+  - **New** Platform versions and market matches: JSONB columns require proper indexing for performance; ensure appropriate GIN indexes are created.
+  - **New** Gift sets functionality: Ensure item_ids array contains valid stash item IDs and items_snapshot is properly formatted.
 - Operational tips:
   - Use Drizzle select/update/delete helpers to maintain referential integrity.
   - For price tracking, ensure scheduled jobs update lastPrice and nextCheckAt consistently.
   - **New** Configure high_value_threshold in userSettings to control approval workflows.
   - **New** Test OpenFang API connectivity before enabling OpenFang as an AI provider.
+  - **New** Monitor platform_versions and market_matches JSONB queries for performance optimization.
 
-**Updated** Added troubleshooting guidance for new high-value approval tracking and OpenFang AI provider features.
+**Updated** Added troubleshooting guidance for new high-value approval tracking, OpenFang AI provider features, platform versioning, market match comparisons, and gift sets functionality.
 
 **Section sources**
 - [drizzle.config.ts:7-9](file://drizzle.config.ts#L7-L9)
@@ -732,12 +806,13 @@ MIG4 -.-> SNAP
 - [shared/schema.ts:121-121](file://shared/schema.ts#L121-L121)
 - [shared/schema.ts:154-156](file://shared/schema.ts#L154-L156)
 - [shared/schema.ts:223-223](file://shared/schema.ts#L223-L223)
+- [shared/schema.ts:268-288](file://shared/schema.ts#L268-L288)
 - [migrations/0002_rls_policies.sql:6-11](file://migrations/0002_rls_policies.sql#L6-L11)
 
 ## Conclusion
-Hidden-Gem's schema cleanly separates user-centric and marketplace domains while enforcing strong referential integrity and business constraints. UUIDs and composite keys are used strategically to ensure uniqueness and scalability. Cascading deletes simplify lifecycle management, and RLS policies protect sensitive marketplace data. **Updated** The schema now includes advanced features for high-value item approval workflows and OpenFang AI provider integration, providing enhanced control over marketplace operations and AI-powered content generation. The documented relationships and constraints provide a solid foundation for application development and maintenance.
+Hidden-Gem's schema cleanly separates user-centric and marketplace domains while enforcing strong referential integrity and business constraints. UUIDs and composite keys are used strategically to ensure uniqueness and scalability. Cascading deletes simplify lifecycle management, and RLS policies protect sensitive marketplace data. **Updated** The schema now includes advanced features for high-value item approval workflows, OpenFang AI provider integration, multi-platform listing capabilities with platform versioning, market match comparisons, and craft functionality for bundled item collections. The documented relationships and constraints provide a solid foundation for application development and maintenance.
 
-**Updated** Enhanced with comprehensive high-value approval tracking and OpenFang AI provider integration capabilities.
+**Updated** Enhanced with comprehensive high-value approval tracking, OpenFang AI provider integration, multi-platform listing support with platform versioning, market match comparisons, and craft functionality for bundled item collections.
 
 ## Appendices
 
@@ -751,10 +826,11 @@ Hidden-Gem's schema cleanly separates user-centric and marketplace domains while
 - [shared/schema.ts:1-5](file://shared/schema.ts#L1-L5)
 - [shared/schema.ts:6-12](file://shared/schema.ts#L6-L12)
 - [shared/schema.ts:14-31](file://shared/schema.ts#L14-L31)
-- [shared/schema.ts:33-55](file://shared/schema.ts#L33-L55)
+- [shared/schema.ts:33-59](file://shared/schema.ts#L33-L59)
 - [shared/schema.ts:133-156](file://shared/schema.ts#L133-L156)
-- [shared/schema.ts:158-177](file://shared/schema.ts#L158-L177)
-- [shared/schema.ts:210-225](file://shared/schema.ts#L210-L225)
+- [shared/schema.ts:162-181](file://shared/schema.ts#L162-L181)
+- [shared/schema.ts:214-229](file://shared/schema.ts#L214-L229)
+- [shared/schema.ts:268-288](file://shared/schema.ts#L268-L288)
 
 ### Typical Data Structures
 - ProductType (shared/types.ts):
@@ -767,6 +843,8 @@ Hidden-Gem's schema cleanly separates user-centric and marketplace domains while
   - Shop profile, subscription tier, timestamps.
 - IntegrationType (shared/types.ts):
   - Service, tokens, credentials, activity counters, timestamps.
+- **New** GiftSetType (shared/types.ts):
+  - Title, tier, description, marketing hook, item IDs array, items snapshot, pricing.
 
 **Section sources**
 - [shared/types.ts:7-32](file://shared/types.ts#L7-L32)
@@ -774,6 +852,7 @@ Hidden-Gem's schema cleanly separates user-centric and marketplace domains while
 - [shared/types.ts:55-73](file://shared/types.ts#L55-L73)
 - [shared/types.ts:75-85](file://shared/types.ts#L75-L85)
 - [shared/types.ts:87-100](file://shared/types.ts#L87-L100)
+- [shared/types.ts:102-115](file://shared/types.ts#L102-L115)
 
 ### Data Lifecycle and Cascade Behaviors
 - users → userSettings, stashItems, notifications, pushTokens: cascade delete on user removal.
@@ -781,6 +860,7 @@ Hidden-Gem's schema cleanly separates user-centric and marketplace domains while
 - sellers → products, listings, integrations, aiGenerations, syncQueue: cascade delete on seller removal.
 - products → listings, aiGenerations, syncQueue: cascade delete on product removal.
 - priceTracking: cascade delete on user or stash item removal.
+- **New** giftSets: cascade delete on user removal.
 
 **Section sources**
 - [shared/schema.ts:16-16](file://shared/schema.ts#L16-L16)
@@ -790,6 +870,7 @@ Hidden-Gem's schema cleanly separates user-centric and marketplace domains while
 - [shared/schema.ts:121-121](file://shared/schema.ts#L121-L121)
 - [shared/schema.ts:136-136](file://shared/schema.ts#L136-L136)
 - [shared/schema.ts:276-277](file://shared/schema.ts#L276-L277)
+- [shared/schema.ts:298-298](file://shared/schema.ts#L298-L298)
 
 ### Validation Rules and Unique Indexes
 - Not-null constraints on identity, credentials, and core fields.
@@ -832,7 +913,7 @@ Configuration includes API keys, base URLs, and model preferences stored in user
 **New** The system now includes sophisticated high-value item approval workflows:
 
 - **Threshold Configuration**: Users can set individual approval thresholds in userSettings.high_value_threshold (default: 500)
-- **Automatic Flagging**: Items with suggestedListPrice above threshold are automatically flagged with publish_status = 'draft'
+- **Automatic Flagging**: Items with suggestedListPrice above threshold are automatically flagged with publish_status = 'held_for_review'
 - **Manual Review**: Users must manually approve high-value items before publication
 - **Approval Interface**: Client-side approval gates provide clear visibility of suggested prices vs. user thresholds
 - **Workflow Integration**: Approval status affects marketplace publishing pipeline
@@ -858,3 +939,29 @@ Configuration includes API keys, base URLs, and model preferences stored in user
 - [client/screens/AIProvidersScreen.tsx:523-604](file://client/screens/AIProvidersScreen.tsx#L523-L604)
 - [server/routes.ts:323-346](file://server/routes.ts#L323-L346)
 - [server/routes.ts:775-802](file://server/routes.ts#L775-L802)
+
+### Multi-Platform Listing Capabilities
+**New** Enhanced stashItems table now supports comprehensive multi-platform listing operations:
+
+- **Platform Versions Tracking**: JSONB column stores platform-specific version information and metadata
+- **Market Match Comparisons**: JSONB column enables detailed market analysis and competitive pricing comparisons
+- **Cross-Platform Synchronization**: Unified item management across multiple marketplace platforms
+- **Version Control**: Track item modifications and platform-specific adaptations
+- **Market Intelligence**: Store and analyze market match data for pricing optimization
+
+**Section sources**
+- [shared/schema.ts:55-56](file://shared/schema.ts#L55-L56)
+- [migrations/0006_platform_versions.sql:1-3](file://migrations/0006_platform_versions.sql#L1-L3)
+
+### Craft Functionality and Gift Sets
+**New** Comprehensive craft functionality for bundled item collections:
+
+- **Tier-Based Pricing**: Multiple tiers (Budget, Starter, Core, Premium, Ultimate) with predefined pricing strategies
+- **Item Bundling**: Curated collections from individual stash items with automatic value calculation
+- **Marketing Integration**: Built-in marketing hooks and descriptions for promotional campaigns
+- **Snapshot Caching**: Cached item details prevent broken links when individual items are modified
+- **Value Optimization**: Automatic calculation of total item value vs. package selling price
+
+**Section sources**
+- [shared/schema.ts:268-288](file://shared/schema.ts#L268-L288)
+- [migrations/0005_gift_sets.sql:1-14](file://migrations/0005_gift_sets.sql#L1-L14)

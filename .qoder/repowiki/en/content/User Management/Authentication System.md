@@ -10,24 +10,25 @@
 - [App.tsx](file://client/App.tsx)
 - [MainTabNavigator.tsx](file://client/navigation/MainTabNavigator.tsx)
 - [SettingsScreen.tsx](file://client/screens/SettingsScreen.tsx)
+- [CraftScreen.tsx](file://client/screens/CraftScreen.tsx)
+- [query-client.ts](file://client/lib/query-client.ts)
 - [ENVIRONMENT.md](file://ENVIRONMENT.md)
 - [routes.ts](file://server/routes.ts)
 - [index.ts](file://server/index.ts)
 - [db.ts](file://server/db.ts)
+- [auth-middleware.ts](file://server/auth-middleware.ts)
 - [schema.ts](file://shared/schema.ts)
-- [marketplace.ts](file://client/lib/marketplace.ts)
-- [query-client.ts](file://client/lib/query-client.ts)
 - [0002_rls_policies.sql](file://migrations/0002_rls_policies.sql)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive marketplace authentication infrastructure documentation
-- Updated security policies section to cover Row-Level Security (RLS) implementation
-- Enhanced API authentication enforcement documentation
-- Added marketplace operations authentication patterns
-- Updated database schema documentation for seller profiles and marketplace integration
-- Expanded authentication middleware and API security coverage
+- Enhanced authentication system with new server-side authentication middleware for protecting craft endpoints
+- Added requireAuth middleware for proper user identification and IDOR protection
+- Implemented server-side authentication for craft routes (/api/craft/*)
+- Improved security throughout the application with mandatory authentication for sensitive endpoints
+- Updated client-side authentication handling to support Bearer token authentication
+- Added comprehensive craft endpoint protection with user-scoped data access
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -35,20 +36,21 @@
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Marketplace Authentication Infrastructure](#marketplace-authentication-infrastructure)
-7. [Database Security and Row-Level Policies](#database-security-and-row-level-policies)
-8. [API Authentication Enforcement](#api-authentication-enforcement)
-9. [Dependency Analysis](#dependency-analysis)
-10. [Performance Considerations](#performance-considerations)
-11. [Security Considerations](#security-considerations)
-12. [Troubleshooting Guide](#troubleshooting-guide)
-13. [Practical Implementation Examples](#practical-implementation-examples)
-14. [Conclusion](#conclusion)
+6. [Enhanced Authentication Middleware](#enhanced-authentication-middleware)
+7. [Craft Endpoint Security](#craft-endpoint-security)
+8. [Database Security and Row-Level Policies](#database-security-and-row-level-policies)
+9. [API Authentication Enforcement](#api-authentication-enforcement)
+10. [Dependency Analysis](#dependency-analysis)
+11. [Performance Considerations](#performance-considerations)
+12. [Security Considerations](#security-considerations)
+13. [Troubleshooting Guide](#troubleshooting-guide)
+14. [Practical Implementation Examples](#practical-implementation-examples)
+15. [Conclusion](#conclusion)
 
 ## Introduction
 This document provides comprehensive authentication system documentation for Hidden-Gem's user login and registration functionality. It covers Supabase integration for email/password authentication and Google OAuth, session management, the AuthContext provider implementation, authentication state handling, and protected route protection. The documentation explains the authentication flow from initial login/signup through session persistence and automatic re-authentication, including error handling, loading states, and authentication status checking. It also documents the useAuth hook implementation, authentication callbacks, session lifecycle management, and security considerations such as password policies, account verification requirements, and session timeout handling.
 
-**Enhanced** The system now includes comprehensive marketplace authentication infrastructure supporting seller profiles, product inventory management, and marketplace listing operations with standardized security policies enforced through both client-side authentication and server-side Row-Level Security (RLS).
+**Updated** The system now includes enhanced authentication middleware with server-side protection for craft endpoints, proper user identification, and IDOR (Insecure Direct Object Reference) protection throughout the application.
 
 ## Project Structure
 The authentication system is implemented across several key files in the client application:
@@ -59,29 +61,23 @@ The authentication system is implemented across several key files in the client 
 - **Authentication Screen**: User interface for email/password login and Google OAuth sign-in
 - **Navigation Guards**: Root stack navigator controls access based on authentication state
 - **Application Bootstrap**: App component wraps the entire app with AuthProvider and navigation
-- **Marketplace Integration**: API client for marketplace operations with authentication enforcement
-- **Database Schema**: Shared schema defining marketplace entities with security constraints
+- **Authentication Middleware**: Server-side middleware for protecting craft endpoints
+- **Craft Endpoints**: Protected endpoints for gift set generation and strategy analysis
 
 ```mermaid
 graph TB
-subgraph "Authentication Layer"
+subgraph "Client Authentication Layer"
 AC[AuthContext Provider]
 UA[useAuth Hook]
 SB[Supabase Client]
-end
-subgraph "UI Layer"
-AS[AuthScreen]
-RS[RootStackNavigator]
-MTN[MainTabNavigator]
-SS[SettingsScreen]
-end
-subgraph "Marketplace Layer"
-MP[Marketplace API Client]
 QC[Query Client]
+CS[Craft Screen]
 end
-subgraph "Database Layer"
-DB[PostgreSQL Database]
-RLS[Row-Level Security Policies]
+subgraph "Server Authentication Layer"
+AM[Auth Middleware]
+RT[Routes]
+DB[Database]
+RLS[Row-Level Security]
 end
 subgraph "External Services"
 SUP[Supabase Auth]
@@ -89,36 +85,34 @@ GOOGLE[Google OAuth]
 end
 AC --> UA
 UA --> SB
-AS --> AC
-RS --> AC
-MTN --> AC
-SS --> AC
-MP --> QC
-QC --> SB
+CS --> QC
+QC --> AM
+AM --> RT
+RT --> DB
+DB --> RLS
 SB --> SUP
 UA --> GOOGLE
-DB --> RLS
 ```
 
 **Diagram sources**
 - [AuthContext.tsx:19-30](file://client/contexts/AuthContext.tsx#L19-L30)
 - [useAuth.ts:12-38](file://client/hooks/useAuth.ts#L12-L38)
 - [supabase.ts:20-38](file://client/lib/supabase.ts#L20-L38)
-- [AuthScreen.tsx:13-239](file://client/screens/AuthScreen.tsx#L13-L239)
-- [RootStackNavigator.tsx:34-132](file://client/navigation/RootStackNavigator.tsx#L34-L132)
-- [marketplace.ts:1-139](file://client/lib/marketplace.ts#L1-L139)
-- [query-client.ts:1-80](file://client/lib/query-client.ts#L1-L80)
-- [schema.ts:120-225](file://shared/schema.ts#L120-L225)
+- [query-client.ts:26-47](file://client/lib/query-client.ts#L26-L47)
+- [CraftScreen.tsx:314-320](file://client/screens/CraftScreen.tsx#L314-L320)
+- [auth-middleware.ts:25-50](file://server/auth-middleware.ts#L25-L50)
+- [routes.ts:1259-1460](file://server/routes.ts#L1259-L1460)
 
 **Section sources**
 - [AuthContext.tsx:1-31](file://client/contexts/AuthContext.tsx#L1-L31)
-- [useAuth.ts:1-151](file://client/hooks/useAuth.ts#L1-L151)
-- [supabase.ts:1-39](file://client/lib/supabase.ts#L1-L39)
-- [AuthScreen.tsx:1-435](file://client/screens/AuthScreen.tsx#L1-L435)
+- [useAuth.ts:1-157](file://client/hooks/useAuth.ts#L1-L157)
+- [supabase.ts:1-41](file://client/lib/supabase.ts#L1-L41)
+- [AuthScreen.tsx:1-481](file://client/screens/AuthScreen.tsx#L1-L481)
 - [RootStackNavigator.tsx:1-133](file://client/navigation/RootStackNavigator.tsx#L1-L133)
-- [marketplace.ts:1-139](file://client/lib/marketplace.ts#L1-L139)
-- [query-client.ts:1-80](file://client/lib/query-client.ts#L1-L80)
-- [schema.ts:1-349](file://shared/schema.ts#L1-L349)
+- [query-client.ts:1-84](file://client/lib/query-client.ts#L1-L84)
+- [CraftScreen.tsx:1-800](file://client/screens/CraftScreen.tsx#L1-L800)
+- [auth-middleware.ts:1-51](file://server/auth-middleware.ts#L1-L51)
+- [routes.ts:1236-1460](file://server/routes.ts#L1236-L1460)
 
 ## Core Components
 The authentication system consists of three primary components working together:
@@ -147,8 +141,8 @@ The Supabase client is configured with:
 
 **Section sources**
 - [AuthContext.tsx:5-30](file://client/contexts/AuthContext.tsx#L5-L30)
-- [useAuth.ts:12-150](file://client/hooks/useAuth.ts#L12-L150)
-- [supabase.ts:6-38](file://client/lib/supabase.ts#L6-L38)
+- [useAuth.ts:12-157](file://client/hooks/useAuth.ts#L12-L157)
+- [supabase.ts:6-41](file://client/lib/supabase.ts#L6-L41)
 
 ## Architecture Overview
 The authentication system follows a reactive architecture pattern with real-time state synchronization:
@@ -256,7 +250,7 @@ HandleRedirect --> UpdateState
 **Diagram sources**
 - [useAuth.ts:17-38](file://client/hooks/useAuth.ts#L17-L38)
 - [useAuth.ts:40-70](file://client/hooks/useAuth.ts#L40-L70)
-- [useAuth.ts:72-137](file://client/hooks/useAuth.ts#L72-L137)
+- [useAuth.ts:72-157](file://client/hooks/useAuth.ts#L72-L157)
 
 #### Google OAuth Implementation
 The Google OAuth flow handles multiple platforms and redirect scenarios:
@@ -289,10 +283,10 @@ AuthHook->>AuthHook : Update Authentication State
 ```
 
 **Diagram sources**
-- [useAuth.ts:72-137](file://client/hooks/useAuth.ts#L72-L137)
+- [useAuth.ts:72-157](file://client/hooks/useAuth.ts#L72-L157)
 
 **Section sources**
-- [useAuth.ts:12-150](file://client/hooks/useAuth.ts#L12-L150)
+- [useAuth.ts:12-157](file://client/hooks/useAuth.ts#L12-L157)
 
 ### Supabase Client Configuration
 The Supabase client configuration ensures optimal platform-specific behavior:
@@ -308,7 +302,7 @@ The Supabase client configuration ensures optimal platform-specific behavior:
 - **Fallback Handling**: Graceful degradation when configuration is missing
 
 **Section sources**
-- [supabase.ts:6-38](file://client/lib/supabase.ts#L6-L38)
+- [supabase.ts:6-41](file://client/lib/supabase.ts#L6-L41)
 
 ### Authentication Screen Implementation
 The AuthScreen provides a comprehensive user interface for authentication:
@@ -339,7 +333,7 @@ ShowError --> ResetLoading
 - **Platform Adaptations**: Different behaviors for web vs mobile platforms
 
 **Section sources**
-- [AuthScreen.tsx:13-239](file://client/screens/AuthScreen.tsx#L13-L239)
+- [AuthScreen.tsx:13-481](file://client/screens/AuthScreen.tsx#L13-L481)
 
 ### Protected Route Protection
 The navigation system implements automatic route protection based on authentication state:
@@ -362,66 +356,121 @@ ShowAuth --> AuthNavigator["AuthScreen"]
 - [RootStackNavigator.tsx:36-42](file://client/navigation/RootStackNavigator.tsx#L36-L42)
 
 **Section sources**
-- [RootStackNavigator.tsx:34-132](file://client/navigation/RootStackNavigator.tsx#L34-L132)
+- [RootStackNavigator.tsx:34-133](file://client/navigation/RootStackNavigator.tsx#L34-L133)
 
-## Marketplace Authentication Infrastructure
+## Enhanced Authentication Middleware
 
-### Marketplace API Client Integration
-The marketplace authentication infrastructure extends beyond basic user authentication to support marketplace operations:
+### Server-Side Authentication Implementation
+The authentication system now includes comprehensive server-side authentication middleware for protecting sensitive endpoints:
 
-#### API Request Authentication
-The marketplace API client automatically includes authentication credentials with all requests:
+#### Authentication Middleware Flow
+```mermaid
+flowchart TD
+IncomingRequest["Incoming Request"] --> CheckRoute["Check Route Path"]
+CheckRoute --> IsCraftRoute{"Is /api/craft/* Route?"}
+IsCraftRoute --> |No| ProcessRequest["Process Without Auth"]
+IsCraftRoute --> |Yes| CheckAuthHeader["Check Authorization Header"]
+CheckAuthHeader --> HasBearer{"Has Bearer Token?"}
+HasBearer --> |No| Return401A["Return 401 Unauthorized"]
+HasBearer --> |Yes| ExtractToken["Extract Token from Header"]
+ExtractToken --> VerifyToken["Verify Token with Supabase"]
+VerifyToken --> TokenValid{"Token Valid?"}
+TokenValid --> |No| Return401B["Return 401 Invalid Token"]
+TokenValid --> |Yes| SetUserId["Set User ID in res.locals"]
+SetUserId --> NextMiddleware["Call Next Middleware"]
+NextMiddleware --> ProcessRequest
+ProcessRequest --> ApplyBusinessLogic["Apply Business Logic"]
+ApplyBusinessLogic --> ReturnResponse["Return Response"]
+Return401A --> ReturnResponse
+Return401B --> ReturnResponse
+```
 
+**Diagram sources**
+- [auth-middleware.ts:25-50](file://server/auth-middleware.ts#L25-L50)
+
+#### Middleware Implementation Details
+The authentication middleware provides:
+- **Token Validation**: Verifies Bearer tokens against Supabase
+- **User Identification**: Extracts user ID from valid tokens
+- **Error Handling**: Comprehensive error responses for authentication failures
+- **Security**: Prevents unauthorized access to craft endpoints
+
+**Section sources**
+- [auth-middleware.ts:1-51](file://server/auth-middleware.ts#L1-L51)
+
+## Craft Endpoint Security
+
+### Protected Craft Endpoints
+The craft endpoints are now secured with mandatory authentication and user-scoped data access:
+
+#### Craft Endpoint Protection Flow
 ```mermaid
 sequenceDiagram
 participant Client as Client Application
-participant MarketAPI as Marketplace API
-participant Supabase as Supabase Auth
-participant Server as Express Server
-Client->>MarketAPI : apiRequest(method, route, data)
-MarketAPI->>Supabase : Get current session
-Supabase-->>MarketAPI : Session with auth tokens
-MarketAPI->>Server : Fetch with credentials : include
-Server->>Server : Verify session and enforce policies
-Server-->>Client : Authenticated response
+participant AuthMiddleware as requireAuth
+participant Routes as Craft Routes
+participant Database as PostgreSQL
+Client->>AuthMiddleware : Request /api/craft/*
+AuthMiddleware->>AuthMiddleware : Verify Bearer Token
+AuthMiddleware-->>Client : 401 if invalid
+AuthMiddleware->>Routes : Valid token, call next()
+Routes->>Database : Query with user-scoped filters
+Database-->>Routes : Return user-owned data only
+Routes-->>Client : Return protected data
 ```
 
 **Diagram sources**
-- [marketplace.ts:81-108](file://client/lib/marketplace.ts#L81-L108)
-- [query-client.ts:26-43](file://client/lib/query-client.ts#L26-L43)
+- [routes.ts:1259-1460](file://server/routes.ts#L1259-L1460)
 
-#### Marketplace Operations Authentication
-Marketplace operations include:
-- **Product Management**: CRUD operations on products with seller ownership validation
-- **Listing Operations**: Creating, updating, and managing marketplace listings
-- **Integration Management**: OAuth flows for external marketplace integrations
-- **Seller Profile Access**: Restricted access to seller-specific data
+#### Craft Endpoints with Authentication
+The following craft endpoints are protected:
+- **GET /api/craft/gift-sets** - List saved gift sets for authenticated user
+- **POST /api/craft/gift-sets** - Generate gift sets for authenticated user
+- **POST /api/craft/gift-sets/generate** - Generate new bundles from stash
+- **POST /api/craft/gift-sets/save** - Persist generated gift set (owned by userId)
+- **DELETE /api/craft/gift-sets/:id** - Remove saved gift set (ownership enforced)
+- **POST /api/craft/strategy** - Ask Emma strategy questions (SSE streaming)
+
+#### IDOR Protection Implementation
+The craft endpoints implement comprehensive IDOR protection:
+- **Ownership Verification**: All operations scoped to authenticated user
+- **Cross-User Prevention**: Deletion requests include user ownership checks
+- **Data Filtering**: Queries automatically filter by user ID
+- **Error Messages**: Clear error messages for unauthorized access attempts
 
 **Section sources**
-- [marketplace.ts:1-139](file://client/lib/marketplace.ts#L1-L139)
-- [query-client.ts:1-80](file://client/lib/query-client.ts#L1-L80)
+- [routes.ts:1259-1460](file://server/routes.ts#L1259-L1460)
 
-### Seller Profile Authentication
-The system supports seller profiles with authentication-aware operations:
+### Client-Side Authentication Integration
+The client application integrates authentication seamlessly with craft endpoints:
 
-#### Seller Ownership Validation
+#### Bearer Token Implementation
 ```mermaid
 flowchart TD
-UserAction["User Action"] --> GetSeller["Get Seller Profile"]
-GetSeller --> ValidateOwnership{"Is User Owner?"}
-ValidateOwnership --> |Yes| AllowAccess["Allow Access"]
-ValidateOwnership --> |No| DenyAccess["Deny Access"]
-AllowAccess --> Proceed["Proceed with Operation"]
-DenyAccess --> ShowError["Show Authentication Error"]
+AuthState["Authentication State"] --> CheckSession["Check Session Exists"]
+CheckSession --> HasSession{"Has Access Token?"}
+HasSession --> |No| NoAuth["No Auth Headers"]
+HasSession --> |Yes| CreateHeaders["Create Auth Headers"]
+CreateHeaders --> AddBearer["Add Authorization: Bearer <token>"]
+AddBearer --> SendRequest["Send Request to /api/craft/*"]
+NoAuth --> SendRequest
+SendRequest --> ReceiveResponse["Receive Response"]
 ```
 
 **Diagram sources**
-- [schema.ts:120-131](file://shared/schema.ts#L120-L131)
-- [routes.ts:816-854](file://server/routes.ts#L816-L854)
+- [CraftScreen.tsx:314-320](file://client/screens/CraftScreen.tsx#L314-L320)
+- [query-client.ts:26-47](file://client/lib/query-client.ts#L26-L47)
+
+#### Client-Side Implementation Details
+The client handles authentication for craft endpoints:
+- **Session-Based Headers**: Automatically adds Bearer tokens from session
+- **Error Handling**: Proper handling of 401 responses from protected endpoints
+- **User Context**: Uses authenticated user ID for data operations
+- **SSE Streaming**: Supports server-sent events for strategy analysis
 
 **Section sources**
-- [schema.ts:120-131](file://shared/schema.ts#L120-L131)
-- [routes.ts:816-854](file://server/routes.ts#L816-L854)
+- [CraftScreen.tsx:314-320](file://client/screens/CraftScreen.tsx#L314-L320)
+- [query-client.ts:26-47](file://client/lib/query-client.ts#L26-L47)
 
 ## Database Security and Row-Level Policies
 
@@ -438,18 +487,22 @@ LISTINGS[Listings Table]
 INTEGRATIONS[Integrations Table]
 AI[Ai Generations Table]
 SYNC[Sync Queue Table]
-end
+STASH[Stash Items Table]
+GIFTSETS[Gift Sets Table]
+END
 subgraph "Security Enforcement"
 AUTH[auth.uid() Function]
 USERID[User ID Matching]
 SELLERID[Seller ID Validation]
-end
+END
 SELLERS --> AUTH
 PRODUCTS --> USERID
 LISTINGS --> SELLERID
 INTEGRATIONS --> SELLERID
 AI --> SELLERID
 SYNC --> SELLERID
+STASH --> USERID
+GIFTSETS --> USERID
 ```
 
 **Diagram sources**
@@ -462,10 +515,12 @@ SYNC --> SELLERID
 - **Integrations**: Users can only manage integrations for their own seller accounts
 - **AI Generations**: Users can only access AI generation records for their own products
 - **Sync Queue**: Users can only access sync queue items for their own products
+- **Stash Items**: Users can only access their own stash items
+- **Gift Sets**: Users can only access their own gift sets
 
 **Section sources**
 - [0002_rls_policies.sql:1-66](file://migrations/0002_rls_policies.sql#L1-L66)
-- [schema.ts:120-225](file://shared/schema.ts#L120-L225)
+- [schema.ts:154-307](file://shared/schema.ts#L154-L307)
 
 ### Database Schema Security
 The shared schema defines marketplace entities with built-in security constraints:
@@ -476,9 +531,11 @@ The shared schema defines marketplace entities with built-in security constraint
 - **Listings** → **Products**: Many-to-one relationship with product ownership
 - **Integrations** → **Sellers**: Many-to-one relationship with seller ownership
 - **AI Generations** → **Products**: Optional many-to-one relationship with product association
+- **Stash Items** → **Users**: Many-to-one relationship with user ownership
+- **Gift Sets** → **Users**: Many-to-one relationship with user ownership
 
 **Section sources**
-- [schema.ts:120-225](file://shared/schema.ts#L120-L225)
+- [schema.ts:154-307](file://shared/schema.ts#L154-L307)
 
 ## API Authentication Enforcement
 
@@ -491,8 +548,8 @@ flowchart TD
 IncomingRequest["Incoming Request"] --> CheckRoute["Check Route Type"]
 CheckRoute --> IsAPIRoute{"Is /api/* Route?"}
 IsAPIRoute --> |No| ProcessStatic["Process Static Content"]
-IsAPIRoute --> |Yes| VerifyAuth["Verify Authentication"]
-VerifyAuth --> AuthValid{"Authentication Valid?"}
+IsAPIRoute --> |Yes| CheckAuth["Check Authentication"]
+CheckAuth --> AuthValid{"Authentication Valid?"}
 AuthValid --> |Yes| ProcessRequest["Process Request"]
 AuthValid --> |No| Return401["Return 401 Unauthorized"]
 ProcessRequest --> ApplyPolicies["Apply RLS Policies"]
@@ -539,16 +596,15 @@ useAuth --> supabaseClient
 AuthScreen --> AuthContext
 RootNavigator --> AuthContext
 SettingsScreen --> AuthContext
+CraftScreen --> AuthContext
+queryClient --> AuthContext
 end
-subgraph "Marketplace Dependencies"
-marketplaceAPI --> queryClient
-queryClient --> supabaseClient
-marketplaceAPI --> schema
-end
-subgraph "Database Dependencies"
+subgraph "Server Dependencies"
 serverRoutes --> dbConnection
 dbConnection --> schema
 serverRoutes --> rlsPolicies
+serverRoutes --> authMiddleware
+authMiddleware --> supabaseAuthClient
 end
 subgraph "External Dependencies"
 useAuth --> SupabaseAuth
@@ -560,6 +616,7 @@ subgraph "UI Dependencies"
 AuthScreen --> ThemedComponents
 RootNavigator --> NavigationComponents
 MainNavigator --> TabComponents
+CraftScreen --> QueryClient
 end
 ```
 
@@ -567,10 +624,9 @@ end
 - [AuthContext.tsx:1-3](file://client/contexts/AuthContext.tsx#L1-L3)
 - [useAuth.ts:3-6](file://client/hooks/useAuth.ts#L3-L6)
 - [supabase.ts:2-4](file://client/lib/supabase.ts#L2-L4)
-- [marketplace.ts:1-4](file://client/lib/marketplace.ts#L1-L4)
-- [query-client.ts:1-4](file://client/lib/query-client.ts#L1-L4)
 - [routes.ts:1-18](file://server/routes.ts#L1-L18)
 - [db.ts:1-3](file://server/db.ts#L1-L3)
+- [auth-middleware.ts:1-51](file://server/auth-middleware.ts#L1-L51)
 
 The system maintains loose coupling through React Context patterns and functional composition, allowing for easy testing and maintenance.
 
@@ -600,6 +656,11 @@ The authentication system implements several performance optimizations:
 - **Connection Pooling**: Efficient database connection management
 - **Query Optimization**: Optimized queries with proper indexing strategies
 
+### Authentication Middleware Performance
+- **Token Verification**: Efficient token validation against Supabase
+- **Minimal Overhead**: Lightweight middleware with minimal processing overhead
+- **Caching**: Potential for caching verified tokens to reduce repeated validation
+
 ## Security Considerations
 The authentication system incorporates multiple security measures:
 
@@ -627,12 +688,22 @@ The authentication system incorporates multiple security measures:
 - **CORS Validation**: Dynamic origin validation prevents cross-site attacks
 - **Request Logging**: Comprehensive logging for security monitoring
 - **Error Handling**: Proper error handling prevents information leakage
+- **Authentication Middleware**: Mandatory authentication for sensitive endpoints
+- **IDOR Protection**: Comprehensive protection against direct object reference attacks
+
+### Craft Endpoint Security
+- **Mandatory Authentication**: All craft endpoints require valid authentication
+- **User Scoping**: Data access limited to authenticated user's data only
+- **Cross-User Prevention**: Deletion operations include ownership verification
+- **SSE Security**: Server-sent events properly authenticated and authorized
 
 **Section sources**
 - [ENVIRONMENT.md:23-32](file://ENVIRONMENT.md#L23-L32)
 - [supabase.ts:26-33](file://client/lib/supabase.ts#L26-L33)
 - [0002_rls_policies.sql:1-66](file://migrations/0002_rls_policies.sql#L1-L66)
 - [index.ts:19-56](file://server/index.ts#L19-L56)
+- [auth-middleware.ts:25-50](file://server/auth-middleware.ts#L25-L50)
+- [routes.ts:1404-1424](file://server/routes.ts#L1404-L1424)
 
 ## Troubleshooting Guide
 Common authentication issues and their solutions:
@@ -647,15 +718,20 @@ Common authentication issues and their solutions:
 - **OAuth Redirect Problems**: Check redirect URL configuration and browser session handling
 - **Real-time State Not Updating**: Ensure proper subscription setup and cleanup
 
-### Marketplace Authentication Issues
-- **Seller Profile Access Denied**: Verify user has associated seller profile
-- **Product Management Blocked**: Check seller ownership validation
-- **API Requests Failing**: Verify authentication credentials are included
-
 ### Database Security Issues
 - **RLS Policy Conflicts**: Check row-level security policy violations
 - **Foreign Key Constraint Errors**: Verify entity relationships are valid
 - **Permission Denied Errors**: Ensure proper authentication before database access
+
+### Craft Endpoint Issues
+- **401 Unauthorized Errors**: Verify Bearer token is included in request headers
+- **Cross-User Access Attempts**: Check that user ID is properly extracted and validated
+- **IDOR Protection Failures**: Ensure deletion operations include ownership verification
+
+### Authentication Middleware Issues
+- **Token Verification Failures**: Check Supabase service role key configuration
+- **User ID Extraction Problems**: Verify token structure and user claims
+- **Middleware Chain Issues**: Ensure requireAuth middleware is properly applied to routes
 
 ### Error Handling Patterns
 The system implements comprehensive error handling:
@@ -664,11 +740,13 @@ The system implements comprehensive error handling:
 - **Authentication Errors**: Specific error messages for authentication failures
 - **Platform Errors**: Platform-specific error handling for mobile vs web
 - **Database Errors**: Proper error propagation from database operations
+- **Craft Endpoint Errors**: Specific error handling for protected endpoint access
 
 **Section sources**
 - [ENVIRONMENT.md:186-189](file://ENVIRONMENT.md#L186-L189)
 - [AuthScreen.tsx:48-57](file://client/screens/AuthScreen.tsx#L48-L57)
 - [useAuth.ts:48-69](file://client/hooks/useAuth.ts#L48-L69)
+- [auth-middleware.ts:45-49](file://server/auth-middleware.ts#L45-L49)
 
 ## Practical Implementation Examples
 
@@ -737,71 +815,6 @@ const { user, signOut } = useAuthContext();
 </Button>
 ```
 
-### Marketplace Authentication Implementation
-```typescript
-// In marketplace components
-const { isAuthenticated, user } = useAuthContext();
-const [sellerProfile, setSellerProfile] = useState<Seller | null>(null);
-
-// Load seller profile with authentication
-useEffect(() => {
-  if (!isAuthenticated || !user) return;
-  
-  const loadSellerProfile = async () => {
-    try {
-      const response = await apiRequest("GET", "/api/seller/profile");
-      setSellerProfile(response);
-    } catch (error) {
-      console.error("Failed to load seller profile:", error);
-    }
-  };
-  
-  loadSellerProfile();
-}, [isAuthenticated, user]);
-
-// Handle marketplace operations
-const publishToMarketplace = async (itemId: number) => {
-  if (!isAuthenticated) {
-    throw new Error("Authentication required for marketplace operations");
-  }
-  
-  try {
-    const result = await publishToWooCommerce(itemId, settings);
-    return result;
-  } catch (error) {
-    console.error("Marketplace publish failed:", error);
-    throw error;
-  }
-};
-```
-
-### Error Handling Patterns
-```typescript
-// In authentication components
-const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-const handleError = (error: any) => {
-  const message = error.message || error.error_description || "Authentication failed";
-  setErrorMessage(message);
-  // Log error for debugging
-  console.error("Auth error:", error);
-};
-
-// In marketplace components
-const handleMarketplaceError = (error: any) => {
-  if (error.response?.status === 401) {
-    // Handle unauthorized access
-    navigateToAuth();
-  } else if (error.response?.status === 403) {
-    // Handle forbidden access
-    showError("Access denied for this operation");
-  } else {
-    // Handle other errors
-    showError(error.message || "Operation failed");
-  }
-};
-```
-
 ### Database Security Implementation
 ```typescript
 // In server-side marketplace operations
@@ -826,27 +839,81 @@ const getSellerProducts = async (userId: string, sellerId: string) => {
 };
 ```
 
-These examples demonstrate the practical implementation of the authentication system across different components and use cases within the Hidden-Gem application, including the enhanced marketplace authentication infrastructure.
+### Craft Endpoint Authentication
+```typescript
+// In client-side craft screen
+const { session } = useAuthContext();
+const userId = user?.id || "demo-user";
+
+const authHeaders = session?.access_token
+  ? { Authorization: `Bearer ${session.access_token}` }
+  : {};
+
+// Fetch protected craft data
+const response = await fetch('/api/craft/gift-sets', {
+  headers: { 
+    'Content-Type': 'application/json',
+    ...authHeaders 
+  },
+});
+
+if (response.status === 401) {
+  // Handle unauthorized access
+  console.error('Authentication required');
+  return;
+}
+
+const data = await response.json();
+```
+
+### Authentication Middleware Usage
+```typescript
+// In server routes
+app.post("/api/craft/gift-sets", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = res.locals.userId as string;
+    
+    // All operations now scoped to authenticated user
+    const items = await db
+      .select()
+      .from(stashItems)
+      .where(eq(stashItems.userId, userId))
+      .orderBy(desc(stashItems.createdAt));
+    
+    // Process items and generate gift sets
+    const generatedSets = await generateGiftSets(items);
+    res.json(generatedSets);
+  } catch (error) {
+    console.error("Error in craft endpoint:", error);
+    res.status(500).json({ error: "Failed to process craft request" });
+  }
+});
+```
+
+These examples demonstrate the practical implementation of the enhanced authentication system across different components and use cases within the Hidden-Gem application, showing the comprehensive authentication protection for craft endpoints and improved security throughout the application.
 
 **Section sources**
 - [AuthContext.tsx:24-30](file://client/contexts/AuthContext.tsx#L24-L30)
 - [RootStackNavigator.tsx:36-42](file://client/navigation/RootStackNavigator.tsx#L36-L42)
 - [SettingsScreen.tsx:110-128](file://client/screens/SettingsScreen.tsx#L110-L128)
-- [marketplace.ts:81-139](file://client/lib/marketplace.ts#L81-L139)
-- [query-client.ts:26-80](file://client/lib/query-client.ts#L26-L80)
+- [CraftScreen.tsx:314-320](file://client/screens/CraftScreen.tsx#L314-L320)
+- [auth-middleware.ts:25-50](file://server/auth-middleware.ts#L25-L50)
+- [routes.ts:1259-1460](file://server/routes.ts#L1259-L1460)
 
 ## Conclusion
-The Hidden-Gem authentication system provides a robust, scalable solution for user authentication with comprehensive Supabase integration and enhanced marketplace security. The system successfully implements:
+The Hidden-Gem authentication system provides a robust, scalable solution for user authentication with comprehensive Supabase integration and enhanced security measures. The system successfully implements:
 
 - **Seamless Multi-Platform Support**: Unified authentication experience across web and mobile platforms
 - **Real-Time State Management**: Automatic session updates and authentication state synchronization
 - **Comprehensive Error Handling**: User-friendly error messaging with proper logging
 - **Security Best Practices**: Environment-based configuration, secure storage, and OAuth security
 - **Developer-Friendly Architecture**: Clean separation of concerns with React Context and custom hooks
-- **Marketplace Authentication Infrastructure**: Secure seller profiles, product management, and marketplace operations
 - **Database-Level Security**: Row-Level Security policies enforcing strict access control
 - **API Authentication Enforcement**: Comprehensive authentication and authorization across all API routes
+- **Enhanced Craft Endpoint Protection**: Mandatory authentication with IDOR prevention for sensitive endpoints
+- **Server-Side Authentication Middleware**: Robust middleware for protecting craft routes and user data
+- **Cross-Platform Authentication Integration**: Seamless Bearer token handling across client and server
 
 The implementation demonstrates excellent architectural patterns with proper dependency management, platform-specific optimizations, and comprehensive testing coverage. The system is ready for production deployment with minimal modifications required for additional security policies or authentication methods.
 
-**Enhanced** The addition of marketplace authentication infrastructure provides a solid foundation for e-commerce operations while maintaining strict security boundaries through both client-side authentication and server-side database policies.
+**Updated** The authentication system now includes comprehensive server-side authentication middleware with mandatory authentication for craft endpoints, proper user identification, and IDOR protection throughout the application, providing a significantly enhanced security posture compared to the previous implementation.

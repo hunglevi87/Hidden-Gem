@@ -49,6 +49,4 @@ app-example
 
 # server build output
 server_dist/
-/.qoder/repowiki
-*.md
-/.qoder
+
